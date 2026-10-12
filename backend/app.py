@@ -78,6 +78,7 @@ session.init_app(app)
 
 # 先创建数据库对象，再导入模型
 from models import User, Application, Rule
+import automation_models  # 注册新增材料、任务、去重、政策及审计表
 
 # 导入并注册蓝图
 from blueprints.auth_bp import auth_bp
@@ -90,6 +91,7 @@ from blueprints.organization_bp import organization_bp
 from blueprints.score_bp import score_bp
 from blueprints.system_bp import system_bp
 from routes import main_bp
+from blueprints.automation_bp import automation_bp
 
 
 # 配置推免文件的静态服务
@@ -255,6 +257,7 @@ app.register_blueprint(score_bp)  # score_bp 已经在定义时设置了 url_pre
 app.register_blueprint(organization_bp)  # organization_bp 已经在定义时设置了 url_prefix='/api/organization'
 app.register_blueprint(system_bp)  # system_bp 已经在定义时设置了 url_prefix='/api/system'
 app.register_blueprint(main_bp, url_prefix='/api')
+app.register_blueprint(automation_bp)
 
 # 根路径路由，解决直接访问/返回404的问题
 @app.route("/", methods=["GET"])

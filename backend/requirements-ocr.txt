@@ -1,0 +1,4 @@
+# 独立 worker 环境安装；Web 不需要这两个包。
+-r requirements.txt
+paddlepaddle==3.3.1
+paddleocr==3.7.0

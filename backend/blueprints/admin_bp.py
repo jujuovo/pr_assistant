@@ -34,6 +34,7 @@ from models import (
 )
 from datetime import datetime
 from extensions import db
+from services.deletion import automation_deletion_conflict, protected_deletion_response, commit_deletion
 
 # 引入组织信息管理模块
 from .organization_bp import (
@@ -134,97 +135,31 @@ def update_faculty(faculty_id):
 # 删除学院
 @admin_bp.route("/faculties/<int:faculty_id>", methods=["DELETE"])
 def delete_faculty(faculty_id):
-    current_app.logger.info(f"管理员开始删除学院，学院ID: {faculty_id}")
-
     faculty = Faculty.query.get(faculty_id)
-
     if not faculty:
-        current_app.logger.warning(f"尝试删除不存在的学院，学院ID: {faculty_id}")
         return jsonify({"message": "学院不存在"}), 404
-
-    current_app.logger.info(f"待删除学院: {faculty.name}")
-
-    # 删除学院成绩比例设置
+    # 先读取完整删除范围并保护自动化材料，不在数据库提交前删除附件。
     score_settings = FacultyScoreSettings.query.filter_by(faculty_id=faculty_id).first()
-    if score_settings:
-        current_app.logger.info(f"删除学院成绩比例设置: {score_settings.id}")
-        db.session.delete(score_settings)
-
-    # 级联删除：推免申请 ->学生 ->用户 ->专业 ->系 -> 学院
-
-    # 1. 先获取所有关联的申请记录
     applications = Application.query.filter_by(faculty_id=faculty.id).all()
-    current_app.logger.info(f"将删除{len(applications)}个关联的推免申请")
-    for application in applications:
-        # 删除申请关联的文件
-        if application.files:
-            for file in application.files:
-                try:
-                    if "path" in file and file["path"]:
-                        filename = os.path.basename(file["path"])
-                        file_path = os.path.join(
-                            current_app.config["FILE_FOLDER"], filename
-                        )
-                        if os.path.exists(file_path):
-                            os.remove(file_path)
-                            current_app.logger.info(f"删除推免申请附件: {file_path}")
-                except Exception as e:
-                    error_msg = f"删除文件失败: {str(e)}"
-                    current_app.logger.error(error_msg)
-                    print(error_msg)
-        db.session.delete(application)
-
-    # 2. 再获取所有关联的学生，通过直接关联的方式
     students = Student.query.filter_by(faculty_id=faculty.id).all()
-    current_app.logger.info(f"将处理{len(students)}个关联的学生")
-    for student in students:
-        # 删除关联的用户记录
-        if student.user:
-            current_app.logger.info(
-                f"删除学生用户: {student.user.id} ({student.user.username})"
-            )
-            db.session.delete(student.user)
-        # 删除学生记录
-        current_app.logger.info(f"删除学生: {student.id} ({student.student_name})")
-        db.session.delete(student)
-
-    # 3. 处理直接关联到学院的非学生用户（如教师、管理员）
-    non_student_users = (
-        User.query.filter_by(faculty_id=faculty.id).filter(User.role != "student").all()
-    )
-    if non_student_users:
-        current_app.logger.info(f"将清除{len(non_student_users)}个非学生用户的学院关联")
-        for user in non_student_users:
-            # 清除用户的学院关联，而不是删除用户
-            user.faculty_id = None
-
-    # 4. 再获取所有关联的专业
-    majors = (
-        Major.query.join(Department).filter(Department.faculty_id == faculty.id).all()
-    )
-    current_app.logger.info(f"将删除{len(majors)}个关联的专业")
-    for major in majors:
-        db.session.delete(major)
-
-    # 5. 再获取所有关联的系
+    users = [student.user for student in students if student.user]
+    non_student_users = User.query.filter_by(faculty_id=faculty.id).filter(User.role != "student").all()
+    majors = Major.query.join(Department).filter(Department.faculty_id == faculty.id).all()
     departments = Department.query.filter_by(faculty_id=faculty.id).all()
-    current_app.logger.info(f"将删除{len(departments)}个关联的系")
-    for department in departments:
-        db.session.delete(department)
-
-    # 6. 最后删除学院
-    current_app.logger.info(f"删除学院: {faculty.id} ({faculty.name})")
-    db.session.delete(faculty)
-
-    try:
-        db.session.commit()
-        current_app.logger.info(f"学院删除成功: {faculty_id}")
-        return jsonify({"message": "学院删除成功"}), 200
-    except Exception as e:
-        db.session.rollback()
-        error_msg = f"删除学院失败: {str(e)}"
-        current_app.logger.error(error_msg)
-        return jsonify({"message": error_msg}), 500
+    conflict = automation_deletion_conflict(students, users, faculty_id=faculty.id, applications=applications)
+    if conflict:
+        return protected_deletion_response(conflict)
+    with db.session.no_autoflush:
+        for user in non_student_users:
+            if user not in users:
+                user.faculty_id = user.department_id = user.major_id = None
+        records = applications + users + students + majors + departments + [faculty]
+        if score_settings:
+            records.append(score_settings)
+        for record in records:
+            db.session.delete(record)
+    error = commit_deletion(applications)
+    return error if error else (jsonify({"message": "学院删除成功"}), 200)
 
 
 # 获取所有系（可按学院筛选）
@@ -336,50 +271,22 @@ def delete_department(department_id):
     if not department:
         return jsonify({"message": "系不存在"}), 404
 
-    # 级联删除：系 -> 专业 -> 学生 -> 用户
-    from models import Student, Major, Application
-
-    # 1. 先获取所有关联的申请记录
     applications = Application.query.filter_by(department_id=department.id).all()
-    for application in applications:
-        # 删除申请关联的文件
-        if application.files:
-            for file in application.files:
-                try:
-                    if "path" in file and file["path"]:
-                        filename = os.path.basename(file["path"])
-                        file_path = os.path.join(
-                            current_app.config["FILE_FOLDER"], filename
-                        )
-                        if os.path.exists(file_path):
-                            os.remove(file_path)
-                except Exception as e:
-                    print(f"删除文件失败: {str(e)}")
-        db.session.delete(application)
-
-    # 2. 再获取所有关联的学生
     students = Student.query.filter_by(department_id=department.id).all()
-    for student in students:
-        # 删除关联的用户记录
-        if student.user:
-            db.session.delete(student.user)
-        # 删除学生记录
-        db.session.delete(student)
-
-    # 3. 再获取所有关联的专业
+    users = [student.user for student in students if student.user]
     majors = Major.query.filter_by(department_id=department.id).all()
-    for major in majors:
-        db.session.delete(major)
-
-    # 4. 最后删除系
-    db.session.delete(department)
-
-    try:
-        db.session.commit()
-        return jsonify({"message": "系删除成功"}), 200
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"message": f"删除系失败: {str(e)}"}), 500
+    linked_users = User.query.filter_by(department_id=department.id).all()
+    conflict = automation_deletion_conflict(students, users, applications=applications)
+    if conflict:
+        return protected_deletion_response(conflict)
+    with db.session.no_autoflush:
+        for user in linked_users:
+            if user not in users:
+                user.department_id = user.major_id = None
+        for record in applications + users + students + majors + [department]:
+            db.session.delete(record)
+    error = commit_deletion(applications)
+    return error if error else (jsonify({"message": "系删除成功"}), 200)
 
 
 # 获取所有专业（可按学院或系筛选）
@@ -484,45 +391,21 @@ def delete_major(major_id):
     if not major:
         return jsonify({"message": "专业不存在"}), 404
 
-    # 级联删除：专业 -> 申请记录 -> 学生 -> 用户
-    from models import Student, Application
-
-    # 1. 先获取所有关联的申请记录
     applications = Application.query.filter_by(major_id=major.id).all()
-    for application in applications:
-        # 删除申请关联的文件
-        if application.files:
-            for file in application.files:
-                try:
-                    if "path" in file and file["path"]:
-                        filename = os.path.basename(file["path"])
-                        file_path = os.path.join(
-                            current_app.config["FILE_FOLDER"], filename
-                        )
-                        if os.path.exists(file_path):
-                            os.remove(file_path)
-                except Exception as e:
-                    print(f"删除文件失败: {str(e)}")
-        db.session.delete(application)
-
-    # 2. 再获取所有关联的学生
     students = Student.query.filter_by(major_id=major.id).all()
-    for student in students:
-        # 删除关联的用户记录
-        if student.user:
-            db.session.delete(student.user)
-        # 删除学生记录
-        db.session.delete(student)
-
-    # 3. 最后删除专业
-    db.session.delete(major)
-
-    try:
-        db.session.commit()
-        return jsonify({"message": "专业删除成功"}), 200
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"message": f"删除专业失败: {str(e)}"}), 500
+    users = [student.user for student in students if student.user]
+    linked_users = User.query.filter_by(major_id=major.id).all()
+    conflict = automation_deletion_conflict(students, users, applications=applications)
+    if conflict:
+        return protected_deletion_response(conflict)
+    with db.session.no_autoflush:
+        for user in linked_users:
+            if user not in users:
+                user.major_id = None
+        for record in applications + users + students + [major]:
+            db.session.delete(record)
+    error = commit_deletion(applications)
+    return error if error else (jsonify({"message": "专业删除成功"}), 200)
 
 
 # 获取系统设置

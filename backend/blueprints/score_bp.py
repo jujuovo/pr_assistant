@@ -27,7 +27,7 @@ score_bp = Blueprint("score", __name__, url_prefix="/api")
 
 
 # 辅助函数：更新学生的统计数据
-def update_student_statistics(student_id):
+def update_student_statistics(student_id, commit=True):
     """
     根据学生的已通过申请更新其统计数据
     :param student_id: 学生ID
@@ -104,7 +104,8 @@ def update_student_statistics(student_id):
     student.comprehensive_score = round(calculated_score, 4)
 
     # 保存更改到数据库
-    db.session.commit()
+    if commit:
+        db.session.commit()
 
     return {
         "academic_specialty_total": student.academic_specialty_total,
