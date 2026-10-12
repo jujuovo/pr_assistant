@@ -1,0 +1,171 @@
+.tree-node {
+  margin-left: calc(var(--level, 0) * 24px);
+  transition: margin-left 0.3s ease;
+}
+
+.node-content {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  margin-bottom: 4px;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.node-content:hover {
+  background: var(--system-surface);
+  border-color: #c0c0c0;
+}
+
+.node-content.selected {
+  background: #e3f2fd;
+  border-color: #2196f3;
+  box-shadow: 0 0 0 1px rgba(33, 150, 243, 0.1);
+}
+
+.node-content.leaf {
+  border-left: 3px solid #4caf50;
+}
+
+.node-toggle {
+  background: none;
+  border: none;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  flex-grow: 0;
+  flex-basis: auto;
+}
+
+.node-toggle:hover {
+  background: #f0f0f0;
+  color: #333;
+}
+
+.node-info {
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+}
+
+.node-name {
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 2px;
+  font-size: 14px;
+  word-break: break-all;
+}
+
+.node-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: #666;
+}
+
+.node-value {
+  color: #666;
+}
+
+.node-score {
+  color: #2196f3;
+  font-weight: 500;
+}
+
+.node-name-input,
+.node-score-input {
+  display: inline-block;
+  width: auto;
+  min-width: 80px;
+  max-width: 100px;
+  padding: 2px 4px;
+  margin: 0;
+  border: 1px solid #2196f3;
+  border-radius: 3px;
+  background: #fff;
+  font-size: 14px;
+  line-height: 1.4;
+  font-weight: 600;
+  color: #333;
+  transition: none;
+  height: auto;
+  box-sizing: border-box;
+  vertical-align: baseline;
+}
+
+.node-name-input:focus,
+.node-score-input:focus {
+  outline: none;
+  border-color: #1976d2;
+  box-shadow: 0 0 0 1px rgba(25, 118, 210, 0.3);
+}
+
+.node-actions {
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  flex-shrink: 0;
+}
+
+.node-content:hover .node-actions {
+  opacity: 1;
+}
+
+.btn-icon {
+  background: none;
+  border: none;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.btn-icon:hover {
+  background: #f0f0f0;
+  color: #333;
+}
+
+.btn-save {
+  color: #4caf50;
+}
+
+.btn-save:hover {
+  background: #e8f5e9;
+  color: #388e3c;
+}
+
+.btn-cancel {
+  color: #f44336;
+}
+
+.btn-cancel:hover {
+  background: #ffebee;
+  color: #d32f2f;
+}
+
+.node-children {
+  margin-left: 24px;
+  border-left: 1px dashed #e0e0e0;
+  padding-left: 12px;
+}

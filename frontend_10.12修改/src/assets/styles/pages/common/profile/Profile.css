@@ -1,0 +1,135 @@
+/* 引入共享样式 */
+@import '@/assets/styles/shared/content.css';
+
+.card {
+  border: 1px solid #1680ff;
+  border-top: 8px solid #0059c7;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: none;
+}
+
+/* Personal information uses a larger reading scale than dense data pages. */
+.profile-page .page-title > span {
+  font-size: clamp(32px, 3vw, 42px);
+}
+
+.profile-page .card-title {
+  font-size: 26px;
+}
+
+.profile-page .form-label {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.profile-page .form-control {
+  font-size: 18px;
+  line-height: 1.6;
+}
+
+.profile-page .btn {
+  font-size: 17px;
+}
+
+.profile-page .avatar-overlay {
+  font-size: 17px;
+}
+
+/* 头像样式 */
+.avatar-row {
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.avatar-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  position: relative;
+}
+
+.avatar-container {
+  position: relative;
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 3px solid #e8e8e8;
+  cursor: pointer;
+}
+
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* 添加抗锯齿效果 */
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+  /* 添加轻微阴影增强视觉效果 */
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
+}
+
+.avatar-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  color: white;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.avatar-container:hover .avatar-overlay {
+  opacity: 1;
+}
+
+.avatar-icon {
+  font-size: 24px;
+  margin-bottom: 5px;
+}
+
+.avatar-tooltip {
+  position: absolute;
+  top: 160px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(0, 0, 0, 0.6);
+  color: white;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 0.3s ease,
+    visibility 0.3s ease;
+  z-index: 10;
+}
+
+.avatar-container:hover + .avatar-tooltip {
+  opacity: 1;
+  visibility: visible;
+}
+
+.reset-avatar-btn {
+  margin-top: 10px;
+  font-size: 14px;
+  padding: 5px 15px;
+  white-space: nowrap;
+}
+
+/* 错误文本样式 */
+.error-text {
+  font-size: 12px;
+  color: #e74c3c;
+  margin-top: 5px;
+}

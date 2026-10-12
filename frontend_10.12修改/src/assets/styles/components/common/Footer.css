@@ -1,0 +1,29 @@
+.copyright {
+  text-align: center;
+  margin-top: 30px;
+  margin-bottom: 20px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 13px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  position: absolute;
+  bottom: 40px;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  letter-spacing: 0.5px;
+  font-weight: 400;
+}
+
+@media (max-width: 992px) {
+  .copyright {
+    position: relative;
+    bottom: 0px;
+  }
+}
+
+@media (max-width: 576px) {
+  .copyright {
+    position: relative;
+    bottom: 0px;
+  }
+}

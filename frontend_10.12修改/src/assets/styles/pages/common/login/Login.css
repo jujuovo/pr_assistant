@@ -1,0 +1,581 @@
+/* 登录页面整体容器样式 */
+.login-page {
+  font-family: 'Microsoft Yahei', 'PingFang SC', 'Helvetica Neue', sans-serif;
+  line-height: 1.6;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  position: relative;
+  overflow: hidden;
+  padding-bottom: 40px;
+}
+
+/* 背景效果 */
+.background-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+}
+
+.background-blur {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: url('/images/loginBackground.jpg') no-repeat center center;
+  background-size: cover;
+  filter: blur(5px) brightness(0.85);
+  transform: scale(1.05);
+  z-index: 0;
+}
+
+.background-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, rgba(30, 85, 157, 0.164) 0%, rgba(11, 42, 88, 0.17) 100%);
+  z-index: 1;
+}
+
+/* 主容器居中 */
+.login-container {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  position: relative;
+  z-index: 1;
+  margin: auto;
+  flex: 1;
+}
+
+/* 登录内容区域 */
+.login-content {
+  display: flex;
+  width: 100%;
+  max-width: 1300px;
+  border-radius: 16px;
+  background: rgba(11, 42, 88, 0.6);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 20px 60px rgba(0, 30, 84, 0.4);
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+  min-height: 600px;
+  max-height: 730px;
+}
+
+/* 左侧信息面板样式 */
+.info-panel {
+  flex: 1.8;
+  color: rgba(255, 255, 255, 0.95);
+  padding: 50px 45px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, rgba(30, 84, 157, 0.9) 0%, rgba(11, 42, 88, 0.2) 100%);
+}
+
+.info-panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><circle cx="100" cy="100" r="80" fill="none" stroke="rgba(255,255,255,0.03)" stroke-width="1"/></svg>')
+    repeat;
+  z-index: 0;
+}
+
+/* Logo区域优化 */
+.logo-area {
+  display: flex;
+  align-items: center;
+  margin-bottom: 40px;
+  position: relative;
+  z-index: 1;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 50px;
+  margin-left: 25px;
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 15px;
+  backdrop-filter: blur(5px);
+}
+
+.logo-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.logo-text .system-name {
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  letter-spacing: 0.5px;
+}
+
+.logo-text .auth-title {
+  font-size: 18px;
+  opacity: 0.9;
+  font-weight: 500;
+}
+
+/* 欢迎内容区域优化 */
+.welcome-content {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.welcome-title {
+  font-size: 36px;
+  font-weight: 700;
+  margin-bottom: 25px;
+  line-height: 1.3;
+  background: linear-gradient(135deg, #ffffff 0%, rgba(255, 255, 255, 0.9) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.welcome-subtitle {
+  font-size: 19px;
+  opacity: 0.85;
+  margin-bottom: 12px;
+  line-height: 1.6;
+  font-weight: 400;
+}
+
+/* 时间卡片优化 */
+.time-card {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 30px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  margin: 35px 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.time-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 5px;
+  height: 100%;
+  background: linear-gradient(to bottom, #4caf50, #2196f3);
+}
+
+.time-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 25px;
+  gap: 15px;
+}
+
+.time-icon {
+  width: 50px;
+  height: 50px;
+  background: linear-gradient(135deg, rgba(76, 175, 80, 0.2), rgba(33, 150, 243, 0.2));
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.time-icon svg {
+  font-size: 24px;
+  color: #ffffff;
+}
+
+.time-header-text {
+  flex: 1;
+}
+
+.time-title {
+  font-size: 22px;
+  font-weight: 600;
+  margin-bottom: 5px;
+}
+
+.time-subtitle {
+  font-size: 14px;
+  opacity: 0.8;
+}
+
+.time-dates {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.time-item {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.3s ease;
+}
+
+.time-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateX(5px);
+}
+
+.time-item-icon {
+  width: 40px;
+  height: 40px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.time-item-icon svg {
+  font-size: 18px;
+  color: #ffffff;
+}
+
+.time-item-content {
+  flex: 1;
+}
+
+.time-label {
+  font-size: 13px;
+  opacity: 0.8;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.time-value {
+  font-size: 18px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 右侧登录区域 */
+.login-box {
+  flex: 1;
+  padding: 50px 40px;
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  box-shadow: -10px 0 20px rgba(1, 7, 26, 0.2);
+  background: rgba(255, 255, 255, 0.95);
+  max-height: 730px;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+  padding-top: 20px;
+  padding-bottom: 40px;
+  margin-left: 0;
+  /* 隐藏滚动条 */
+  -ms-overflow-style: none;
+  /* IE 和 Edge */
+  scrollbar-width: none;
+  /* Firefox */
+}
+
+/* 隐藏Webkit浏览器（Chrome、Safari）的滚动条 */
+.login-box::-webkit-scrollbar {
+  display: none;
+}
+
+/* 登录头部 */
+.login-header {
+  text-align: center;
+  margin-top: 35px;
+  margin-bottom: 35px;
+}
+
+.login-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #003d86;
+  margin-bottom: 10px;
+}
+
+.login-subtitle {
+  color: #666;
+  font-size: 16px;
+}
+
+.login-tabs {
+  width: 90%;
+  margin: 0 auto 25px;
+  text-align: center;
+  border-bottom: 2px solid #003d86;
+  padding-bottom: 10px;
+}
+
+.tab-btn {
+  background: none;
+  border: none;
+  color: #003d86;
+  font-size: 18px;
+  font-weight: bold;
+  cursor: default;
+  padding: 0;
+}
+
+.form-container {
+  margin-bottom: 30px;
+  display: flex;
+  justify-content: center;
+}
+
+.login-form,
+.register-form {
+  width: 90%;
+}
+
+.input-group {
+  margin-bottom: 18px;
+  position: relative;
+}
+
+.input-icon {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #666;
+  font-size: 18px;
+  transition: color 0.3s ease;
+}
+
+.input-group input,
+.input-group select {
+  width: 100%;
+  height: 50px;
+  padding: 10px 20px 10px 45px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  outline: none;
+  font-size: 16px;
+  transition: all 0.3s ease;
+  background: #f9fafb;
+  box-sizing: border-box;
+}
+
+.input-group input:focus,
+.input-group select:focus {
+  border-color: #003d86;
+  box-shadow: 0 0 0 1px rgba(0, 61, 134, 0.3);
+  background: #fff;
+}
+
+.input-group input:focus + .input-icon,
+.input-group select:focus + .input-icon {
+  color: #003d86;
+}
+
+.form-actions {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.links-container {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 5px;
+  gap: 5px;
+}
+
+.tab-link {
+  color: #0066cc;
+  text-decoration: none;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  font-weight: 500;
+  padding: 0;
+}
+
+.tab-link:hover {
+  color: #0041a8;
+  text-decoration: underline;
+}
+
+.login-btn {
+  width: 100%;
+  padding: 16px;
+  background: linear-gradient(135deg, #003d86, #0066cc);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 4px 15px rgba(0, 61, 134, 0.3);
+}
+
+.login-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #002a5c, #0052a3);
+  box-shadow: 0 6px 20px rgba(0, 61, 134, 0.4);
+  transform: translateY(-1px);
+}
+
+.login-btn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 4px 15px rgba(0, 61, 134, 0.3);
+}
+
+.login-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.btn-text,
+.btn-loading {
+  transition: opacity 0.3s ease;
+}
+
+.btn-loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+}
+
+.login-btn.loading .btn-text {
+  opacity: 0;
+}
+
+.login-btn.loading .btn-loading {
+  opacity: 1;
+}
+
+.help-area {
+  margin: 20px auto 0;
+  width: 85%;
+  font-size: 13px;
+  color: #666;
+  line-height: 1.6;
+  text-align: center;
+  padding: 15px;
+  background: #f0f4f9;
+  border-radius: 8px;
+}
+
+.help-text {
+  margin-bottom: 5px;
+}
+
+.help-text:last-child {
+  margin-bottom: 0;
+}
+
+/* 版权信息样式 */
+
+/* 响应式设计优化 */
+@media (max-width: 1200px) {
+  .login-content {
+    max-width: 1100px;
+    min-height: 650px;
+  }
+
+  .welcome-title {
+    font-size: 32px;
+  }
+
+  .time-title {
+    font-size: 20px;
+  }
+
+  .features-title {
+    font-size: 20px;
+  }
+}
+
+@media (max-width: 992px) {
+  /* 允许移动端页面滚动 */
+  .login-page {
+    overflow: auto;
+  }
+
+  .login-content {
+    flex-direction: column;
+    max-width: 650px;
+    max-height: none;
+  }
+
+  .info-panel,
+  .login-box {
+    padding: 30px 25px;
+    border-radius: 20px;
+  }
+
+  .welcome-title {
+    font-size: 28px;
+  }
+}
+
+@media (max-width: 576px) {
+  /* 允许移动端页面滚动 */
+  .login-page {
+    overflow: auto;
+  }
+
+  .login-container {
+    padding: 20px 15px;
+  }
+
+  .info-panel,
+  .login-box {
+    padding: 30px 25px;
+    border-radius: 20px;
+  }
+
+  .welcome-title {
+    font-size: 24px;
+  }
+
+  .login-title {
+    font-size: 28px;
+  }
+
+  .time-card,
+  .features-card {
+    padding: 25px;
+  }
+
+  .time-item-icon,
+  .feature-icon-bg {
+    width: 45px;
+    height: 45px;
+  }
+}

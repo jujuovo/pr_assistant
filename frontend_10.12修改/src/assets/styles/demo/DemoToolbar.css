@@ -1,0 +1,26 @@
+.demo-toolbar {
+  position: fixed;
+  bottom: 10px;
+  right: 16px;
+  z-index: 10000;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 8px 12px;
+  border: 1px solid #c7d2fe;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 3px 15px #0002;
+  font: 12px sans-serif;
+}
+.demo-toolbar strong {
+  color: #4338ca;
+}
+.demo-toolbar button {
+  padding: 6px 9px;
+  background: #eef2ff;
+  color: #3730a3;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}

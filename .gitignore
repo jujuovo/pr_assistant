@@ -1,0 +1,45 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+.DS_Store
+dist
+dist-ssr
+coverage
+*.local
+venv
+# 忽略虚拟环境目录
+
+/cypress/videos/
+/cypress/screenshots/
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+*.tsbuildinfo
+
+# 忽略上传文件目录中的所有文件，但保留目录结构
+backend/uploads/avatars/*
+backend/uploads/files/*
+backend/uploads/graduate-files/*
+backend/cache/*
+backend/backup/*
+
+# 不忽略.gitkeep文件，这样目录会被Git跟踪
+!backend/uploads/avatars/.gitkeep
+!backend/uploads/files/.gitkeep
+!backend/uploads/graduate-files/.gitkeep
+!backend/cache/.gitkeep

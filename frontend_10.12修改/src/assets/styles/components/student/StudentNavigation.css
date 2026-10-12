@@ -1,0 +1,417 @@
+.student-nav {
+  width: 248px;
+  flex: none;
+  background: #fff;
+  border-right: 1px solid var(--home-border);
+  overflow-y: auto;
+  padding: 32px 16px;
+}
+.student-identity {
+  gap: 16px;
+  padding: 0 8px 32px;
+}
+.student-identity img {
+  width: 56px;
+  height: auto;
+  aspect-ratio: 1;
+  border-radius: 50%;
+}
+.student-identity strong {
+  font-size: 18px;
+  color: var(--home-text);
+}
+.student-nav-group {
+  margin-bottom: 24px;
+}
+.student-group-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  min-height: 48px;
+  border: 0;
+  background: none;
+  color: var(--home-text);
+  font-size: 16px;
+  font-weight: 650;
+  padding: 8px;
+  cursor: pointer;
+}
+.student-nav-items {
+  display: grid;
+  gap: 8px;
+}
+.student-nav-items button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  min-height: 44px;
+  padding: 8px 16px 8px 24px;
+  border: 0;
+  background: none;
+  border-radius: 8px;
+  color: var(--home-muted);
+  font-size: 16px;
+  cursor: pointer;
+}
+.student-nav-items button.selected,
+.student-group-title.selected {
+  background: var(--home-blue);
+  color: #fff;
+  font-weight: 600;
+  border-radius: 8px;
+}
+.nav-title-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.nav-title-content svg,
+.student-nav-items button svg {
+  width: 16px;
+  flex: none;
+  color: inherit;
+}
+.student-group-title {
+  color: var(--home-blue);
+}
+.nav-mobile-toggle {
+  display: none;
+} /* Hover feedback belongs only to enabled menu controls. */
+.student-nav {
+  --nav-hover-bg: #e8f0fb;
+  --nav-hover-shadow: 0 4px 8px rgba(18, 61, 115, 0.12);
+  --nav-hover-motion: 180ms;
+}
+.student-group-title,
+.student-nav-items button,
+.nav-mobile-toggle {
+  border-radius: 8px;
+  transition: transform var(--nav-hover-motion) ease-out;
+}
+@media (hover: hover) and (pointer: fine) {
+  .student-nav button:not(:disabled):not([aria-disabled='true']):hover {
+    background: var(--nav-hover-bg);
+    color: var(--home-blue);
+    box-shadow: var(--nav-hover-shadow);
+    transform: translateY(-2px);
+    cursor: pointer;
+  }
+  .student-nav button.selected:not(:disabled):not([aria-disabled='true']):hover {
+    background: #002b60;
+    color: #fff;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .student-nav button {
+    transition: none;
+  }
+  .student-nav button:hover {
+    transform: none;
+  }
+}
+@media (max-width: 768px) {
+  .student-nav {
+    width: 100%;
+    padding: 16px;
+    border-right: 0;
+    border-bottom: 1px solid var(--home-border);
+    overflow: visible;
+  }
+  .student-identity {
+    padding: 0 0 8px;
+  }
+  .student-identity img {
+    width: 40px;
+  }
+  .nav-mobile-toggle {
+    display: block;
+    width: 100%;
+    text-align: left;
+    min-height: 44px;
+    background: none;
+    border: 1px solid var(--home-border);
+    border-radius: 8px;
+    padding: 8px;
+    color: var(--home-blue);
+    font: inherit;
+  }
+  .student-nav nav {
+    display: none;
+  }
+  .student-nav nav.nav-mobile-open {
+    display: block;
+  }
+  .student-nav-group {
+    margin: 8px 0;
+  }
+}
+
+.student-nav {
+  width: 224px;
+  padding: 24px 12px;
+  scrollbar-width: thin;
+  scrollbar-color: #d7dfe9 transparent;
+}
+.student-identity {
+  padding: 0 8px 24px;
+  gap: 12px;
+}
+.student-identity img {
+  width: 40px;
+}
+.student-identity strong {
+  font-size: 16px;
+  font-weight: 500;
+}
+.identity-fallback {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #e9eff7;
+  color: #123d73;
+  font-size: 18px;
+}
+.student-nav-group {
+  margin-bottom: 16px;
+}
+.student-group-title {
+  font-size: 16px;
+  font-weight: 500;
+  min-height: 44px;
+}
+.student-nav-items {
+  gap: 0;
+}
+.student-nav-items button {
+  font-weight: 400;
+  border-radius: 4px;
+  padding: 8px 12px 8px 24px;
+}
+.student-nav-items button.selected,
+.student-group-title.selected {
+  border-radius: 4px;
+  font-weight: 500;
+}
+.student-nav button:hover {
+  transform: none;
+  box-shadow: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .student-nav button:not(:disabled):hover {
+    transform: none;
+    box-shadow: none;
+  }
+}
+@media (max-width: 768px) {
+  .student-nav {
+    width: 100%;
+    padding: 12px 16px;
+  }
+  .student-identity {
+    padding-bottom: 8px;
+  }
+  .student-nav-group {
+    margin: 8px 0;
+  }
+}
+
+.sidebar-collapse-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  margin-bottom: 12px;
+  padding: 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--home-blue);
+  font: inherit;
+  font-size: 16px;
+  cursor: pointer;
+}
+.sidebar-collapse-toggle:focus-visible {
+  outline: 2px solid var(--home-blue);
+  outline-offset: 2px;
+}
+@media (min-width: 769px) {
+  .student-nav.is-collapsed {
+    width: 64px;
+    padding: 12px 8px;
+  }
+  .is-collapsed .student-identity,
+  .is-collapsed nav,
+  .is-collapsed .collapse-label {
+    display: none;
+  }
+  .is-collapsed .sidebar-collapse-toggle {
+    justify-content: center;
+    margin-bottom: 0;
+  }
+}
+@media (max-width: 768px) {
+  .sidebar-collapse-toggle {
+    display: none;
+  }
+}
+/* Reference navigation, with collapse retained. */
+.student-nav {
+  --home-blue: #0059c7;
+  width: 248px;
+  padding: 16px 16px 24px;
+  background: #fff;
+}
+.student-identity {
+  width: 100%;
+  padding: 12px 8px;
+  margin-bottom: 12px;
+  border: 0;
+  border-bottom: 1px solid #dce4ee;
+  background: #fff;
+  gap: 16px;
+  text-align: left;
+  cursor: pointer;
+}
+.identity-fallback {
+  width: 56px;
+  height: 56px;
+  background: #0059c7;
+  color: #fff;
+  font-size: 28px;
+  font-weight: 600;
+}
+.student-identity img {
+  width: 56px;
+}
+.student-identity strong {
+  font-size: 18px;
+  font-weight: 650;
+  color: #111;
+}
+.identity-role {
+  font-size: 16px;
+  color: #536079;
+}
+.student-identity.selected {
+  background: #0059c7;
+  border-radius: 6px;
+  border-bottom-color: #0059c7;
+}
+.student-identity.selected strong,
+.student-identity.selected .identity-role {
+  color: #fff;
+}
+.student-identity.selected .identity-fallback {
+  background: #fff;
+  color: #0059c7;
+}
+.student-direct-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 52px;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 0;
+  border-radius: 6px;
+  background: #fff;
+  color: #111;
+  font: inherit;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+.student-direct-item svg {
+  width: 20px;
+}
+.student-direct-item.selected {
+  background: #0059c7;
+  color: #fff;
+}
+.student-identity:focus-visible,
+.student-direct-item:focus-visible {
+  outline: 3px solid rgba(0, 89, 199, 0.28);
+  outline-offset: 2px;
+}
+.student-group-title {
+  color: #111;
+  font-weight: 500;
+  padding: 12px;
+  min-height: 52px;
+}
+.student-nav-items button {
+  color: #111;
+  padding: 12px 12px 12px 32px;
+  min-height: 52px;
+  border-radius: 6px;
+}
+.student-nav-items button.selected,
+.student-group-title.selected {
+  background: #0059c7;
+  color: #fff;
+  border-radius: 6px;
+}
+.student-nav-group {
+  margin-bottom: 12px;
+}
+.student-nav-group:last-child {
+  border-top: 1px solid #dce4ee;
+  padding-top: 12px;
+}
+.nav-title-content svg,
+.student-nav-items button svg {
+  width: 20px;
+}
+.sidebar-collapse-toggle {
+  margin: 0;
+  min-height: 32px;
+  font-size: 14px;
+  padding: 4px;
+}
+.student-group-title.selected {
+  font-weight: 600;
+}
+@media (hover: hover) {
+  .student-nav button:not(:disabled):hover {
+    background: #eaf5ff;
+    color: #003c92;
+  }
+  .student-nav button.selected:hover {
+    background: #004aa7;
+    color: #fff;
+  }
+}
+@media (min-width: 769px) {
+  .student-nav.is-collapsed {
+    width: 64px;
+    padding: 12px 8px;
+  }
+}
+@media (max-width: 768px) {
+  .student-nav {
+    width: 100%;
+    padding: 12px 16px;
+  }
+  .student-identity {
+    padding: 0 0 8px;
+    margin: 0;
+    border: 0;
+  }
+  .identity-fallback {
+    width: 40px;
+    height: 40px;
+    font-size: 22px;
+  }
+}
+/* 与下方业务分组使用同一条分界线，分开个人信息与推免明细。 */
+.student-direct-item + .student-nav-group {
+  border-top: 1px solid #dce4ee;
+  padding-top: 12px;
+}

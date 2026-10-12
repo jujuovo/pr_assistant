@@ -1,0 +1,10 @@
+<<<<<<< HEAD
+node_modules/
+dist/
+dist-homepage/
+.DS_Store
+.env.local
+.env.*.local
+=======
+else/
+>>>>>>> origin/main

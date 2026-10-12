@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "kind": "html",
+  "title": "前端代码修改版/frontend/public/demo-guide.html",
+  "entry": "前端代码修改版/frontend/public/demo-guide.html",
+  "renderer": "html",
+  "status": "complete",
+  "exports": [
+    "html",
+    "pdf",
+    "zip"
+  ],
+  "createdAt": "2026-10-11T06:16:11.481Z",
+  "updatedAt": "2026-10-11T06:16:11.481Z",
+  "metadata": {
+    "inferred": true,
+    "reconciled": true
+  }
+}

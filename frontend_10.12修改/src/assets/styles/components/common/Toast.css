@@ -1,0 +1,318 @@
+.toast-container {
+  position: fixed;
+  top: 50px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: auto;
+  max-width: 500px;
+  pointer-events: none;
+  /* 从顶部开始堆叠toast */
+  justify-content: flex-start;
+  gap: 10px;
+}
+
+.toast {
+  padding: 14px 20px;
+  border-radius: 8px;
+  box-shadow:
+    0 2px 12px rgba(0, 51, 102, 0.1),
+    0 1px 3px rgba(0, 51, 102, 0.08);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background-color: white;
+  border: 1px solid #e5e7eb;
+  border-left-width: 4px;
+  min-width: 320px;
+  max-width: 500px;
+  pointer-events: auto;
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+
+/* 进入动画 */
+.toast-enter-active {
+  animation: toast-enter 0.1s ease-out;
+}
+
+/* 离开动画 */
+.toast-leave-active {
+  animation: toast-leave 0.2s ease-in;
+}
+
+@keyframes toast-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes toast-leave {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+}
+
+.toast:hover {
+  box-shadow: 0 4px 16px rgba(0, 51, 102, 0.15);
+  transform: translateY(-2px);
+}
+
+/* 成功样式 - 使用绿色 */
+.toast-success {
+  border-left-color: #27ae60;
+  background-color: #f8fdf9;
+}
+
+.toast-success .toast-icon {
+  color: #27ae60;
+  background-color: rgba(39, 174, 96, 0.1);
+}
+
+/* 错误样式 - 使用红色 */
+.toast-error {
+  border-left-color: #e74c3c;
+  background-color: #fef8f7;
+}
+
+.toast-error .toast-icon {
+  color: #e74c3c;
+  background-color: rgba(231, 76, 60, 0.1);
+}
+
+/* 警告样式 - 使用橙色 */
+.toast-warning {
+  border-left-color: #f39c12;
+  background-color: #fffcf5;
+}
+
+.toast-warning .toast-icon {
+  color: #f39c12;
+  background-color: rgba(243, 156, 18, 0.1);
+}
+
+/* 信息样式 - 使用蓝色（与主色调一致） */
+.toast-info {
+  border-left-color: #3498db;
+  background-color: #f7fbfe;
+}
+
+.toast-info .toast-icon {
+  color: #3498db;
+  background-color: rgba(52, 152, 219, 0.1);
+}
+
+.toast-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: bold;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.toast-content {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.toast-close {
+  background: none;
+  border: none;
+  color: #6b7280;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  margin-left: 4px;
+}
+
+.toast-close:hover {
+  background-color: #f3f4f6;
+  color: #333;
+}
+
+/* 响应式设计 */
+@media (max-width: 1024px) {
+  .toast-container {
+    max-width: 400px;
+  }
+
+  .toast {
+    min-width: 280px;
+    max-width: 400px;
+    padding: 12px 16px;
+    gap: 10px;
+  }
+
+  .toast-content {
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 768px) {
+  .toast-container {
+    top: 15px;
+    max-width: 90%;
+    padding: 0 15px;
+  }
+
+  .toast {
+    width: 100%;
+    min-width: unset;
+    max-width: 100%;
+    padding: 12px 16px;
+    border-radius: 6px;
+  }
+
+  .toast-icon {
+    width: 22px;
+    height: 22px;
+    font-size: 13px;
+  }
+
+  .toast-content {
+    font-size: 13px;
+  }
+
+  .toast-close {
+    width: 26px;
+    height: 26px;
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 576px) {
+  .toast-container {
+    top: 10px;
+    max-width: 95%;
+    padding: 0 10px;
+  }
+
+  .toast {
+    padding: 10px 14px;
+    gap: 8px;
+  }
+
+  .toast-icon {
+    width: 20px;
+    height: 20px;
+    font-size: 12px;
+  }
+
+  .toast-content {
+    font-size: 12px;
+  }
+
+  .toast-close {
+    width: 24px;
+    height: 24px;
+    font-size: 14px;
+  }
+}
+
+/* 与侧边栏折叠状态协调 */
+/* 当侧边栏折叠时，Toast位置需要微调 */
+@media (min-width: 769px) {
+  .sidebar-collapsed .toast-container {
+    left: calc(50% + 30px);
+  }
+}
+
+/* 移动端不需要调整 */
+@media (max-width: 768px) {
+  .sidebar-collapsed .toast-container,
+  .toast-container {
+    left: 50%;
+  }
+}
+
+/* 深色模式适配 */
+@media (prefers-color-scheme: dark) {
+  .toast {
+    background-color: #1f2937;
+    border-color: #374151;
+  }
+
+  .toast-content {
+    color: #f9fafb;
+  }
+
+  .toast-close {
+    color: #9ca3af;
+  }
+
+  .toast-close:hover {
+    background-color: #374151;
+    color: #f9fafb;
+  }
+
+  .toast-success {
+    background-color: rgba(39, 174, 96, 0.1);
+    border-left-color: #10b981;
+  }
+
+  .toast-success .toast-icon {
+    color: #10b981;
+    background-color: rgba(16, 185, 129, 0.2);
+  }
+
+  .toast-error {
+    background-color: rgba(231, 76, 60, 0.1);
+    border-left-color: #ef4444;
+  }
+
+  .toast-error .toast-icon {
+    color: #ef4444;
+    background-color: rgba(239, 68, 68, 0.2);
+  }
+
+  .toast-warning {
+    background-color: rgba(243, 156, 18, 0.1);
+    border-left-color: #f59e0b;
+  }
+
+  .toast-warning .toast-icon {
+    color: #f59e0b;
+    background-color: rgba(245, 158, 11, 0.2);
+  }
+
+  .toast-info {
+    background-color: rgba(52, 152, 219, 0.1);
+    border-left-color: #3b82f6;
+  }
+
+  .toast-info .toast-icon {
+    color: #3b82f6;
+    background-color: rgba(59, 130, 246, 0.2);
+  }
+}

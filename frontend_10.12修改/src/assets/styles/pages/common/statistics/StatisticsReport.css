@@ -1,0 +1,142 @@
+/* 引入共享样式 */
+@import '@/assets/styles/shared/content.css';
+
+/* 组件特有样式 */
+.table-wrapper {
+  position: relative;
+  margin-bottom: 20px;
+}
+
+/* 顶部滚动条容器 */
+.top-scroll-container {
+  overflow-x: auto;
+  overflow-y: hidden;
+  width: 100%;
+  height: 8px;
+  /* 滚动条高度 */
+  margin-bottom: 4px;
+  opacity: 1;
+  background-color: #f1f1f1;
+}
+
+.top-scroll-container::-webkit-scrollbar {
+  height: 8px;
+}
+
+.top-scroll-container::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.top-scroll-container::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+.top-scroll-container::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+.top-scroll-content {
+  /* 这个宽度会被JavaScript动态设置为与表格宽度相同 */
+  height: 1px;
+}
+
+.table-container {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.application-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 1200px;
+}
+
+.application-table th,
+.application-table td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid #e9ecef;
+  font-size: 13px;
+}
+
+.application-table th {
+  background-color: var(--system-surface);
+  font-weight: bold;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  white-space: nowrap;
+}
+
+.comprehensive-table th {
+  min-width: 100px;
+}
+
+.comprehensive-table th:nth-child(1),
+.comprehensive-table td:nth-child(1) {
+  min-width: 60px;
+}
+
+.comprehensive-table th:nth-child(4),
+.comprehensive-table td:nth-child(4) {
+  min-width: 120px;
+}
+
+.comprehensive-table th:nth-child(5),
+.comprehensive-table td:nth-child(5) {
+  min-width: 80px;
+}
+
+.comprehensive-table th:nth-child(11),
+.comprehensive-table td:nth-child(11) {
+  min-width: 150px;
+}
+
+.comprehensive-table th:nth-child(17),
+.comprehensive-table td:nth-child(17) {
+  min-width: 150px;
+}
+
+/* 学生组之间的分割线 */
+.application-table tbody tr.student-group-start td {
+  border-top: 3px solid #8b9096;
+}
+
+/* 第一个学生组不添加顶部边框 */
+.application-table tbody tr:first-child.student-group-start td {
+  border-top: 1px solid #e9ecef;
+}
+
+/* 学术专长项目相关栏目的背景色 */
+.comprehensive-table th:nth-child(n + 12):nth-child(-n + 20),
+.comprehensive-table td:nth-child(n + 12):nth-child(-n + 20) {
+  background-color: rgba(222, 235, 247, 0.5);
+  /* 浅蓝色背景 */
+}
+
+/* 综合表现项目相关栏目的背景色 */
+.comprehensive-table th:nth-child(n + 21):nth-child(-n + 29),
+.comprehensive-table td:nth-child(n + 21):nth-child(-n + 29) {
+  background-color: rgba(237, 247, 237, 0.8);
+  /* 浅绿色背景 */
+}
+
+.comprehensive-table th:nth-child(26),
+.comprehensive-table td:nth-child(26) {
+  min-width: 150px;
+}
+
+.no-data {
+  text-align: center;
+  color: #6c757d;
+  padding: 30px;
+}
+
+.card-title {
+  font-size: 18px;
+  font-weight: bold;
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e9ecef;
+}

@@ -1,0 +1,216 @@
+[
+  {
+    "viewport": 1440,
+    "role": "student",
+    "baselineErrors": [],
+    "currentErrors": [],
+    "states": [
+      {
+        "name": "home",
+        "textEqual": true,
+        "pixelsEqual": true
+      },
+      {
+        "name": "0",
+        "textEqual": true,
+        "pixelsEqual": true
+      },
+      {
+        "name": "1",
+        "textEqual": true,
+        "pixelsEqual": true
+      },
+      {
+        "name": "2",
+        "textEqual": true,
+        "pixelsEqual": true
+      },
+      {
+        "name": "3",
+        "textEqual": true,
+        "pixelsEqual": true
+      },
+      {
+        "name": "4",
+        "textEqual": true,
+        "pixelsEqual": true
+      },
+      {
+        "name": "5",
+        "textEqual": true,
+        "pixelsEqual": true
+      },
+      {
+        "name": "学业成绩",
+        "textEqual": true,
+        "pixelsEqual": true
+      },
+      {
+        "name": "学术创新",
+        "textEqual": true,
+        "pixelsEqual": true
+      },
+      {
+        "name": "社会工作",
+        "textEqual": true,
+        "pixelsEqual": false
+      }
+    ]
+  },
+  {
+    "viewport": 1440,
+    "role": "teacher",
+    "baselineErrors": [],
+    "currentErrors": [],
+    "states": [
+      {
+        "name": "home",
+        "textEqual": true,
+        "pixelsEqual": true
+      },
+      {
+        "name": "0",
+        "textEqual": true,
+        "pixelsEqual": true
+      },
+      {
+        "name": "1",
+        "textEqual": true,
+        "pixelsEqual": true
+      },
+      {
+        "name": "2",
+        "textEqual": true,
+        "pixelsEqual": true
+      },
+      {
+        "name": "3",
+        "textEqual": true,
+        "pixelsEqual": true
+      }
+    ]
+  },
+  {
+    "viewport": 1440,
+    "role": "admin",
+    "baselineErrors": [],
+    "currentErrors": [],
+    "states": [
+      {
+        "name": "home",
+        "textEqual": true,
+        "pixelsEqual": true
+      },
+      {
+        "name": "0",
+        "textEqual": true,
+        "pixelsEqual": true
+      },
+      {
+        "name": "1",
+        "textEqual": true,
+        "pixelsEqual": true
+      },
+      {
+        "name": "2",
+        "textEqual": true,
+        "pixelsEqual": true
+      },
+      {
+        "name": "3",
+        "textEqual": true,
+        "pixelsEqual": true
+      },
+      {
+        "name": "4",
+        "textEqual": true,
+        "pixelsEqual": true
+      },
+      {
+        "name": "5",
+        "textEqual": true,
+        "pixelsEqual": true
+      },
+      {
+        "name": "6",
+        "textEqual": true,
+        "pixelsEqual": true
+      },
+      {
+        "name": "7",
+        "textEqual": true,
+        "pixelsEqual": true
+      },
+      {
+        "name": "8",
+        "textEqual": true,
+        "pixelsEqual": true
+      }
+    ]
+  },
+  {
+    "viewport": 1440,
+    "role": "login",
+    "baselineErrors": [],
+    "currentErrors": [],
+    "states": [
+      {
+        "name": "home",
+        "textEqual": true,
+        "pixelsEqual": true
+      }
+    ]
+  },
+  {
+    "viewport": 390,
+    "role": "student",
+    "baselineErrors": [],
+    "currentErrors": [],
+    "states": [
+      {
+        "name": "home",
+        "textEqual": true,
+        "pixelsEqual": true
+      }
+    ]
+  },
+  {
+    "viewport": 390,
+    "role": "teacher",
+    "baselineErrors": [],
+    "currentErrors": [],
+    "states": [
+      {
+        "name": "home",
+        "textEqual": true,
+        "pixelsEqual": true
+      }
+    ]
+  },
+  {
+    "viewport": 390,
+    "role": "admin",
+    "baselineErrors": [],
+    "currentErrors": [],
+    "states": [
+      {
+        "name": "home",
+        "textEqual": true,
+        "pixelsEqual": true
+      }
+    ]
+  },
+  {
+    "viewport": 390,
+    "role": "login",
+    "baselineErrors": [],
+    "currentErrors": [],
+    "states": [
+      {
+        "name": "home",
+        "textEqual": true,
+        "pixelsEqual": true
+      }
+    ]
+  }
+]

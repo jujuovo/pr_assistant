@@ -1,0 +1,38 @@
+/* 引入共享样式 */
+@import '@/assets/styles/shared/content.css';
+
+.status-with-action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.revision-entry {
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 1px solid #0059c7;
+  border-radius: 6px;
+  background: #fff;
+  color: #0059c7;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color 180ms ease-out,
+    color 180ms ease-out,
+    box-shadow 180ms ease-out;
+}
+
+.revision-entry:focus-visible {
+  outline: 3px solid rgba(0, 89, 199, 0.28);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) {
+  .revision-entry:hover {
+    background: #0059c7;
+    color: #fff;
+    box-shadow: 0 4px 10px rgba(0, 59, 126, 0.18);
+  }
+}
