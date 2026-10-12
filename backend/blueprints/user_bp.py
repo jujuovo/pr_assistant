@@ -20,6 +20,7 @@ from PIL import Image
 from io import BytesIO
 from werkzeug.utils import secure_filename
 from extensions import db
+from services.deletion import automation_deletion_conflict, protected_deletion_response, commit_deletion
 import openpyxl
 from openpyxl.utils import get_column_letter
 
@@ -284,34 +285,21 @@ def delete_user(user_id):
     if not user:
         return jsonify({"message": "用户不存在"}), 404
 
-    # 如果是学生用户，同时删除关联的Student记录和申请数据
-    if user.role == "student" and user.student:
-        # 获取该学生的所有申请数据
-        applications = Application.query.filter_by(
-            student_id=user.student.student_id
-        ).all()
-        # 先删除每个申请关联的文件
+    # 即使账号角色后来改变，学生外键关联的材料仍需保留。
+    student = user.student
+    applications = Application.query.filter_by(student_id=student.student_id).all() if student else []
+    conflict = automation_deletion_conflict([student] if student else [], [user], applications=applications)
+    if conflict:
+        return protected_deletion_response(conflict)
+    with db.session.no_autoflush:
         for application in applications:
-            if application.files:
-                for file in application.files:
-                    try:
-                        if "path" in file and file["path"]:
-                            filename = os.path.basename(file["path"])
-                            file_path = os.path.join(
-                                current_app.config["FILE_FOLDER"], filename
-                            )
-                            if os.path.exists(file_path):
-                                os.remove(file_path)
-                    except Exception as e:
-                        print(f"删除文件失败: {str(e)}")
-        # 删除该学生的所有申请数据
-        Application.query.filter_by(student_id=user.student.student_id).delete()
-        # 删除Student记录
-        db.session.delete(user.student)
-
-    db.session.delete(user)
-    db.session.commit()
-
+            db.session.delete(application)
+        if student:
+            db.session.delete(student)
+        db.session.delete(user)
+    error = commit_deletion(applications)
+    if error:
+        return error
     return jsonify({"message": "用户删除成功"}), 200
 
 

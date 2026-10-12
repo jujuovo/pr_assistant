@@ -43,3 +43,11 @@ backend/backup/*
 !backend/uploads/files/.gitkeep
 !backend/uploads/graduate-files/.gitkeep
 !backend/cache/.gitkeep
+# 自动化后端本地环境、私有材料和测试结果
+.venv/
+.venv-ocr/
+backend/private-materials/
+backend/tests/artifacts/
+backend/**/__pycache__/
+.pytest_cache/
+/cache/

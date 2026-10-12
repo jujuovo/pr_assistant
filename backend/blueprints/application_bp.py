@@ -231,6 +231,11 @@ def get_applications():
 # 获取单个申请
 @application_bp.route("/applications/<int:id>", methods=["GET"])
 def get_application(id):
+    from automation_models import AutomationBatch
+    from services.automation import authorize
+    automation = AutomationBatch.query.filter_by(application_id=id).first()
+    if automation:
+        authorize(automation)
     app = Application.query.get_or_404(id)
 
     # 转换文件路径格式
@@ -574,6 +579,10 @@ def create_application():
 # 更新申请
 @application_bp.route("/applications/<int:id>", methods=["PUT"])
 def update_application(id):
+    from automation_models import AutomationBatch
+    from flask import abort
+    if AutomationBatch.query.filter_by(application_id=id).first():
+        abort(409, description="自动化申请只允许通过专用明细审核接口更新，不能修改状态或最终分数")
     try:
         application = Application.query.get_or_404(id)
 
@@ -813,6 +822,16 @@ def update_application(id):
 # 审核申请
 @application_bp.route("/applications/<int:id>/review", methods=["POST"])
 def review_application(id):
+    from automation_models import AutomationBatch
+    from services.automation import review_batch
+    automation = AutomationBatch.query.filter_by(application_id=id).first()
+    if automation:
+        from werkzeug.exceptions import HTTPException
+        try:
+            return jsonify(review_batch(automation, request.get_json(silent=True)))
+        except HTTPException as error:
+            db.session.rollback()
+            return jsonify({"error": error.description}), error.code
     application = Application.query.get_or_404(id)
     data = request.get_json()
 
@@ -906,6 +925,10 @@ def review_application(id):
 # 删除申请
 @application_bp.route("/applications/<int:id>", methods=["DELETE"])
 def delete_application(id):
+    from automation_models import AutomationBatch
+    from flask import abort
+    if AutomationBatch.query.filter_by(application_id=id).first():
+        abort(409, description="自动化申请需通过审核驳回/撤销认定，不能删除去重和审计记录")
     application = Application.query.get_or_404(id)
 
     # 获取学生ID，用于后续更新统计数据

@@ -17,6 +17,15 @@ class Config:
     # SQLALCHEMY_DATABASE_URI = "postgresql://gradpush:0701284612yekYEK@localhost:5432/gradpush" # 服务器数据库
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
+    # 独立识别工作进程与 Web 使用同一数据库；测试可指向隔离 SQLite。
+    SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL", SQLALCHEMY_DATABASE_URI)
+    AUTOMATION_UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "private-materials")
+    AUTOMATION_MAX_FILES = 30
+    AUTOMATION_MAX_IMAGE_BYTES = 10 * 1024 * 1024
+    AUTOMATION_MAX_PIXELS = 20_000_000
+    AUTOMATION_LEASE_SECONDS = 600
+    AUTOMATION_MAX_ATTEMPTS = 3
+
     # 密钥配置
     SECRET_KEY = os.environ.get("SECRET_KEY") or "0701284612yekYEK"
 
