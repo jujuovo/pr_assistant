@@ -93,7 +93,7 @@ async function apiRequest(endpoint, method = 'GET', data = null, token = null, t
 
     // 检查响应状态
     if (!response.ok) {
-      throw new Error(responseData.message || '请求失败')
+      throw new Error(responseData.error || responseData.message || '请求失败')
     }
 
     return responseData

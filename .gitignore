@@ -47,7 +47,12 @@ backend/backup/*
 .venv/
 .venv-ocr/
 backend/private-materials/
+backend/private-certificates/
+backend/private-evidence/
+backend/ocr-models/
 backend/tests/artifacts/
 backend/**/__pycache__/
 .pytest_cache/
 /cache/
+
+backend/instance/certificate-local.db*

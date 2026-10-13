@@ -184,6 +184,11 @@
           ></button>
         </section>
 
+        <CertificateSelection
+          v-model:project="formData.certificateProject"
+          v-model:claims="formData.certificateClaims"
+        />
+
         <div class="form-actions">
           <button type="button" class="btn btn-outline" @click="saveDraft">
             <font-awesome-icon :icon="['fas', 'save']" /> 保存草稿
@@ -222,6 +227,7 @@
 
 <script setup>
 import { ref, reactive, watch, onMounted, computed } from 'vue'
+import CertificateSelection from '@/components/student/CertificateSelection.vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { useApplicationsStore } from '@/stores/applications.js'
 import { useToastStore } from '@/stores/toast.js'
@@ -325,6 +331,8 @@ const formData = reactive({
   facultyId: authStore.user?.facultyId || authStore.user?.faculty_id || '',
   // 基本信息
   projectName: '',
+  certificateProject: 'manual',
+  certificateClaims: {},
   awardDate: '',
   ruleId: '', // 选择的规则ID
   // 动态系数字段，根据规则配置自动生成
@@ -356,6 +364,8 @@ const resetForm = () => {
     departmentId: authStore.user?.departmentId || '',
     majorId: authStore.user?.majorId || '',
     projectName: '',
+    certificateProject: 'manual',
+    certificateClaims: {},
     awardDate: '',
     ruleId: '',
     selfScore: '',

@@ -8,6 +8,7 @@ from extensions import db
 from models import Faculty, Department, Major, Student, User
 from blueprints.automation_bp import automation_bp
 from blueprints.application_bp import application_bp
+from blueprints.certificate_bp import certificate_bp
 
 
 @pytest.fixture
@@ -20,6 +21,13 @@ def env(tmp_path):
     db.init_app(app)
     app.register_blueprint(automation_bp)
     app.register_blueprint(application_bp)
+    app.register_blueprint(certificate_bp)
+    from blueprints.material_bp import material_bp
+    app.register_blueprint(material_bp)
+    app.config['MATERIAL_STORAGE_FOLDER'] = str(tmp_path / 'evidence')
+    app.config['CERTIFICATE_STORAGE_FOLDER'] = str(tmp_path / 'certificates')
+    app.config['FILE_FOLDER'] = str(tmp_path / 'uploads' / 'files')
+    app.config['UPLOAD_FOLDER'] = str(tmp_path / 'uploads')
     with app.app_context():
         db.create_all()
         faculty = Faculty(name="测试学院")

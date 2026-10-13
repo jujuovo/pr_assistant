@@ -1,0 +1,26 @@
+{
+  "example4.jpg": {
+    "school": "厦门大学",
+    "student": "徐一杰",
+    "teacher": "李胜睿",
+    "edition": "第十七届",
+    "track": "C/C++程序设计",
+    "group": "大学A组",
+    "region": "福建赛区",
+    "award": "二等奖",
+    "certificate_no": "1701003650",
+    "date": "2026年5月8日"
+  },
+  "example5.jpg": {
+    "school": "厦门大学",
+    "student": "王勇顺",
+    "teacher": "赵江声",
+    "edition": "第十七届",
+    "track": "Python程序设计",
+    "group": "大学A组",
+    "region": "福建赛区",
+    "award": "三等奖",
+    "certificate_no": "1732000548",
+    "date": "2026年5月8日"
+  }
+}
