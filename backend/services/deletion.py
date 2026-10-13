@@ -15,6 +15,24 @@ def automation_deletion_conflict(students=(), users=(), *, faculty_id=None, appl
     if student_ids:
         Student.query.filter(Student.student_id.in_(student_ids)).order_by(
             Student.student_id).with_for_update().all()
+    from material_models import MaterialRecord, MaterialSource, MaterialEvent
+    record_conditions, source_conditions = [], []
+    if student_ids:
+        record_conditions.append(MaterialRecord.student_id.in_(student_ids))
+        source_conditions.append(MaterialSource.student_id.in_(student_ids))
+    if faculty_id is not None:
+        record_conditions.append(MaterialRecord.faculty_id == faculty_id)
+        source_conditions.append(MaterialSource.faculty_id == faculty_id)
+    if applications:
+        record_conditions.append(MaterialRecord.application_id.in_([a.id for a in applications]))
+    if record_conditions and MaterialRecord.query.filter(or_(*record_conditions)).first():
+        return "存在材料申报或核验记录，请保留记录并停用账号"
+    if source_conditions and MaterialSource.query.filter(or_(*source_conditions)).first():
+        return "存在校方材料数据快照，不能直接删除关联学生或学院"
+    material_user_ids = [user.id for user in users]
+    if material_user_ids and (MaterialEvent.query.filter(MaterialEvent.actor_id.in_(material_user_ids)).first()
+                             or MaterialSource.query.filter(MaterialSource.imported_by.in_(material_user_ids)).first()):
+        return "账号关联材料核验或导入审计记录，请停用账号"
     conditions = []
     if student_ids:
         conditions.append(AutomationBatch.student_id.in_(student_ids))

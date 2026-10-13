@@ -78,6 +78,7 @@ session.init_app(app)
 
 # 先创建数据库对象，再导入模型
 from models import User, Application, Rule
+import material_models  # 五类结构化材料接口
 import certificate_models  # 注册独立证书识别任务
 import automation_models  # 注册新增材料、任务、去重、政策及审计表
 
@@ -261,6 +262,8 @@ app.register_blueprint(main_bp, url_prefix='/api')
 app.register_blueprint(automation_bp)
 from blueprints.certificate_bp import certificate_bp
 app.register_blueprint(certificate_bp)
+from blueprints.material_bp import material_bp
+app.register_blueprint(material_bp)
 
 # 根路径路由，解决直接访问/返回404的问题
 @app.route("/", methods=["GET"])

@@ -30,6 +30,8 @@ class Config:
     CERTIFICATE_MAX_FILE_BYTES = 10 * 1024 * 1024
     CERTIFICATE_MAX_PIXELS = 20_000_000
     CERTIFICATE_MAX_PDF_PAGES = 4
+    MATERIAL_STORAGE_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'private-evidence')
+    MATERIAL_MAX_FILE_BYTES = 10 * 1024 * 1024
     OCR_MODEL_ROOT = os.environ.get('OCR_MODEL_ROOT', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ocr-models'))
 
     # 密钥配置

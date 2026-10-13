@@ -147,3 +147,7 @@ python app.py
    - 修改 `frontend/components/admin/UserManagement.vue` 中直接使用的API地址
 5. 确保前后端服务端口不冲突
 6. 前端开发服务器默认运行在 http://localhost:5173/，如果端口被占用会自动切换到其他端口
+
+## 五类材料接口
+
+已添加学业成绩、学科竞赛、外语能力、学生工作、荣誉称号的材料接口及非OCR处理。没有新增自动加分。详见 [接口说明](backend/docs/material-interfaces.md) 和 [OpenAPI合同](backend/docs/openapi-materials.json)。

@@ -27,10 +27,17 @@ from certificate_models import CertificateAssessment
 from services.certificates.service import (authorize_application, validate_selection, enqueue,
                                             selection_present, selection_json)
 from services.automation import actor
+from services.materials.service import has_linked_material, scope_application_query
 from blueprints.score_bp import update_student_statistics
 
 # 创建蓝图实例
 application_bp = Blueprint("application", __name__, url_prefix="/api")
+
+@application_bp.errorhandler(HTTPException)
+def application_http_error(error):
+    db.session.rollback()
+    return jsonify({'error':error.description}), error.code
+
 
 
 # 获取所有申请
@@ -51,7 +58,7 @@ def get_applications():
     major_name = request.args.get("major")
 
     # 构建查询
-    query = Application.query
+    query = scope_application_query(Application.query)
 
     # 按学院筛选
     if faculty_id:
@@ -243,7 +250,7 @@ def get_application(id):
     if automation:
         authorize(automation)
     app = Application.query.get_or_404(id)
-    if CertificateAssessment.query.filter_by(application_id=id).first():
+    if CertificateAssessment.query.filter_by(application_id=id).first() or has_linked_material(id):
         authorize_application(app)
 
     # 转换文件路径格式
@@ -663,7 +670,8 @@ def update_application(id):
             return jsonify({"error": "项目名称长度必须在2-50个字符之间"}), 400
 
         certificate = CertificateAssessment.query.filter_by(application_id=id).first()
-        if certificate or selection_present(data):
+        linked_material = has_linked_material(id)
+        if certificate or linked_material or selection_present(data):
             owner = authorize_application(application)
             if owner.role != "student" or application.status not in ("draft", "pending"):
                 abort(409, description="证书申请只能由本人在待审核前编辑；教师请使用审核入口")
@@ -895,7 +903,7 @@ def review_application(id):
             db.session.rollback()
             return jsonify({"error": error.description}), error.code
     application = Application.query.get_or_404(id)
-    if CertificateAssessment.query.filter_by(application_id=id).first():
+    if CertificateAssessment.query.filter_by(application_id=id).first() or has_linked_material(id):
         authorize_application(application, reviewer=True)
     data = request.get_json()
 
@@ -995,8 +1003,12 @@ def delete_application(id):
         abort(409, description="自动化申请需通过审核驳回/撤销认定，不能删除去重和审计记录")
     application = Application.query.get_or_404(id)
 
-    if CertificateAssessment.query.filter_by(application_id=id).first():
+    if CertificateAssessment.query.filter_by(application_id=id).first() or has_linked_material(id):
         authorize_application(application)
+
+    from material_models import MaterialRecord
+    if MaterialRecord.query.filter_by(application_id=id).first():
+        abort(409, description="申请关联材料核验记录，不能直接删除；请保留核验依据")
 
     # 获取学生ID，用于后续更新统计数据
     student_id = application.student_id
@@ -1041,7 +1053,7 @@ def get_pending_applications():
     student_name = request.args.get("studentName")
 
     # 构建查询
-    query = Application.query.filter_by(status="pending")
+    query = scope_application_query(Application.query.filter_by(status="pending"))
 
     # 按学院筛选
     if faculty_id:

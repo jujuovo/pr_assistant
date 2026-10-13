@@ -1,0 +1,2371 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "pr_assistant 材料核验接口",
+    "version": "1.0.0",
+    "description": "五类结构化材料与人工核验接口；OCR新适配器和自动加分未实现，材料核验不会写入学生或申请分数。"
+  },
+  "servers": [
+    {
+      "url": "/"
+    }
+  ],
+  "security": [
+    {
+      "sessionCookie": []
+    }
+  ],
+  "paths": {
+    "/api/materials/types": {
+      "get": {
+        "summary": "查询五类材料字段与支持能力",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "没有权限",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态或版本冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "materialTypes"
+      }
+    },
+    "/api/materials/{category}/records": {
+      "parameters": [
+        {
+          "name": "category",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "enum": [
+              "academic",
+              "competition",
+              "language",
+              "student_work",
+              "honor"
+            ]
+          }
+        }
+      ],
+      "get": {
+        "summary": "列出本人或本院材料",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "没有权限",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态或版本冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "listMaterials",
+        "parameters": [
+          {
+            "name": "student_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 2000,
+              "maximum": 2100
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          },
+          {
+            "name": "after_id",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          }
+        ]
+      },
+      "post": {
+        "summary": "学生创建结构化草稿",
+        "responses": {
+          "201": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Material"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "没有权限",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态或版本冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRecord"
+              },
+              "examples": {
+                "academic": {
+                  "summary": "学业成绩",
+                  "value": {
+                    "year": 2026,
+                    "data": {
+                      "term": "2025-2026-2",
+                      "courses": [
+                        {
+                          "course_code": "A",
+                          "course_name": "数据结构",
+                          "credits": 2,
+                          "score": 80,
+                          "full_score": 100
+                        },
+                        {
+                          "course_code": "B",
+                          "course_name": "数学",
+                          "credits": 3,
+                          "score": 90,
+                          "full_score": 100
+                        }
+                      ]
+                    }
+                  }
+                },
+                "competition": {
+                  "summary": "学科竞赛",
+                  "value": {
+                    "year": 2026,
+                    "data": {
+                      "competition_name": "蓝桥杯",
+                      "organizer": "比赛主办单位",
+                      "competition_level": "省级",
+                      "award_level": "二等奖",
+                      "award_date": "2026-05-08",
+                      "certificate_no": "1234567890",
+                      "project_key": "lanqiao"
+                    }
+                  }
+                },
+                "language": {
+                  "summary": "外语能力",
+                  "value": {
+                    "year": 2026,
+                    "data": {
+                      "exam_name": "CET6",
+                      "language": "英语",
+                      "score": 560,
+                      "full_score": 710,
+                      "test_date": "2025-12-20",
+                      "certificate_no": "CET-2025-001"
+                    }
+                  }
+                },
+                "student_work": {
+                  "summary": "学生工作",
+                  "value": {
+                    "year": 2026,
+                    "data": {
+                      "as_of": "2026-01-31",
+                      "appointments": [
+                        {
+                          "organization": "学生会",
+                          "position": "部长",
+                          "position_level": "院级",
+                          "start_date": "2026-01-01",
+                          "end_date": "2026-01-10",
+                          "assessment_result": "优秀"
+                        },
+                        {
+                          "organization": "班级",
+                          "position": "班长",
+                          "position_level": "班级",
+                          "start_date": "2026-01-05",
+                          "end_date": "2026-01-20",
+                          "assessment_result": "合格"
+                        }
+                      ]
+                    }
+                  }
+                },
+                "honor": {
+                  "summary": "荣誉称号",
+                  "value": {
+                    "year": 2026,
+                    "data": {
+                      "honor_name": "优秀学生干部",
+                      "honor_level": "校级",
+                      "issuer": "学校",
+                      "award_date": "2026-06-01",
+                      "certificate_no": "HONOR-001"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "createMaterial"
+      }
+    },
+    "/api/materials/{category}/records/{record_id}": {
+      "parameters": [
+        {
+          "name": "category",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "enum": [
+              "academic",
+              "competition",
+              "language",
+              "student_work",
+              "honor"
+            ]
+          }
+        },
+        {
+          "name": "record_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "get": {
+        "summary": "读取材料",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Material"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "没有权限",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态或版本冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getMaterial"
+      },
+      "patch": {
+        "summary": "完整替换本人草稿申报字段",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Material"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "没有权限",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态或版本冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditRecord"
+              }
+            }
+          }
+        },
+        "operationId": "editMaterial"
+      }
+    },
+    "/api/materials/{category}/records/{record_id}/submit": {
+      "parameters": [
+        {
+          "name": "category",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "enum": [
+              "academic",
+              "competition",
+              "language",
+              "student_work",
+              "honor"
+            ]
+          }
+        },
+        {
+          "name": "record_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "post": {
+        "summary": "提交人工核验",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Material"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "没有权限",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态或版本冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VersionRequest"
+              }
+            }
+          }
+        },
+        "operationId": "submitMaterial"
+      }
+    },
+    "/api/materials/{category}/records/{record_id}/withdraw": {
+      "parameters": [
+        {
+          "name": "category",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "enum": [
+              "academic",
+              "competition",
+              "language",
+              "student_work",
+              "honor"
+            ]
+          }
+        },
+        {
+          "name": "record_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "post": {
+        "summary": "撤回尚未核验的材料",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Material"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "没有权限",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态或版本冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VersionRequest"
+              }
+            }
+          }
+        },
+        "operationId": "withdrawMaterial"
+      }
+    },
+    "/api/materials/{category}/records/{record_id}/check": {
+      "parameters": [
+        {
+          "name": "category",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "enum": [
+              "academic",
+              "competition",
+              "language",
+              "student_work",
+              "honor"
+            ]
+          }
+        },
+        {
+          "name": "record_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "post": {
+        "summary": "与管理员导入的校方快照对照",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Material"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "没有权限",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态或版本冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VersionRequest"
+              }
+            }
+          }
+        },
+        "operationId": "checkMaterial"
+      }
+    },
+    "/api/materials/{category}/records/{record_id}/review": {
+      "parameters": [
+        {
+          "name": "category",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "enum": [
+              "academic",
+              "competition",
+              "language",
+              "student_work",
+              "honor"
+            ]
+          }
+        },
+        {
+          "name": "record_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "post": {
+        "summary": "教师或管理员人工核验，结果不加分",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Material"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "没有权限",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态或版本冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewRequest"
+              }
+            }
+          }
+        },
+        "operationId": "reviewMaterial"
+      }
+    },
+    "/api/materials/{category}/records/{record_id}/events": {
+      "parameters": [
+        {
+          "name": "category",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "enum": [
+              "academic",
+              "competition",
+              "language",
+              "student_work",
+              "honor"
+            ]
+          }
+        },
+        {
+          "name": "record_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "get": {
+        "summary": "读取材料审计记录",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "没有权限",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态或版本冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "materialEvents"
+      }
+    },
+    "/api/materials/{category}/records/{record_id}/recognize": {
+      "parameters": [
+        {
+          "name": "category",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "enum": [
+              "academic",
+              "competition",
+              "language",
+              "student_work",
+              "honor"
+            ]
+          }
+        },
+        {
+          "name": "record_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "post": {
+        "operationId": "recognizeMaterial",
+        "summary": "预留OCR入口，尚未实现，不运行模型或排队",
+        "responses": {
+          "501": {
+            "description": "明确未实现",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "recognition_not_implemented"
+                      ]
+                    },
+                    "ocr_executed": {
+                      "type": "boolean",
+                      "enum": [
+                        false
+                      ]
+                    },
+                    "category": {
+                      "type": "string"
+                    },
+                    "record_id": {
+                      "type": "integer"
+                    },
+                    "next_step": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录"
+          },
+          "403": {
+            "description": "无权访问"
+          },
+          "404": {
+            "description": "材料不存在"
+          }
+        }
+      }
+    },
+    "/api/materials/{category}/records/{record_id}/attachments": {
+      "parameters": [
+        {
+          "name": "category",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "enum": [
+              "academic",
+              "competition",
+              "language",
+              "student_work",
+              "honor"
+            ]
+          }
+        },
+        {
+          "name": "record_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "post": {
+        "summary": "上传私有附件",
+        "responses": {
+          "201": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Material"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "没有权限",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态或版本冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "uploadMaterialEvidence",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "version",
+                  "files"
+                ],
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2000000000
+                  },
+                  "files": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 10,
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/materials/{category}/records/{record_id}/attachments/{attachment_id}": {
+      "parameters": [
+        {
+          "name": "category",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "enum": [
+              "academic",
+              "competition",
+              "language",
+              "student_work",
+              "honor"
+            ]
+          }
+        },
+        {
+          "name": "record_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        {
+          "name": "attachment_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "downloadMaterialEvidence",
+        "summary": "带权限下载原件",
+        "responses": {
+          "200": {
+            "description": "私有附件下载",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录"
+          },
+          "403": {
+            "description": "无权访问"
+          },
+          "404": {
+            "description": "附件不存在"
+          },
+          "409": {
+            "description": "原件大小或SHA-256与上传记录不一致，停止下载",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/materials/sources/import": {
+      "post": {
+        "summary": "本学院管理员导入不可覆盖的来源快照",
+        "responses": {
+          "201": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "没有权限",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态或版本冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "相同内容重复导入，不创建新记录"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceImport"
+              }
+            }
+          }
+        },
+        "operationId": "importMaterialSources"
+      }
+    },
+    "/api/materials/sources/{source_id}": {
+      "parameters": [
+        {
+          "name": "source_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          }
+        }
+      ],
+      "get": {
+        "summary": "同院教师或管理员读取来源快照",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "没有权限",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态或版本冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getMaterialSource"
+      }
+    },
+    "/api/materials/academic/parse-csv": {
+      "post": {
+        "summary": "UTF-8成绩CSV预览，不保存或写入成绩",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "没有权限",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态或版本冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "parseAcademicCsv",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "term",
+                  "file"
+                ],
+                "properties": {
+                  "term": {
+                    "type": "string",
+                    "maxLength": 200
+                  },
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/materials/openapi.json": {
+      "get": {
+        "summary": "读取本批接口合同",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "没有权限",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态或版本冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "materialOpenApi"
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "sessionCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "session"
+      }
+    },
+    "schemas": {
+      "Course": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "course_code",
+          "course_name",
+          "credits",
+          "score",
+          "full_score"
+        ],
+        "properties": {
+          "course_code": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "course_name": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "credits": {
+            "oneOf": [
+              {
+                "type": "number",
+                "minimum": 0
+              },
+              {
+                "type": "string",
+                "maxLength": 40
+              }
+            ],
+            "description": "有限十进制数，最多8位小数；标准化响应为十进制字符串。"
+          },
+          "score": {
+            "oneOf": [
+              {
+                "type": "number",
+                "minimum": 0
+              },
+              {
+                "type": "string",
+                "maxLength": 40
+              }
+            ],
+            "description": "有限十进制数，最多8位小数；标准化响应为十进制字符串。"
+          },
+          "full_score": {
+            "oneOf": [
+              {
+                "type": "number",
+                "minimum": 0
+              },
+              {
+                "type": "string",
+                "maxLength": 40
+              }
+            ],
+            "description": "有限十进制数，最多8位小数；标准化响应为十进制字符串。"
+          },
+          "included": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      },
+      "Appointment": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "organization",
+          "position",
+          "position_level",
+          "start_date",
+          "end_date",
+          "assessment_result"
+        ],
+        "properties": {
+          "organization": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "position": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "position_level": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date",
+            "nullable": true,
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          },
+          "assessment_result": {
+            "type": "string",
+            "maxLength": 200
+          }
+        }
+      },
+      "AcademicData": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "term",
+          "courses"
+        ],
+        "properties": {
+          "term": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "courses": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1000,
+            "items": {
+              "$ref": "#/components/schemas/Course"
+            }
+          },
+          "reference_id": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "匹配本院本学生本年度来源数据的external_id"
+          }
+        }
+      },
+      "CompetitionData": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "competition_name",
+          "organizer",
+          "competition_level",
+          "award_level",
+          "award_date"
+        ],
+        "properties": {
+          "competition_name": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "organizer": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "competition_level": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "award_level": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "award_date": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          },
+          "certificate_no": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "project_key": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "lanqiao"
+            ]
+          },
+          "reference_id": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "匹配本院本学生本年度来源数据的external_id"
+          }
+        }
+      },
+      "LanguageData": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "exam_name",
+          "language",
+          "score",
+          "full_score",
+          "test_date",
+          "certificate_no"
+        ],
+        "properties": {
+          "exam_name": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "language": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "score": {
+            "oneOf": [
+              {
+                "type": "number",
+                "minimum": 0
+              },
+              {
+                "type": "string",
+                "maxLength": 40
+              }
+            ],
+            "description": "有限十进制数，最多8位小数；标准化响应为十进制字符串。"
+          },
+          "full_score": {
+            "oneOf": [
+              {
+                "type": "number",
+                "minimum": 0
+              },
+              {
+                "type": "string",
+                "maxLength": 40
+              }
+            ],
+            "description": "有限十进制数，最多8位小数；标准化响应为十进制字符串。"
+          },
+          "test_date": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          },
+          "certificate_no": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "score_scale": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "reference_id": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "匹配本院本学生本年度来源数据的external_id"
+          }
+        }
+      },
+      "StudentWorkData": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "as_of",
+          "appointments"
+        ],
+        "properties": {
+          "as_of": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          },
+          "appointments": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/Appointment"
+            }
+          },
+          "reference_id": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "匹配本院本学生本年度来源数据的external_id"
+          }
+        }
+      },
+      "HonorData": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "honor_name",
+          "honor_level",
+          "issuer",
+          "award_date"
+        ],
+        "properties": {
+          "honor_name": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "honor_level": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "issuer": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "award_date": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          },
+          "certificate_no": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "reference_id": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "匹配本院本学生本年度来源数据的external_id"
+          }
+        }
+      },
+      "CreateRecord": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "year",
+          "data"
+        ],
+        "properties": {
+          "year": {
+            "type": "integer",
+            "minimum": 2000,
+            "maximum": 2100
+          },
+          "application_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "data": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AcademicData"
+              },
+              {
+                "$ref": "#/components/schemas/CompetitionData"
+              },
+              {
+                "$ref": "#/components/schemas/LanguageData"
+              },
+              {
+                "$ref": "#/components/schemas/StudentWorkData"
+              },
+              {
+                "$ref": "#/components/schemas/HonorData"
+              }
+            ]
+          }
+        }
+      },
+      "EditRecord": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "data"
+        ],
+        "properties": {
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2000000000
+          },
+          "data": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AcademicData"
+              },
+              {
+                "$ref": "#/components/schemas/CompetitionData"
+              },
+              {
+                "$ref": "#/components/schemas/LanguageData"
+              },
+              {
+                "$ref": "#/components/schemas/StudentWorkData"
+              },
+              {
+                "$ref": "#/components/schemas/HonorData"
+              }
+            ]
+          }
+        }
+      },
+      "VersionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version"
+        ],
+        "properties": {
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2000000000
+          }
+        }
+      },
+      "ReviewRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "decision",
+          "comment"
+        ],
+        "properties": {
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2000000000
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "verified",
+              "rejected",
+              "needs_correction"
+            ]
+          },
+          "comment": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "CheckReport": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "consistent",
+              "mismatch",
+              "awaiting_official_data"
+            ]
+          },
+          "authenticity": {
+            "type": "string",
+            "enum": [
+              "not_assessed"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "source": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": true
+          },
+          "differences": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string"
+                },
+                "claimed": {},
+                "source_value": {}
+              }
+            }
+          }
+        }
+      },
+      "Material": {
+        "type": "object",
+        "required": [
+          "id",
+          "category",
+          "year",
+          "status",
+          "version",
+          "data",
+          "analysis",
+          "bonus_result"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "academic",
+              "competition",
+              "language",
+              "student_work",
+              "honor"
+            ]
+          },
+          "student_id": {
+            "type": "string"
+          },
+          "faculty_id": {
+            "type": "integer"
+          },
+          "application_id": {
+            "type": "integer",
+            "nullable": true
+          },
+          "year": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "submitted",
+              "verified",
+              "rejected",
+              "needs_correction"
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2000000000
+          },
+          "data": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AcademicData"
+              },
+              {
+                "$ref": "#/components/schemas/CompetitionData"
+              },
+              {
+                "$ref": "#/components/schemas/LanguageData"
+              },
+              {
+                "$ref": "#/components/schemas/StudentWorkData"
+              },
+              {
+                "$ref": "#/components/schemas/HonorData"
+              }
+            ]
+          },
+          "analysis": {
+            "type": "object",
+            "description": "非OCR数据统计，未进行加分计算",
+            "additionalProperties": true
+          },
+          "check_report": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CheckReport"
+              }
+            ],
+            "nullable": true
+          },
+          "bonus_result": {
+            "nullable": true,
+            "enum": [
+              null
+            ],
+            "description": "本阶段永远为null，不计算加分"
+          },
+          "recognition_status": {
+            "type": "string",
+            "enum": [
+              "not_implemented"
+            ]
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "filename": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "size": {
+                  "type": "integer"
+                },
+                "sha256": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "SourceItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "student_id",
+          "category",
+          "year",
+          "external_id",
+          "data"
+        ],
+        "properties": {
+          "student_id": {
+            "type": "string",
+            "maxLength": 20
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "academic",
+              "competition",
+              "language",
+              "student_work",
+              "honor"
+            ]
+          },
+          "year": {
+            "type": "integer",
+            "minimum": 2000,
+            "maximum": 2100
+          },
+          "external_id": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2000000000,
+            "default": 1
+          },
+          "data": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AcademicData"
+              },
+              {
+                "$ref": "#/components/schemas/CompetitionData"
+              },
+              {
+                "$ref": "#/components/schemas/LanguageData"
+              },
+              {
+                "$ref": "#/components/schemas/StudentWorkData"
+              },
+              {
+                "$ref": "#/components/schemas/HonorData"
+              }
+            ]
+          }
+        }
+      },
+      "SourceImport": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source_name",
+          "records"
+        ],
+        "properties": {
+          "source_name": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "source_url": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "records": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 500,
+            "items": {
+              "$ref": "#/components/schemas/SourceItem"
+            }
+          }
+        }
+      }
+    }
+  }
+}
