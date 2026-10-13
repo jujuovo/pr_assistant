@@ -29,6 +29,7 @@
             </div>
           </div>
         </div>
+        <CertificateSelection v-model:project="formData.certificateProject" v-model:claims="formData.certificateClaims" />
         <!-- 规则选择 -->
         <div class="form-section">
           <div class="section-title">
@@ -255,6 +256,7 @@
 
 <script setup>
 import { ref, reactive, watch, onMounted, computed } from 'vue'
+import CertificateSelection from './CertificateSelection.vue'
 import { useAuthStore } from '../../stores/auth'
 import { useApplicationsStore } from '../../stores/applications'
 import { useToastStore } from '../../stores/toast'
@@ -280,6 +282,8 @@ const formData = reactive({
   facultyId: authStore.user?.facultyId || authStore.user?.faculty_id || '',
   // 基本信息
   projectName: '',
+  certificateProject: 'manual',
+  certificateClaims: {},
   awardDate: '',
   ruleId: '', // 选择的规则ID
   // 动态系数字段，根据规则配置自动生成
@@ -311,6 +315,8 @@ const resetForm = () => {
     departmentId: authStore.user?.departmentId || '',
     majorId: authStore.user?.majorId || '',
     projectName: '',
+    certificateProject: 'manual',
+    certificateClaims: {},
     awardDate: '',
     ruleId: '',
     selfScore: '',

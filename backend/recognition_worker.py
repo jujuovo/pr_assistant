@@ -11,11 +11,14 @@ def main():
     from extensions import db
     from services.recognition.provider import PaddleProvider
     from services.recognition.worker import run_one
-    provider = PaddleProvider()
+    provider = PaddleProvider(model_root=app.config.get('OCR_MODEL_ROOT'))
     with app.app_context():
         while True:
             try:
-                processed = run_one(app, provider)
+                from services.certificates.worker import run_one_certificate
+                certificate_processed = run_one_certificate(app, provider)
+                volunteer_processed = run_one(app, provider)
+                processed = certificate_processed or volunteer_processed
             except Exception:
                 db.session.rollback()
                 app.logger.exception("识别工作进程异常，任务租约到期后可恢复")

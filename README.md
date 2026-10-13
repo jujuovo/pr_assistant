@@ -1,3 +1,7 @@
+## 证书识别已接入
+
+本地完整启动（Web、识别 worker、前端）：`./start-local.ps1`。使用本项目独立环境、PP-OCRv5模型和ZigZag，不引用实验目录。详见 [证书识别使用说明](backend/docs/certificate-ocr.md)。
+
 # 快速启动指南
 
 ## 启动后端

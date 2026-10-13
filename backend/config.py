@@ -26,6 +26,12 @@ class Config:
     AUTOMATION_LEASE_SECONDS = 600
     AUTOMATION_MAX_ATTEMPTS = 3
 
+    CERTIFICATE_STORAGE_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'private-certificates')
+    CERTIFICATE_MAX_FILE_BYTES = 10 * 1024 * 1024
+    CERTIFICATE_MAX_PIXELS = 20_000_000
+    CERTIFICATE_MAX_PDF_PAGES = 4
+    OCR_MODEL_ROOT = os.environ.get('OCR_MODEL_ROOT', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ocr-models'))
+
     # 密钥配置
     SECRET_KEY = os.environ.get("SECRET_KEY") or "0701284612yekYEK"
 

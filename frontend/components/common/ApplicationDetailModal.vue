@@ -100,6 +100,7 @@
 
         <!-- 右侧：申请信息和文件列表/审核操作 -->
         <div class="right-column">
+          <CertificateReport :application-id="application.id" :application-status="application.status" />
           <!-- 学生基本信息 -->
           <div class="card compact-card">
             <div class="card-title">学生信息</div>
@@ -275,6 +276,7 @@
 
 <script setup>
 import { ref, reactive, computed, watch } from 'vue'
+import CertificateReport from './CertificateReport.vue'
 import { useToastStore } from '../../stores/toast'
 import { getFileFullUrl } from '../../utils/api'
 

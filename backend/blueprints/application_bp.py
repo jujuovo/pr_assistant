@@ -21,6 +21,12 @@ import os
 import traceback
 import uuid
 from extensions import db
+from werkzeug.exceptions import HTTPException
+from flask import abort
+from certificate_models import CertificateAssessment
+from services.certificates.service import (authorize_application, validate_selection, enqueue,
+                                            selection_present, selection_json)
+from services.automation import actor
 from blueprints.score_bp import update_student_statistics
 
 # 创建蓝图实例
@@ -237,6 +243,8 @@ def get_application(id):
     if automation:
         authorize(automation)
     app = Application.query.get_or_404(id)
+    if CertificateAssessment.query.filter_by(application_id=id).first():
+        authorize_application(app)
 
     # 转换文件路径格式
     processed_files = []
@@ -331,6 +339,7 @@ def get_application(id):
         "rule": rule_info,
     }
 
+    app_data.update(selection_json(app))
     return jsonify(app_data), 200
 
 
@@ -385,6 +394,18 @@ def create_application():
         # 验证项目名称长度
         if "project_name" in data and (len(data["project_name"]) < 2 or len(data["project_name"]) > 50):
             return jsonify({"error": "项目名称长度必须在2-50个字符之间"}), 400
+
+        certificate_selection = None
+        if selection_present(data):
+            certificate_selection = validate_selection(data)
+            user = actor()
+            if user.role != "student" or user.student_id != data.get("student_id") or user.faculty_id != data.get("faculty_id"):
+                abort(403, description="只能为本人提交证书材料")
+            from models import Student
+            owner = Student.query.filter_by(student_id=user.student_id).one()
+            data.update(student_name=owner.student_name, department_id=owner.department_id, major_id=owner.major_id)
+            if data.get("status", "pending") not in ("draft", "pending"):
+                abort(400, description="学生提交只能为草稿或待审核")
 
         # 处理文件上传
         files = []
@@ -517,6 +538,9 @@ def create_application():
         )
 
         db.session.add(new_application)
+        db.session.flush()
+        if certificate_selection:
+            enqueue(new_application, *certificate_selection)
         db.session.commit()
 
         # 构建完整的响应数据
@@ -550,13 +574,18 @@ def create_application():
         }
 
         return jsonify(app_data), 201
+    except HTTPException as e:
+        db.session.rollback()
+        return jsonify({'error': e.description}), e.code
     except json.JSONDecodeError as e:
         return jsonify({"error": "无效的JSON格式", "details": str(e)}), 400
     except KeyError as e:
         return jsonify({"error": f"缺少必要字段: {str(e)}"}), 400
     except ValueError as e:
+        db.session.rollback()
         return jsonify({"error": f"数据格式错误: {str(e)}"}), 400
     except Exception as e:
+        db.session.rollback()
         error_msg = f"发生未预期的错误: {str(e)}"
         traceback_str = traceback.format_exc()
         print(error_msg)
@@ -584,7 +613,7 @@ def update_application(id):
     if AutomationBatch.query.filter_by(application_id=id).first():
         abort(409, description="自动化申请只允许通过专用明细审核接口更新，不能修改状态或最终分数")
     try:
-        application = Application.query.get_or_404(id)
+        application = Application.query.filter_by(id=id).with_for_update().first_or_404()
 
         # 解析申请数据
         if "application" in request.form:
@@ -632,6 +661,24 @@ def update_application(id):
         # 验证项目名称长度
         if "project_name" in data and (len(data["project_name"]) < 2 or len(data["project_name"]) > 50):
             return jsonify({"error": "项目名称长度必须在2-50个字符之间"}), 400
+
+        certificate = CertificateAssessment.query.filter_by(application_id=id).first()
+        if certificate or selection_present(data):
+            owner = authorize_application(application)
+            if owner.role != "student" or application.status not in ("draft", "pending"):
+                abort(409, description="证书申请只能由本人在待审核前编辑；教师请使用审核入口")
+            forbidden = ("final_score", "review_comment", "reviewed_by", "reviewed_at")
+            if any(k in data for k in forbidden) or data.get("status", application.status) not in ("draft", "pending"):
+                abort(400, description="学生不能修改审核结果")
+            for field in ("student_id", "faculty_id", "department_id", "major_id", "student_name"):
+                if field in data and data[field] != getattr(application, field):
+                    abort(400, description="证书申请不能更改所属学生或学院")
+            # 客户端保留的附件只允许从原申请中选择，不能引用其他申请的文件。
+            existing_paths = {f.get("path") for f in application.files or []}
+            if any(f.get("path") not in existing_paths for f in data.get("files", []) if isinstance(f, dict) and "path" in f):
+                abort(400, description="证书附件不属于当前申请")
+            if selection_present(data):
+                validate_selection(data)
 
         # 处理文件上传
         files = []
@@ -773,9 +820,14 @@ def update_application(id):
             "dynamic_coefficients", application.dynamic_coefficients
         )
 
-        # 只有当有新文件上传时才更新文件列表
+        # 新证书附件与仍被学生保留的旧附件一起处理。
         if files:
-            application.files = files
+            if certificate or selection_present(data):
+                kept_paths = {f.get("path") for f in data.get("files", application.files or []) if isinstance(f, dict)}
+                kept_files = [f for f in application.files or [] if f.get("path") in kept_paths]
+                application.files = kept_files + files
+            else:
+                application.files = files
         elif "files" in data:
             # 保留原有文件的size字段
             existing_files = application.files or []
@@ -797,10 +849,20 @@ def update_application(id):
 
             application.files = updated_files
 
+        if certificate or selection_present(data):
+            selected = validate_selection(data) if selection_present(data) else (certificate.project_key, {k:v for k,v in certificate.claims.items() if k in ('award','region','group','track')})
+            enqueue(application, *selected)
         db.session.commit()
 
         return jsonify({"message": "申请更新成功"}), 200
+    except HTTPException as e:
+        db.session.rollback()
+        return jsonify({'error':e.description}), e.code
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({'error':str(e)}), 400
     except Exception as e:
+        db.session.rollback()
         # 记录详细错误信息
         traceback_str = traceback.format_exc()
         print("更新申请时发生错误:")
@@ -833,6 +895,8 @@ def review_application(id):
             db.session.rollback()
             return jsonify({"error": error.description}), error.code
     application = Application.query.get_or_404(id)
+    if CertificateAssessment.query.filter_by(application_id=id).first():
+        authorize_application(application, reviewer=True)
     data = request.get_json()
 
     application.status = data["status"]
@@ -930,6 +994,9 @@ def delete_application(id):
     if AutomationBatch.query.filter_by(application_id=id).first():
         abort(409, description="自动化申请需通过审核驳回/撤销认定，不能删除去重和审计记录")
     application = Application.query.get_or_404(id)
+
+    if CertificateAssessment.query.filter_by(application_id=id).first():
+        authorize_application(application)
 
     # 获取学生ID，用于后续更新统计数据
     student_id = application.student_id
