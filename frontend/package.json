@@ -11,7 +11,10 @@
     "build": "vite build --config vite.config.js",
     "preview": "vite preview --config vite.config.js",
     "demo": "vite --mode demo --host 127.0.0.1",
-    "build:demo": "vite build --mode demo"
+    "build:demo": "vite build --mode demo",
+    "build:homepage": "vite build --mode demo --config vite.homepage.config.js",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "@fortawesome/free-solid-svg-icons": "^7.0.1",
@@ -23,6 +26,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.1",
+    "prettier": "3.6.2",
     "vite": "^7.0.6",
     "vite-plugin-vue-devtools": "^8.0.0"
   }

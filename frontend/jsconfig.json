@@ -19,13 +19,13 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
-    
+
     /* Path mapping */
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./src/*"]
     }
   },
-  "include": ["./**/*.js", "./**/*.vue"],
+  "include": ["src/**/*.js", "src/**/*.vue", "vite*.config.js"],
   "exclude": ["node_modules", "dist", "build"]
 }

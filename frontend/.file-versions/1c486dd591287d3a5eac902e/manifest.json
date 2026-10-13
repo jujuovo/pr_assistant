@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 2,
+  "fileName": "public/demo-guide.html",
+  "currentVersionId": "88a50961-1c14-4b51-b1f5-80f38360f869",
+  "entries": [
+    {
+      "id": "88a50961-1c14-4b51-b1f5-80f38360f869",
+      "fileName": "public/demo-guide.html",
+      "version": 1,
+      "label": "Version 1",
+      "createdAt": 1791887061517,
+      "source": "ai",
+      "prompt": "/Users/juju/Desktop/学习/交互设计/能工智人队/frontend_10.12修改 这个路径下是一个保研助手的前端代码，我现在需要你修改：1.我点开index之后默认进入的应该是登陆界面而不是学生端的前端界面；2.修改一下src里面教师端和管理员端的界面，左侧边栏使用和学生界面一样的悬浮效果，晚上好xxx底下那行字的格式和内容页统一一下。教师的边栏改成：个人信息（大栏目），推免审核（大栏目，下设小栏目：待审核申请，审核记录，统计报表），管理员的边栏改成：个人信息（大栏目），推免管理（大栏目，下设小栏目：推免规则（原规则管理），推免文件），推免统计（下设小栏目：统计报表，成绩管理，申请管理），系统管理（大栏目，下设小栏目：用户管理，学院管理，系统设置）。大小栏目的字体，字号，格式，分割线，大栏目下拉效果等和学生端一样，可复用的ui可以复用。操作时尽量保证代码的结构规范和可复用性，统一网页格式风格",
+      "size": 622,
+      "mime": "text/html; charset=utf-8",
+      "kind": "html",
+      "contentPath": "0001-88a50961-1c14-4b51-b1f5-80f38360f869.html",
+      "contentDigest": "215dbab74a0e2721f0b7125f548e4e43b4b4be65f47e18dd0303d9e434515882",
+      "promptSource": "message"
+    }
+  ]
+}
