@@ -16,14 +16,14 @@
           <p>{{ labels[page.status] || page.status }} · {{ page.message }}</p>
           <p v-if="page.watermark">水印检查：{{ watermarkLabels[page.watermark.watermark_status || page.watermark.status] || '待人工核对' }}</p>
           <p class="warning" v-if="page.quality && !page.quality.acceptable">{{ page.quality.reason }}。请通过编辑申请替换材料。</p>
-          <table v-if="page.raw_fields">
-            <thead><tr><th>字段</th><th>原图识别</th><th>处理图识别</th></tr></thead>
+          <table v-if="page.raw_fields || result.student_values?.[index]">
+            <thead><tr><th>字段</th><th>原图识别</th><th>处理图识别</th><th v-if="result.student_values">学生申报值</th></tr></thead>
             <tbody><tr v-for="(label, key) in fields" :key="key" :class="{ difference: differs(page,key) }">
-              <th>{{ label }}</th><td>{{ page.raw_fields[key] || '未识别' }}</td><td>{{ page.processed_fields?.[key] || '未识别' }}</td>
+              <th>{{ label }}</th><td>{{ page.raw_fields?.[key] || '未识别' }}</td><td>{{ page.processed_fields?.[key] || '未识别' }}</td><td v-if="result.student_values" :class="{ difference: result.student_values[index]?.[key] !== (page.processed_fields?.[key] || page.raw_fields?.[key] || '') }">{{ result.student_values[index]?.[key] || '未填写' }}</td>
             </tr></tbody>
           </table>
           <ul v-if="page.warnings?.length"><li v-for="(warning, i) in page.warnings" :key="i" class="warning">{{ warning.message }}</li></ul>
-          <details v-if="page.artifacts?.original || page.artifacts?.processed">
+          <details :open="result.preview_flow" v-if="page.artifacts?.original || page.artifacts?.processed">
             <summary>查看原图与 OCR 辅助图</summary>
             <div class="images">
               <figure v-if="page.artifacts.original"><img :src="url(page.artifacts.original)" alt="保留原图"><figcaption>原图（审核依据）</figcaption></figure>
@@ -32,7 +32,7 @@
           </details>
           <a v-if="page.artifacts?.source" :href="url(page.artifacts.source)" target="_blank" rel="noopener">查看上传原件</a>
         </article>
-        <button type="button" v-if="!['queued','processing'].includes(result.status) && ['draft','pending'].includes(applicationStatus)" :disabled="retrying" @click="retry">{{ retrying ? '正在排队…' : '重新识别' }}</button>
+        <button type="button" v-if="!result.preview_flow && !['queued','processing'].includes(result.status) && ['draft','pending'].includes(applicationStatus)" :disabled="retrying" @click="retry">{{ retrying ? '正在排队…' : '重新识别' }}</button>
       </template>
     </template>
   </section>
@@ -40,7 +40,7 @@
 
 <script setup>
 import { ref, watch, onBeforeUnmount } from 'vue'
-import api from '@/services/api.js'
+import certificateApi from '@/services/certificateApi.js'
 const props = defineProps({ applicationId: { type: [Number, String], required: true }, applicationStatus: String })
 const result = ref(null), error = ref(''), loading = ref(false), retrying = ref(false)
 let timer, generation = 0, disposed = false
@@ -48,7 +48,7 @@ const labels = { queued: '等待识别', processing: '识别中', manual: '人�
 const watermarkLabels = { matched: '蓝桥杯文字匹配', missing: '未发现预期水印', mismatched: '水印文字不匹配', uncertain: '无法可靠确定' }
 const fields = { school: '学校', student: '姓名', teacher: '指导教师', edition: '届次', track: '赛道', group: '组别', region: '赛区', award: '奖项', certificate_no: '证书编号', date: '日期' }
 const differs = (page, key) => page.differences?.some(d => d.field === key) || page.warnings?.some(w => w.field === key)
-const url = (path) => `/api/certificates/applications/${props.applicationId}/artifacts/${result.value.version}/${path.split('/').map(encodeURIComponent).join('/')}`
+const url = path => certificateApi.getArtifactUrl(props.applicationId, result.value.version, path)
 async function load() {
   clearTimeout(timer)
   const current = generation
@@ -56,7 +56,7 @@ async function load() {
   error.value = ''
   if (import.meta.env.MODE === 'demo') { loading.value = false; result.value = { status:'manual', project:'manual' }; return }
   try {
-    const response = await api.apiRequest(`/certificates/applications/${props.applicationId}`)
+    const response = await certificateApi.getAssessment(props.applicationId)
     if (disposed || current !== generation) return
     result.value = response
     if (['queued','processing'].includes(response.status)) timer = setTimeout(load, 2500)
@@ -65,7 +65,7 @@ async function load() {
 }
 async function retry() {
   retrying.value = true
-  try { await api.apiRequest(`/certificates/applications/${props.applicationId}/retry`, 'POST', { version:result.value.version }); await load() }
+  try { await certificateApi.retry(props.applicationId, result.value.version); await load() }
   catch (e) { error.value = e.message }
   finally { retrying.value = false }
 }

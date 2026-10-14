@@ -56,3 +56,20 @@ backend/**/__pycache__/
 /cache/
 
 backend/instance/certificate-local.db*
+
+# Mac 独立本地环境与测试数据
+.venv-mac/
+.local-mac/
+
+# Runtime data and secrets are rebuilt locally, never published
+__pycache__/
+*.py[cod]
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+.env
+.env.*
+!.env.example
+.session-secret
+.local-win/

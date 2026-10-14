@@ -1,0 +1,90 @@
+{
+  "organization": {
+    "faculty": "信息学院",
+    "department": "计算机系",
+    "major": "软件工程专业"
+  },
+  "accounts": [
+    {
+      "username": "student001",
+      "role": "student",
+      "name": "演示同学",
+      "password": "demo123",
+      "email": "demo@example.com",
+      "phone": "13800000000"
+    },
+    {
+      "username": "teacher001",
+      "role": "teacher",
+      "name": "演示教师",
+      "password": "demo123",
+      "email": "demo@example.com",
+      "phone": "13800000000"
+    },
+    {
+      "username": "admin001",
+      "role": "admin",
+      "name": "演示管理员",
+      "password": "demo123",
+      "email": "demo@example.com",
+      "phone": "13800000000"
+    }
+  ],
+  "student": {
+    "student_id": "student001",
+    "student_name": "演示同学",
+    "gender": "女",
+    "gpa": 3.8,
+    "academic_score": 76,
+    "cet4_score": 580,
+    "cet6_score": 550
+  },
+  "rule": {
+    "name": "学科竞赛加分（开发测试）",
+    "type": "academic",
+    "sub_type": "competition",
+    "score": 5,
+    "max_score": 10,
+    "max_count": 5,
+    "status": "active",
+    "description": "仅开发测试：一等奖5分、二等奖3分；非学校正式政策。",
+    "parameters": {
+      "type": "tree",
+      "tree": {
+        "root": {
+          "id": "root",
+          "dimension": {
+            "name": "获奖等级",
+            "key": "level"
+          },
+          "children": [
+            {
+              "id": "first",
+              "dimension": {
+                "name": "一等奖",
+                "key": "first"
+              },
+              "score": 5,
+              "children": []
+            },
+            {
+              "id": "second",
+              "dimension": {
+                "name": "二等奖",
+                "key": "second"
+              },
+              "score": 3,
+              "children": []
+            }
+          ]
+        }
+      }
+    }
+  },
+  "system_settings": {
+    "academic_year": "2025",
+    "application_start": "2026-10-01T10:28:46.965115",
+    "application_end": "2027-01-27T10:28:46.965115"
+  },
+  "volunteer_policy": null
+}

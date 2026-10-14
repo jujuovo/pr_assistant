@@ -4,8 +4,9 @@ $projectRoot = $PSScriptRoot
 $backendRoot = Join-Path $projectRoot 'backend'
 $pythonExe = Join-Path $projectRoot '.venv/Scripts/python.exe'
 if (!(Test-Path -LiteralPath $pythonExe)) {
-    throw '请先在主项目创建 .venv 并安装 backend/requirements-ocr.txt，详见 backend/docs/certificate-ocr.md。'
+    throw '请先创建 Python 3.12 的 .venv 并安装 backend/requirements-ocr.txt，详见 README.md。'
 }
+if (!(Get-Command npm.cmd -ErrorAction SilentlyContinue)) { throw '请安装 Node.js 与 npm，详见 README.md。' }
 $env:PYTHONUTF8 = '1'
 $env:PYTHONDONTWRITEBYTECODE = '1'
 $env:PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK = 'True'
@@ -24,7 +25,7 @@ try {
     $workerProcess = Start-Process -FilePath $pythonExe -ArgumentList '-B', 'recognition_worker.py' -WorkingDirectory $backendRoot -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $logRoot 'local-worker.out.log') -RedirectStandardError (Join-Path $logRoot 'local-worker.err.log')
     Write-Host '后端和识别进程已启动。打开前端输出中的地址；按 Ctrl+C 退出时会结束本次启动的后端进程。'
     Push-Location (Join-Path $projectRoot 'frontend')
-    try { npm run dev -- --host 127.0.0.1 }
+    try { npm.cmd run dev -- --host localhost --port 5173 --strictPort }
     finally { Pop-Location }
 }
 finally {

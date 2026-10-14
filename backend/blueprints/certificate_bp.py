@@ -40,6 +40,8 @@ def retry(application_id):
     row, application = row_for(application_id)
     if not row or row.project_key == "manual":
         abort(409, description="人工通道不运行自动识别")
+    if row.claims.get("preview_flow"):
+        abort(409, description="预览流程请重新选择材料，保留已确认的OCR与申报快照")
     if application.status not in ("draft", "pending"):
         abort(409, description="已审核申请不能重跑；请保留原审核证据")
     body = request.get_json(silent=True) or {}
@@ -78,3 +80,17 @@ def artifact(application_id, version, filename):
     response.headers["Cache-Control"] = "private, no-store"
     response.headers["X-Content-Type-Options"] = "nosniff"
     return response
+
+
+@certificate_bp.post('/previews')
+def preview_upload():
+    from services.certificates.preview import create_preview
+    return jsonify(view(create_preview(request.files.getlist('files')))), 202
+
+
+@certificate_bp.post('/applications/<int:application_id>/confirm-preview')
+def confirm_preview(application_id):
+    from services.certificates.preview import save_preview
+    row, application = row_for(application_id)
+    result = save_preview(row, application, request.get_json(silent=True))
+    return jsonify(view(result))

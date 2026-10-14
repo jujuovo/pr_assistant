@@ -1,7 +1,7 @@
-"""将项目附带的旧 SQLite 复制为独立运行数据库，再进行增量补齐。"""
+"""Create a reproducible local SQLite database; preserve existing application data."""
 import os
 from pathlib import Path
-import sqlite3
+import argparse
 import sys
 
 BACKEND = Path(__file__).resolve().parents[1]
@@ -9,17 +9,11 @@ sys.path.insert(0, str(BACKEND))
 LOCAL = BACKEND / 'instance' / 'certificate-local.db'
 
 
-def main():
-    LOCAL.parent.mkdir(exist_ok=True)
-    if not LOCAL.exists():
-        source = BACKEND / 'instance' / 'gradpush.db'
-        if source.exists():
-            # SQLite backup API 同时处理 WAL，源库以只读方式打开。
-            with sqlite3.connect('file:'+source.as_posix()+'?mode=ro',uri=True) as original:
-                with sqlite3.connect(LOCAL) as target:
-                    original.backup(target)
-            print('已复制项目附带数据库，源库保持原样。')
-    os.environ['DATABASE_URL'] = 'sqlite:///' + LOCAL.as_posix()
+def main(database_file=None):
+    local = Path(database_file).resolve() if database_file else LOCAL
+    local.parent.mkdir(parents=True, exist_ok=True)
+    fresh = not local.exists()
+    os.environ['DATABASE_URL'] = 'sqlite:///' + local.as_posix()
     from app import app
     from extensions import db
     from sqlalchemy import inspect, text
@@ -47,9 +41,14 @@ def main():
         if not SystemSettings.query.first():
             db.session.add(SystemSettings())
             db.session.commit()
-        print(f'本地数据库已准备：{LOCAL}')
+        from tools.seed_demo import seed_demo
+        seed_demo(with_test_rule=True, with_test_settings=fresh)
+        print(f'本地数据库已准备：{local}')
+        print('共享三角色测试账号及信息学院规则已准备；已有数据保持不变。')
         print('证书表已创建；识别结果不会修改申请分数。')
 
 
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser(description='准备本地开发SQLite库及共享测试账号')
+    parser.add_argument('--database-file', type=Path, help='可选独立测试数据库路径')
+    main(parser.parse_args().database_file)

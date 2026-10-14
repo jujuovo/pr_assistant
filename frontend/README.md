@@ -1,3 +1,5 @@
+> 真实后端联调与三角色测试账号请先阅读[项目根目录 README](../README.md)。下文 Demo 模式仅用于页面演示，不运行真实 OCR。
+
 # GradPush 前端（10.13 修改版）
 
 本目录以 `frontend_10.12` 的页面内容为基础完成结构整理，使用 Vue 3、Vite、Pinia 和 Vue Router。

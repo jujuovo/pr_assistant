@@ -670,6 +670,8 @@ def update_application(id):
             return jsonify({"error": "项目名称长度必须在2-50个字符之间"}), 400
 
         certificate = CertificateAssessment.query.filter_by(application_id=id).first()
+        if certificate and certificate.claims.get("preview_flow"):
+            abort(409, description="识别预览申请请使用预览确认入口；已提交材料不能覆盖")
         linked_material = has_linked_material(id)
         if certificate or linked_material or selection_present(data):
             owner = authorize_application(application)
@@ -905,6 +907,9 @@ def review_application(id):
     application = Application.query.get_or_404(id)
     if CertificateAssessment.query.filter_by(application_id=id).first() or has_linked_material(id):
         authorize_application(application, reviewer=True)
+    certificate = CertificateAssessment.query.filter_by(application_id=id).first()
+    if certificate and certificate.claims.get("preview_flow") and application.status == "draft":
+        abort(409, description="学生尚未确认提交，不可审核识别草稿")
     data = request.get_json()
 
     application.status = data["status"]

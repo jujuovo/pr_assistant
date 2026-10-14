@@ -7,14 +7,30 @@
 """
 
 import os
-from sqlalchemy.engine.url import URL
+from pathlib import Path
+import secrets
+
+
+def local_secret():
+    """Share a local session secret across Web/worker without committing it."""
+    if os.environ.get('SECRET_KEY'):
+        return os.environ['SECRET_KEY']
+    path = Path(__file__).resolve().parent / 'instance' / '.session-secret'
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        pass
+    else:
+        with os.fdopen(fd, 'w', encoding='utf-8') as output:
+            output.write(secrets.token_hex(32))
+    return path.read_text(encoding='utf-8').strip()
 
 
 class Config:
     # 数据库配置
     # 使用URL对象构建数据库连接字符串，避免编码问题
-    SQLALCHEMY_DATABASE_URI = "postgresql://postgres:123456@localhost:5432/gradpush" # 本地数据库
-    # SQLALCHEMY_DATABASE_URI = "postgresql://gradpush:0701284612yekYEK@localhost:5432/gradpush" # 服务器数据库
+    SQLALCHEMY_DATABASE_URI = "postgresql://localhost/gradpush"
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # 独立识别工作进程与 Web 使用同一数据库；测试可指向隔离 SQLite。
@@ -35,7 +51,7 @@ class Config:
     OCR_MODEL_ROOT = os.environ.get('OCR_MODEL_ROOT', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ocr-models'))
 
     # 密钥配置
-    SECRET_KEY = os.environ.get("SECRET_KEY") or "0701284612yekYEK"
+    SECRET_KEY = local_secret()
 
     # 文件上传配置
     UPLOAD_FOLDER = os.path.join(os.getcwd(), "uploads")

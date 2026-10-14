@@ -1,153 +1,128 @@
-## 证书识别已接入
-
-本地完整启动（Web、识别 worker、前端）：`./start-local.ps1`。使用本项目独立环境、PP-OCRv5模型和ZigZag，不引用实验目录。详见 [证书识别使用说明](backend/docs/certificate-ocr.md)。
-
-# 快速启动指南
-
-## 启动后端
-使用PowerShell的语法设置环境变量并启动Flask服务：
-```powershell
-cd backend
-venv\Scripts\activate
-python app.py
-```
-
-## 启动前端
-在frontend目录下启动Vue前端服务：
-```powershell
-cd frontend
-npm run dev
-```
-
 # 推免加分系统
 
-一个基于Vue 3和Python Flask的推免加分管理系统。
+Vue 3 / Vite 前端、Flask 后端与独立 OCR worker。源码目录固定为 `frontend` 和 `backend`。以下命令均从**仓库根目录**开始执行，路径中有空格时使用引号。
 
-## Recommended IDE Setup
+## 环境与功能范围
 
-[VSCode](https://code.visualstudio.com/) + [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).
+- Python **3.12**；Node.js `^20.19.0` 或 `>=22.12.0`，建议团队统一 Node 22；npm。
+- 本地开发使用 SQLite，无需先装 PostgreSQL。首次安装 Python/npm 依赖和 OCR 模型需要网络。
+- 后端端口5001，前端5173；Vite代理 `/api` 与 `/uploads`。浏览器统一使用 `http://localhost:5173`，真实联调不要运行 `npm run demo`。
+- 蓝桥杯：上传→OCR预览→学生修改申报值→提交→教师对照原图与OCR审核。OCR不会自动认定真实性或批准加分。
+- 志愿工时有后端和请求模块，但学生页面闭环尚未接入；五类材料有结构化核验接口，通用 `recognize` 返回501。不能把这些未完成功能视为操作系统兼容问题。
 
-## Customize configuration
+## Windows 首次准备与启动
 
-See [Vite Configuration Reference](https://vite.dev/config/).
+在 PowerShell 中执行（先安装 Python 3.12 和 Node.js）：
 
-## 前端设置
-
-### 进入前端目录
-```bash
-cd frontend
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -r backend/requirements-ocr.txt
+.\.venv\Scripts\python.exe -m pip check
+npm.cmd ci --prefix frontend
+.\start-local.ps1
 ```
 
-### 安装依赖
-```bash
-npm install
+脚本会准备数据库、共享账号和模型，然后启动 Web、worker、前端。模型首次准备较慢。若系统阻止执行项目脚本，可仅对当前 PowerShell 窗口执行 `Set-ExecutionPolicy -Scope Process Bypass` 后重试。不要修改全系统策略。
+
+打开 `http://localhost:5173`。日志在 `backend/logs/local-web.*.log`、`local-worker.*.log`。按 Ctrl+C 退出；之后只需运行 `./start-local.ps1`。只准备数据库与模型可运行 `./start-local.ps1 -PrepareOnly`。
+
+Windows 本地数据库为 `backend/instance/certificate-local.db`，模型为 `backend/ocr-models`。均不提交Git。
+
+## macOS 首次准备
+
+安装 Python 3.12 和符合版本要求的 Node.js；例如已使用 Homebrew 时安装 `python@3.12`。Apple Silicon 本机已验证；Intel Mac 尚未实机验证。
+
+```sh
+python3.12 -m venv .venv-mac
+.venv-mac/bin/python -m pip install --upgrade pip
+.venv-mac/bin/python -m pip install -r backend/requirements-ocr.txt
+.venv-mac/bin/python -m pip check
+npm ci --prefix frontend
+.venv-mac/bin/python mac-local.py prepare
+.venv-mac/bin/python mac-local.py models
 ```
 
-### 开发模式启动
-```bash
-npm run dev
+之后打开三个终端，每个终端都先进入仓库根目录，分别运行：
+
+```sh
+# 终端 A：Web
+.venv-mac/bin/python mac-local.py web
 ```
 
-### 构建生产版本
-```bash
-npm run build
+```sh
+# 终端 B：前端
+npm --prefix frontend run dev -- --host localhost --port 5173 --strictPort
 ```
 
-### 预览生产版本
-```bash
-npm run preview
+```sh
+# 终端 C：OCR worker
+.venv-mac/bin/python mac-local.py worker
 ```
 
-## 后端设置
+打开 `http://localhost:5173`。Mac数据、模型和会话在 `.local-mac`；重启不必重复安装或准备。各窗口按 Ctrl+C 结束。详见 [Mac 操作说明](MAC-运行指南.md)。
 
-### 环境配置
+## 共享测试数据与登录
 
-1. 进入后端目录
-```bash
-cd backend
-```
+仓库**不分发旧数据库快照**。`backend/seed/demo.json` 是共享测试数据来源，准备命令从模型建表并加载seed。每个人生成自己的数据库，不会连接到同一台远程测试库。
 
-2. 激活虚拟环境
-```bash
+| 角色 | 账号 | 开发测试密码 |
+| --- | --- | --- |
+| 学生 | student001 | demo123 |
+| 教师 | teacher001 | demo123 |
+| 管理员 | admin001 | demo123 |
+
+使用真实登录页显示的验证码。三角色同属“信息学院→计算机系→软件工程专业”。包含一套信息学院竞赛测试规则；不伪造审核历史或排名。申请期为2026-10-01至2027-01-27（具体时分秒及年度见JSON）。超过截止时间后需团队明确修改共享设置。
+
+重复prepare保留已有数据库、账号密码及设置；已有库需要同步共享日期时，手动执行：
+
+```powershell
 # Windows
-venv\Scripts\activate
-
-# Linux/macOS
-source venv/bin/activate
+.\.venv\Scripts\python.exe -B backend/tools/seed_demo.py --database-file backend/instance/certificate-local.db --all
 ```
 
-3. 安装依赖
-```bash
-pip install -r requirements.txt
+```sh
+# Mac
+.venv-mac/bin/python -B backend/tools/seed_demo.py --database-file .local-mac/app.db --all
 ```
 
-### 数据库配置
+只有明确需要重置三个开发密码时增加 `--reset-password`。开发账号不得用于生产。完整说明见 [demo-seed](backend/docs/demo-seed.md)。
 
-#### PostgreSQL配置
-确保PostgreSQL已安装并运行，然后创建数据库：
-```sql
-CREATE DATABASE gradpush;
+## 蓝桥杯验收
+
+1. 三个服务运行后，以学生账号登录，刷新页面确认会话仍有效。
+2. 新建科创竞赛申请，证书项目选择蓝桥杯，上传清晰图片；可用 `backend/tests/fixtures/lanqiao` 内测试样本。
+3. 等待预览表格出现；核对OCR值，修改一个“学生申报值”，填写项目名称和获得日期，提交审核。
+4. 以教师账号登录，在待审核申请详情查看OCR、学生申报值与原图，然后审核整份申请。
+5. 学生查看审核结果。原OCR与原图应保留，不能被学生修改覆盖。
+
+替换材料会创建新的识别草稿，未使用的旧草稿可在申请记录中处理。旧流程申请结果保留；验证新流程请新建申请。
+
+## 测试与生产构建
+
+使用本机虚拟环境的python执行（Windows为 `.venv/Scripts/python.exe`，Mac为 `.venv-mac/bin/python`）：
+
+```sh
+python -B -m pytest backend/tests -q -p no:cacheprovider
+node --test frontend/tests/material-api.test.mjs
+npm --prefix frontend run build
 ```
 
-更新`backend/config.py`中的数据库连接信息（默认使用PostgreSQL）：
-```python
-# PostgreSQL配置
-SQLALCHEMY_DATABASE_URI = 'postgresql://postgres:your_password@localhost:5432/gradpush?client_encoding=utf8'
-```
+普通测试跳过真实模型测试；真实OCR测试详见 [证书说明](backend/docs/certificate-ocr.md)。GitHub Actions提供Windows/macOS安装、建库、回归与构建检查，推送后查看Actions结果；CI不替代浏览器手工验收。
 
-**注意**：项目默认使用PostgreSQL数据库，如果需要切换到SQLite，可以将配置修改为：
-```python
-# SQLite配置
-SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(basedir, 'app.db')
-```
+当前已验证Mac ARM64真实OCR及隔离库申报审核。Windows修改后尚未实机运行，不能声称两端均已完整验收。前端构建仍有大包提示；后端有既有SQLAlchemy/Flask-Session告警。
 
-项目根目录下的`app.db`文件是SQLite数据库文件，如果使用PostgreSQL可以忽略或删除该文件。
+## 项目结构与提交范围
 
-### 初始化数据库
+- `frontend/src`：页面、组件、状态和API请求。
+- `backend/blueprints`、`services`：接口与业务；`models.py`及其他models文件：数据结构。
+- `backend/seed`、`tools`：共享数据和初始化/模型准备工具。
+- `backend/tests`、`frontend/tests`：测试；`backend/migrations`：保留的迁移历史。
+- `backend/third_party`：第三方算法及许可证，必须保留。
+- `.github/workflows`：跨平台回归；`docs/RELEASE-CHECKLIST.md`：发布检查与当前边界。
 
-```bash
-flask db init
-flask db migrate -m "Initial migration"
-flask db upgrade
-```
+不要提交虚拟环境、node_modules、dist、模型、数据库、上传原件、日志、会话、密钥或.env。`.gitignore`已覆盖；测试样本、依赖锁文件、源码和seed必须保留。
 
-### 运行后端服务器
+生产部署另行配置 `DATABASE_URL` 和稳定的 `SECRET_KEY` 环境变量，并配置Web/worker相同存储及数据库。程序不会自动读取.env。不要在源码中写真实凭据，不要在已有仓库重新执行 `flask db init` / 自动生成迁移。本文本地SQLite建表流程不等于生产PostgreSQL迁移验收。
 
-```bash
-python app.py
-```
-
-## API接口
-
-### 认证接口
-- `POST /api/login` - 用户登录
-- `POST /api/register` - 用户注册
-- `POST /api/reset-password` - 密码重置
-
-### 申请接口
-- `GET /api/applications` - 获取所有申请（支持筛选：studentId, status, applicationType）
-- `GET /api/applications/<int:id>` - 获取单个申请详情
-- `POST /api/applications` - 创建申请（支持文件上传）
-- `PUT /api/applications/<int:id>` - 更新申请
-- `POST /api/applications/<int:id>/review` - 审核申请
-- `DELETE /api/applications/<int:id>` - 删除申请
-- `GET /api/applications/pending` - 获取待审核申请
-
-### 系统接口
-- `GET /api/health` - 系统健康检查
-
-## 注意事项
-
-1. 本项目仅供学习和演示使用，实际部署时需要加强安全性
-2. 数据库连接信息中的密码需要根据实际情况修改
-3. 首次运行时需要初始化数据库
-4. 前端API_BASE_URL可能需要根据后端运行的端口进行调整：
-   - 修改 `frontend/stores/applications.js` 中的 `API_BASE_URL` 常量
-   - 修改 `frontend/stores/auth.js` 中的 `API_BASE_URL` 常量
-   - 修改 `frontend/components/admin/UserManagement.vue` 中直接使用的API地址
-5. 确保前后端服务端口不冲突
-6. 前端开发服务器默认运行在 http://localhost:5173/，如果端口被占用会自动切换到其他端口
-
-## 五类材料接口
-
-已添加学业成绩、学科竞赛、外语能力、学生工作、荣誉称号的材料接口及非OCR处理。没有新增自动加分。详见 [接口说明](backend/docs/material-interfaces.md) 和 [OpenAPI合同](backend/docs/openapi-materials.json)。
+更多接口：[证书OCR](backend/docs/certificate-ocr.md)、[志愿工时](backend/docs/volunteer-automation.md)、[五类材料](backend/docs/material-interfaces.md)、[前端对接](frontend/docs/material-api-integration.md)。

@@ -1,5 +1,5 @@
 <template>
-  <div class="page-content">
+  <div class="page-content" :inert="certificateSaving" :aria-busy="certificateSaving">
     <div class="page-title application-form-heading">
       <button
         v-if="selectedCategory"
@@ -102,6 +102,11 @@
           ></button>
         </section>
 
+        <CertificateSelection
+          v-model:project="formData.certificateProject"
+          v-model:claims="formData.certificateClaims"
+        />
+
         <section
           class="form-section application-step gated-step"
           :class="{ 'is-locked': !hasProjectType }"
@@ -142,7 +147,7 @@
 
             <div v-if="formData.files.length" class="file-list">
               <div class="file-list-header"
-                ><span>已上传文件（{{ formData.files.length }}）</span></div
+                ><span>已选择文件（{{ formData.files.length }}）</span></div
               >
               <div
                 v-for="(file, index) in formData.files"
@@ -184,10 +189,9 @@
           ></button>
         </section>
 
-        <CertificateSelection
-          v-model:project="formData.certificateProject"
-          v-model:claims="formData.certificateClaims"
-        />
+        <CertificatePreview ref="certificatePreview" :files="formData.files"
+          :project="formData.certificateProject" :existing-id="formData.id"
+          @recognized="fillRecognizedDate" @saving="certificateSaving = $event" />
 
         <div class="form-actions">
           <button type="button" class="btn btn-outline" @click="saveDraft">
@@ -228,6 +232,7 @@
 <script setup>
 import { ref, reactive, watch, onMounted, computed } from 'vue'
 import CertificateSelection from '@/components/student/CertificateSelection.vue'
+import CertificatePreview from '@/components/student/CertificatePreview.vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { useApplicationsStore } from '@/stores/applications.js'
 import { useToastStore } from '@/stores/toast.js'
@@ -241,6 +246,12 @@ const authStore = useAuthStore()
 const applicationsStore = useApplicationsStore()
 const toastStore = useToastStore()
 const fileInput = ref(null)
+const certificateSaving = ref(false)
+const certificatePreview = ref(null)
+const fillRecognizedDate = pages => {
+  const value = pages[0]?.date
+  if (!formData.awardDate && /^\d{4}-\d{2}-\d{2}$/.test(value || '')) formData.awardDate = value
+}
 const previewFileData = ref(null)
 
 const categoryProjectTypes = {
@@ -295,6 +306,13 @@ const notifyProjectTypeRequired = () => {
 
 const syncRuleForProjectType = () => {
   if (!formData.applicationType || !availableRules.value.length) return
+  if (formData.certificateProject === 'lanqiao') {
+    const facultyId = authStore.user?.faculty_id || authStore.user?.facultyId
+    const rules = availableRules.value.filter(rule => rule.type === 'academic' && rule.sub_type === 'competition')
+    const rule = rules.find(rule => Number(rule.faculty_id) === Number(facultyId)) || rules.find(rule => !rule.faculty_id)
+    formData.ruleId = rule?.id || ''
+    return
+  }
   const selectedType = projectTypes.value.find((type) => type.value === formData.applicationType)
   const matchingRule =
     availableRules.value.find((rule) => {
@@ -1573,6 +1591,14 @@ const prepareApplicationData = (status) => {
 
 // 修改保存草稿和提交表单的验证逻辑
 const saveDraft = async () => {
+  if (formData.certificateProject === 'lanqiao') {
+    try {
+      syncRuleForProjectType()
+      await certificatePreview.value.confirm(formData, false)
+      toastStore.success('识别预览与申报值已保存为草稿')
+    } catch (error) { toastStore.error(error.message) }
+    return
+  }
   try {
     if (!formData.applicationType) {
       notifyProjectTypeRequired()
@@ -1655,8 +1681,17 @@ const submitForm = async () => {
   // 被精简掉的规则与计分字段由项目类型自动派生，仅用于兼容原提交接口。
   syncRuleForProjectType()
 
-  if (formData.files.length === 0) {
+  if (formData.files.length === 0 && formData.certificateProject !== 'lanqiao') {
     toastStore.error('请上传证明文件')
+    return
+  }
+
+  if (formData.certificateProject === 'lanqiao') {
+    try {
+      await certificatePreview.value.confirm(formData, true)
+      toastStore.success('已提交申报内容，教师将核对OCR结果和原图')
+      resetForm()
+    } catch (error) { toastStore.error(error.message) }
     return
   }
 

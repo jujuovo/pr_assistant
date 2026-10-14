@@ -242,8 +242,8 @@ def test_pdf_page_limit_stops_before_model(env):
 def test_real_standalone_certificates_and_pdf(env):
     import paddleocr
     from services.recognition.provider import PaddleProvider
-    assert 'pr_assistant' in str(Path(paddleocr.__file__).resolve())
-    provider = PaddleProvider()
+    assert Path(paddleocr.__file__).is_file()
+    provider = PaddleProvider(os.environ.get("OCR_MODEL_ROOT"))
     expected = json.loads((FIXTURES/'expected.json').read_text(encoding='utf-8'))
     outputs = []
     for filename in ('example4.jpg','example5.jpg'):

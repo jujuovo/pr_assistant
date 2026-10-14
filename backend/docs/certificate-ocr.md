@@ -4,13 +4,23 @@
 
 ## 已接入的操作
 
-学生在加分申请中选择“蓝桥杯（已适配样本模板）”或“其他项目 / 完全人工核验”。学生继续自主选择适用加分规则、类别与系数；蓝桥杯可额外申报奖项、赛区、组别、赛道。提交申请后后台任务识别，学生、同院教师和管理员在原有申请详情中读取识别结果。前端自动更新排队状态，支持重跑；编辑材料会清除旧结果并排队新版本。
+学生在加分申请中选择“蓝桥杯”，选取图片/PDF 后立即创建识别草稿并排队，页面轮询并展示预览表格。表格优先采用处理图识别值，没有时采用原图识别值；学生可以直接修改“学生申报值”。保存草稿或提交时，申报值独立保存，不覆盖 OCR 报告或原件。正式提交后教师审核整份申请，详情同时展示 OCR、学生申报值及原图，并标出差异；不增加单独的修改申请审批环节。
+
+新流程不在正式提交时再次识别，也不允许重跑覆盖已确认快照。更换文件会创建新的识别草稿，旧草稿保留在申请记录；请按需清理未使用草稿。旧申请及其识别结果保留，新预览确认接口不接管旧流程申请。复用已有表，无新增数据库迁移。
+
+### 上传预览接口
+
+- `POST /api/certificates/previews`：学生 Session，multipart 重复 `files` 字段；返回202及 `application_id`、`version`、`status`，申请状态为draft。原件仅写入私有证书目录。
+- `GET /api/certificates/applications/{id}`：轮询现有接口，新增 `preview_flow`、`application_status`、`student_values`。识别未结束时不能提交。
+- `POST /api/certificates/applications/{id}/confirm-preview`：JSON包含 `version`、`project_name`、`award_date`（YYYY-MM-DD）、`rule_id`、`student_values`、`submit`（true正式提交/false保存草稿）。
+- `student_values` 为与report.pages逐页对应的数组，每项必须包含字符串字段 school/student/teacher/edition/track/group/region/award/certificate_no/date，每字段最多200字。正式提交仍校验申请期及本学院可用竞赛规则。
+- 返回最新版本；过期版本、重复提交返回409。原件下载继续使用受保护证据接口。教师通过原申请审核接口审核，识别草稿不可提前审核。
 
 其他项目不加载模型、不进入识别队列、不计算自动判断置信度。蓝桥杯仅提供辅助，不自动批准申请、不修改自评或最终分数，不宣称证书真实，不推断省级/国家级认定。官方核验通道和证书库管理仍需后续调研接入。
 
 ## 本机启动
 
-当前主项目 `.venv` 已有真实 OCR 依赖，`backend/ocr-models` 已包含两个官方移动模型，合计约22MB。前端依赖已安装。
+每台新机器都需安装自己的依赖和模型；仓库不分发虚拟环境或模型。Windows使用 `.venv` 与 `backend/ocr-models`，Mac使用 `.venv-mac` 与 `.local-mac/ocr-models`；首次安装见根目录README。
 
 在主项目根目录 PowerShell 运行：
 
@@ -18,7 +28,7 @@
 .\start-local.ps1
 ```
 
-脚本复制项目附带的旧 SQLite 为 `backend/instance/certificate-local.db`，补齐已知旧字段和新增表，原数据库文件保持原样。后端和识别进程使用同一数据库，同时启动前端；登录使用附带库中原有账号。终端退出时结束本次启动的两个后端进程。数据库准备可单独执行 `./start-local.ps1 -PrepareOnly`。
+脚本创建 `backend/instance/certificate-local.db` 并加载共享测试seed；已有库仅补齐已知兼容字段和缺失表，不覆盖已有业务数据。后端和识别进程使用同一数据库，同时启动前端；登录使用共享seed三角色账号，详见根目录README。终端退出时结束本次启动的两个后端进程。数据库准备可单独执行 `./start-local.ps1 -PrepareOnly`。
 
 默认 `config.py` 保留原 PostgreSQL 设置。本机的 PostgreSQL 在本次检查时未运行，因此本地启动脚本明确选用上述 SQLite 数据库，避免仅启动页面而识别任务无法落库。
 
@@ -66,6 +76,22 @@ cd ..
 
 普通回归：在 `backend` 运行 `../.venv/Scripts/python.exe -B -m pytest tests -q -p no:cacheprovider`。
 
-真实证书模型：设置 `RUN_REAL_OCR=1`、`PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True` 后运行 `tests/test_certificates.py::test_real_standalone_certificates_and_pdf`。该测试仅使用本项目样本、环境、模型，覆盖实际上传→数据库任务→原图/处理图OCR→权限回读；两张图片的20个字段全部匹配标注，生成的扫描PDF也通过水印门控和编号核对。真实结果写入 `tests/artifacts/real_certificate_preview.json`。
+真实证书模型：设置 `RUN_REAL_OCR=1`、`PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True` 后运行 `tests/test_certificates.py::test_real_standalone_certificates_and_pdf`。该测试仅使用本项目样本、环境、模型，覆盖实际上传→数据库任务→原图/处理图OCR→权限回读；历史基准为两张图片的20个字段匹配标注及扫描PDF编号核对；每次更换环境须重新运行，不能由历史结果推定当前环境通过。真实结果写入 `tests/artifacts/real_certificate_preview.json`。
 
 已验证前端生产构建、人工通道不运行OCR、缺失水印跳过第二次OCR、坏图/坏PDF回退、低质量重传、原件哈希、跨学院禁止访问、学生不能修改审核结果、过期租约恢复、重跑版本及旧worker隔离。不能由两个样本推断其他年份、模板和扫描质量的准确率。
+
+## 跨平台真实预览回归
+
+Mac在项目根目录执行：
+```sh
+RUN_REAL_OCR=1 PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True OCR_MODEL_ROOT="$PWD/.local-mac/ocr-models" .venv-mac/bin/python -B -m pytest backend/tests/test_certificate_preview.py -q -p no:cacheprovider
+```
+Windows PowerShell执行：
+```powershell
+$env:RUN_REAL_OCR = '1'
+$env:PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK = 'True'
+$env:OCR_MODEL_ROOT = Join-Path $PWD 'backend/ocr-models'
+.\.venv\Scripts\python.exe -B -m pytest backend/tests/test_certificate_preview.py -q -p no:cacheprovider
+Remove-Item Env:RUN_REAL_OCR
+```
+测试使用隔离数据库，不修改当前运行库；覆盖真实模型识别、修改申报值及教师整份审核。

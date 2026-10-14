@@ -105,4 +105,7 @@ def selection_json(application):
 def view(row):
     return {"id": row.id, "application_id": row.application_id, "project": row.project_key,
             "status": row.status, "version": row.version, "claims": row.claims,
-            "report": row.report, "error": row.error, "authenticity": "not_assessed"}
+            "report": row.report, "error": row.error,
+            "preview_flow": bool(row.claims.get("preview_flow")),
+            "student_values": row.claims.get("student_values"),
+            "application_status": row.application.status, "authenticity": "not_assessed"}
