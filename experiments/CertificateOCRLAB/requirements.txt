@@ -1,0 +1,7 @@
+# Python 3.13; published packages, no local editable checkout.
+paddleocr==3.7.0
+paddlepaddle==3.3.1
+paddlex==3.7.2
+numpy==2.3.5
+Pillow==12.0.0
+opencv-contrib-python==4.10.0.84

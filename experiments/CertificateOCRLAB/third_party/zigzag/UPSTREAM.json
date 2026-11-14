@@ -1,0 +1,8 @@
+{
+  "repository": "https://github.com/Bloechle/zigzag",
+  "commit": "cec0d646034b6095f5a091b804144b58cc95d1cf",
+  "license": "AGPL-3.0",
+  "source_sha256": "517a8b572b3651d3721196c17dd4ecb63ec6eb2c9af556a9c85c3b3968458206",
+  "source_modified": false,
+  "upstream_path": "ports/zigzag.py"
+}
