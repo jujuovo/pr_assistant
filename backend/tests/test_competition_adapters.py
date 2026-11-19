@@ -86,6 +86,7 @@ class MaterialsTest(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 service.recognize(source, "other", image_dir=evidence)
 
+    @unittest.skipUnless((SAMPLES / "index.json").is_file(), "私有证书样本未提供；公共批处理使用合成样本验证")
     def test_imported_sample_integrity(self):
         rows = json.loads((SAMPLES / "index.json").read_text(encoding="utf-8"))
         self.assertEqual({row["category"] for row in rows}, set(CATEGORIES))
@@ -93,3 +94,30 @@ class MaterialsTest(unittest.TestCase):
         for row in rows:
             data = (SAMPLES / row["file"]).read_bytes()
             self.assertEqual(hashlib.sha256(data).hexdigest(), row["sha256"])
+
+    def test_batch_is_self_contained_with_synthetic_samples(self):
+        from unittest.mock import patch
+        from services.competition_ocr import batch
+        with TemporaryDirectory() as temporary:
+            root=Path(temporary)
+            samples=root/"samples"
+            outputs=root/"outputs"
+            # Every adapter must remain discoverable without the private certificate corpus.
+            for spec in CATEGORIES.values():
+                folder=samples/spec.sample_folder
+                folder.mkdir(parents=True)
+                (folder/"generated.png").write_bytes(image_bytes())
+            with patch.object(batch,"SAMPLES",samples),patch.object(batch,"OUTPUTS",outputs):
+                target=outputs/"synthetic-batch.json"
+                status=batch.run_batch(CompetitionOCR(Engine()),CATEGORIES.values(),target,save_images=True)
+                report=json.loads(target.read_text(encoding="utf-8"))
+                self.assertEqual(status,0)
+                self.assertEqual(report["status"],"completed")
+                self.assertEqual(report["total"],len(CATEGORIES))
+                self.assertEqual(report["failed"],0)
+                self.assertEqual({row["category"] for row in report["results"]},set(CATEGORIES))
+                for row in report["results"]:
+                    self.assertEqual(row["status"],"manual_review")
+                    original=target.parent/row["images"]["original"]
+                    self.assertEqual(original.read_bytes(),image_bytes())
+                    self.assertEqual(hashlib.sha256(original.read_bytes()).hexdigest(),row["source_sha256"])

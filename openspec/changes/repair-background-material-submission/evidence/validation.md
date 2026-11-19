@@ -62,3 +62,11 @@
 ### 已交付到GitHub
 
 代码提交7e48dcffb0f7d55ebc985a8611432f3a451239cc已推送，远端分支与本地一致。PR #4已创建并处于open状态，目标main： https://github.com/jujuovo/pr_assistant/pull/4 。未自动合并。当前后端全量678通过、4跳过，前端mounted57与Node58通过，构建通过；最终浏览器/视觉验收任务仍保留未完成。GitHub连接器创建PR权限不足；本地凭据方式首次被自动审批拦截，用户随后明确授权仅用于创建此PR，创建成功，未输出或存储凭据。
+
+## PR #4 CI环境修复
+
+GitHub运行44514648294确认两类独立问题：macOS的test_imported_sample_integrity无条件读取被Git忽略的backend/samples/index.json，导致1 failed/677 passed/4 skipped；Windows在pip check阶段失败，运行器自带pipx 1.18.12要求packaging>=26.3，但项目锁定packaging25.0。不是审核计分业务失败，push与pull_request两种触发各运行Windows/macOS，所以界面列出4个红叉。
+
+修复：私有证书完整性校验在index.json存在时继续执行，缺失时明确skip，不上传私人证书；新增临时合成图片覆盖全部7类批处理、输出状态及原件字节/摘要保存。CI创建自己的.venv-ci并通过GITHUB_PATH切换Python，断言sys.prefix与base_prefix不同后再安装项目依赖，保留pip check，不改动依赖锁定版本或卸载运行器全局软件。
+
+本地验证：适配器专项8/8，含本地私有样本校验。使用git checkout-index导出仅含跟踪文件的干净副本，确认samples与ocr-models不存在；完整后端678 passed,5 skipped（181 warnings），96.22秒。5项为4个可选真实模型专项及未提供的私有样本完整性校验。另在干净副本中创建全新venv，验证prefix隔离、pipx不可见，空环境pip check通过；本机原项目环境pip check也通过。该本地bootstrap验证不替代远端安装全部依赖，推送后继续查看Windows和macOS实际Actions结果。

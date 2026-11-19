@@ -14,7 +14,7 @@
 | social-practice | 社会实践证明、平台截图、名单 | SocialPractice |
 | other | 任职证明、成果检索报告 | Other |
 
-16张本地样本位于 backend/samples，index.json 保存来源及SHA-256。样本、outputs及私有任务材料均已加入Git忽略。机器输出的是建议字段，官方性、真实性、是否参与和加分仍需人工核验。
+16张本地样本位于 backend/samples，index.json 保存来源及SHA-256。样本、outputs及私有任务材料均已加入Git忽略。私有样本完整性测试仅在提供index.json时执行；公共CI使用临时生成图片验证七类批处理及原件保存，不依赖私有证书。机器输出的是建议字段，官方性、真实性、是否参与和加分仍需人工核验。
 
 ## API
 
