@@ -10,9 +10,50 @@ from flask import abort, current_app
 from extensions import db
 from models import Application, Student, Rule, SystemSettings
 from certificate_models import CertificateAssessment
+from automation_models import utcnow
 from services.automation import actor
+from domain.material_terms import (NORMALIZATION_VERSION, TermNormalizationError,
+                                   normalize_confirmed_terms)
 from .service import artifact_root, contained
 from .fields import FIELDS
+
+
+def _confirmed_terms(project_name, values):
+    """Build one authoritative snapshot from student declarations, never OCR."""
+    populated_dates = {fields['date'].strip() for fields in values if fields['date'].strip()}
+    if len(populated_dates) != 1:
+        abort(400, description={
+            'error': '请确认唯一的获奖日期',
+            'code': 'confirmed_award_date_required' if not populated_dates else 'confirmed_award_date_ambiguous',
+        })
+    def unique(field):
+        entries = {item[field].strip() for item in values if item[field].strip()}
+        return next(iter(entries)) if len(entries) == 1 else None
+    confirmed = {
+        'competition_name': project_name.strip(),
+        'award_level': unique('award'),
+        'competition_level': None,
+        'region': unique('region'),
+        'group': unique('group'),
+        'track': unique('track'),
+        'award_date': next(iter(populated_dates)),
+    }
+    try:
+        normalized = normalize_confirmed_terms(confirmed)
+    except TermNormalizationError as error:
+        abort(400, description={
+            'error': '学生确认的获奖日期格式无效',
+            'code': error.reason,
+            'field': error.field,
+        })
+    return confirmed, normalized
+
+
+def _ocr_raw_terms(report):
+    return [
+        {field: page.get('raw_fields', {}).get(field) for field in FIELDS}
+        for page in (report or {}).get('pages', [])
+    ]
 
 
 def create_preview(files):
@@ -110,20 +151,29 @@ def _validate_confirmation(payload, pages, faculty_id):
     name = payload.get('project_name')
     if not isinstance(name, str) or not 2 <= len(name.strip()) <= 30:
         abort(400, description='项目名称必须为2至30字')
-    raw_date = payload.get('award_date')
-    try:
-        if not isinstance(raw_date, str) or not re.fullmatch(r'\d{4}-\d{2}-\d{2}', raw_date):
-            raise ValueError()
-        award_date = date.fromisoformat(raw_date)
-    except ValueError:
-        abort(400, description='获得日期格式无效')
+    confirmed_terms, normalized_terms = _confirmed_terms(name, values)
+    confirmed_date = normalized_terms['award_date']
+    compatibility_date = payload.get('award_date')
+    if compatibility_date not in (None, ''):
+        try:
+            compatibility_date = date.fromisoformat(compatibility_date).isoformat()
+        except (TypeError, ValueError):
+            abort(400, description={'error': '获得日期格式无效', 'code': 'invalid_award_date'})
+        if compatibility_date != confirmed_date:
+            abort(409, description={
+                'error': '申请获奖日期与材料确认日期不一致，请重新确认',
+                'code': 'award_date_confirmation_conflict',
+                'application_award_date': compatibility_date,
+                'confirmed_award_date': confirmed_date,
+            })
+    award_date = date.fromisoformat(confirmed_date)
     rule_id = payload.get('rule_id')
     if type(rule_id) is not int:
         abort(400, description='请选择有效竞赛规则')
     rule = db.session.get(Rule, rule_id)
     if not rule or rule.status != 'active' or rule.faculty_id not in (None, faculty_id) or rule.type != 'academic' or rule.sub_type != 'competition':
         abort(400, description='规则不是本学院可用的竞赛规则')
-    return values, name.strip(), award_date, rule
+    return values, name.strip(), award_date, rule, confirmed_terms, normalized_terms
 
 
 def _check_application_period():
@@ -147,21 +197,43 @@ def save_preview(row, application, payload):
         abort(409, description='材料质量不合格，请重新上传清晰材料并完成识别后再确认或提交')
     if not row.report or not row.report.get('pages'):
         abort(409, description='没有可确认的识别结果，请重新上传材料')
-    values, name, award_date, rule = _validate_confirmation(payload, row.report['pages'], application.faculty_id)
+    values, name, award_date, rule, confirmed_terms, normalized_terms = _validate_confirmation(payload, row.report['pages'], application.faculty_id)
+    verify_originals(row)
     if payload['submit']:
         _check_application_period()
-    verify_originals(row)
+        from use_cases.cycles import pin_application_cycle
+        policy = pin_application_cycle(application)
+    else:
+        policy = None
     # CAS both records in one transaction; retry/stale tabs cannot overwrite a submitted snapshot.
     changed = CertificateAssessment.query.filter_by(id=row.id, version=payload['version']).filter(
         CertificateAssessment.status.notin_(['queued', 'processing', 'needs_reupload'])).update(
             {'version': CertificateAssessment.version + 1,
-             'claims': {**row.claims, 'student_values': values}}, synchronize_session=False)
+             'claims': {**row.claims, 'student_values': values,
+                        'ocr_raw_terms': _ocr_raw_terms(row.report),
+                        'confirmed_terms': confirmed_terms,
+                        'normalized_terms': normalized_terms,
+                        'normalization_version': NORMALIZATION_VERSION,
+                        'confirmation_history': [
+                            *row.claims.get('confirmation_history', []),
+                            {'actor_id': user.id, 'source_version': payload['version'],
+                             'confirmed_at': utcnow().isoformat() + 'Z',
+                             'submit': payload['submit'],
+                             'confirmed_terms': confirmed_terms,
+                             'normalized_terms': normalized_terms},
+                        ]}}, synchronize_session=False)
     if not changed:
         abort(409, description='版本已变化，请重新读取预览')
-    changed = Application.query.filter_by(id=application.id, status='draft').update({
-        'project_name': name, 'award_date': award_date, 'rule_id': rule.id,
+    application_updates = {
+        'project_name': name.strip(), 'award_date': award_date, 'rule_id': rule.id,
         'application_type': 'academic', 'status': 'pending' if payload['submit'] else 'draft',
-        'description': '学生已确认OCR预览；申报值与OCR结果独立保存'}, synchronize_session=False)
+        'description': '学生已确认OCR预览；申报值与OCR结果独立保存'}
+    if policy:
+        application_updates.update(
+            cycle_code=policy.cycle_code, cycle_policy_version_id=policy.id
+        )
+    changed = Application.query.filter_by(id=application.id, status='draft').update(
+        application_updates, synchronize_session=False)
     if not changed:
         db.session.rollback()
         abort(409, description='申请状态已变化')

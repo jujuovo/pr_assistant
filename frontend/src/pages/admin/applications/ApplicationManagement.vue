@@ -1,5 +1,5 @@
 <template>
-  <div class="page-content">
+  <div class="page-content"><ManualMaterialReview /><ManualMaterialReview history />
     <div class="page-title">
       <span>申请管理</span>
     </div>
@@ -339,6 +339,7 @@
 </template>
 
 <script setup>
+import ManualMaterialReview from '@/components/common/ManualMaterialReview.vue'
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import ApplicationDetailModal from '@/components/common/ApplicationDetailModal.vue'
 import { useApplicationsStore } from '@/stores/applications.js'
@@ -656,7 +657,12 @@ const handleApproveApplication = async (reviewData) => {
       reviewData.applicationId,
       'approved',
       reviewData.approveComment,
-      reviewData.finalScore,
+      {
+        overrideEnabled: reviewData.overrideEnabled,
+        overrideScore: reviewData.overrideScore,
+        overrideReason: reviewData.overrideReason,
+        idempotencyKey: reviewData.idempotencyKey
+      },
       authStore.userName
     )
     if (success) {
@@ -681,7 +687,7 @@ const handleRejectApplication = async (reviewData) => {
       reviewData.applicationId,
       'rejected',
       reviewData.rejectComment,
-      0,
+      null,
       authStore.userName
     )
     if (success) {

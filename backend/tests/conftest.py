@@ -3,12 +3,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest
+from datetime import date
 from flask import Flask
 from extensions import db
 from models import Faculty, Department, Major, Student, User
 from blueprints.automation_bp import automation_bp
 from blueprints.application_bp import application_bp
 from blueprints.certificate_bp import certificate_bp
+from blueprints.workflow_bp import workflow_bp
 
 
 @pytest.fixture
@@ -17,7 +19,8 @@ def env(tmp_path):
     app.config.update(TESTING=True, SECRET_KEY="test", SQLALCHEMY_DATABASE_URI="sqlite://",
                       AUTOMATION_UPLOAD_FOLDER=str(tmp_path / "images"), AUTOMATION_MAX_FILES=30,
                       AUTOMATION_MAX_IMAGE_BYTES=1024*1024, AUTOMATION_MAX_PIXELS=20_000_000,
-                      AUTOMATION_LEASE_SECONDS=60, AUTOMATION_MAX_ATTEMPTS=3)
+                      AUTOMATION_LEASE_SECONDS=60, AUTOMATION_MAX_ATTEMPTS=3,
+                      ALLOW_LEGACY_CERTIFICATE_PREVIEWS=True)
     db.init_app(app)
     app.register_blueprint(automation_bp)
     app.register_blueprint(application_bp)
@@ -25,6 +28,7 @@ def env(tmp_path):
     from blueprints.ocr_bp import ocr_bp
     app.register_blueprint(ocr_bp)
     app.config['OCR_STORAGE_FOLDER'] = str(tmp_path / 'ocr-jobs')
+    app.register_blueprint(workflow_bp)
     from blueprints.material_bp import material_bp
     app.register_blueprint(material_bp)
     app.config['MATERIAL_STORAGE_FOLDER'] = str(tmp_path / 'evidence')
@@ -61,3 +65,45 @@ def env(tmp_path):
 def login(client, user_id):
     with client.session_transaction() as state:
         state["user_id"] = user_id
+
+
+@pytest.fixture
+def active_cycle(env):
+    from use_cases.cycles import activate_cycle_policy, create_cycle_policy
+
+    admin = db.session.get(User, env[2]["admin"])
+    policy, _ = create_cycle_policy(
+        admin, 2026, date(2023, 9, 1), date(2026, 8, 31), "2026 推免周期"
+    )
+    activate_cycle_policy(admin, policy)
+    db.session.commit()
+    return policy
+
+
+@pytest.fixture
+def active_honor_rule(env, active_cycle):
+    from models import Rule
+    from use_cases.rule_versions import publish_rule_version
+
+    admin = db.session.get(User, env[2]["admin"])
+    rule = Rule(
+        name="荣誉称号测试规则", type="academic", sub_type="honor",
+        score=1, max_score=1, faculty_id=admin.faculty_id, status="active",
+    )
+    db.session.add(rule)
+    publish_rule_version(rule, published_by=admin, cycle_code=active_cycle.cycle_code)
+    db.session.commit()
+    return rule
+
+
+@pytest.fixture
+def active_cycle_2025(env):
+    from use_cases.cycles import activate_cycle_policy, create_cycle_policy
+
+    admin = db.session.get(User, env[2]["admin"])
+    policy, _ = create_cycle_policy(
+        admin, 2025, date(2023, 1, 1), date(2025, 12, 31), "2025 推免周期"
+    )
+    activate_cycle_policy(admin, policy)
+    db.session.commit()
+    return policy

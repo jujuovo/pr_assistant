@@ -6,8 +6,8 @@ from services.materials.ocr_schemas import SOCIAL_REQUIRED
 COMPETITIONS = {"lanqiao", "computer-design", "software-design", "challenge-cup"}
 TARGETS = {
     **{key: ["competition"] for key in COMPETITIONS},
-    "csp": ["certification"], "social-practice": ["social_practice"],
-    "other": ["student_work", "research"],
+    "csp": ["competition", "certification"], "social-practice": ["social_practice"],
+    "other": ["student_work", "research"], "software-design": ["competition_evidence"],
 }
 COMMON = {
     "event": "competition_name", "edition": "edition", "participants": "participants",
@@ -38,7 +38,7 @@ def normalized_date(value):
         return None
 
 
-def suggestions(key, report):
+def raw_suggestions(key, report):
     if not report or not isinstance(report.get("fields"), dict):
         return None
     fields, warnings, provenance = report["fields"], [], {}
@@ -96,3 +96,8 @@ def _appointment(fields):
                            "subject_name": "name", "start_month_as_printed": "start_month", "end_month_as_printed": "end_month"},
             "source_hints": {key: fields.get(key) for key in ("name", "start_month", "end_month")},
             "unmapped_fields": ["document_type"]}
+
+
+def suggestions(key, report, package=None):
+    from .workflow_mapping import for_workflow
+    return for_workflow(key, raw_suggestions(key, report), package)

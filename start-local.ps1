@@ -10,7 +10,7 @@ if (!(Get-Command npm.cmd -ErrorAction SilentlyContinue)) { throw '请安装 Nod
 $env:PYTHONUTF8 = '1'
 $env:PYTHONDONTWRITEBYTECODE = '1'
 $env:PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK = 'True'
-$env:DATABASE_URL = 'sqlite:///' + ((Join-Path $backendRoot 'instance/certificate-local.db') -replace '\\', '/')
+$env:DATABASE_URL = 'sqlite:///' + ((Join-Path $backendRoot 'instance/gradpush-dev.db') -replace '\\', '/')
 & $pythonExe -B (Join-Path $backendRoot 'tools/prepare_local.py')
 if ($LASTEXITCODE -ne 0) { throw '本地数据库准备失败。' }
 & $pythonExe -B (Join-Path $backendRoot 'tools/setup_certificate_models.py')

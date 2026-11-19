@@ -5,7 +5,7 @@ export const OCR_PROJECTS = Object.freeze([
   'lanqiao', 'computer-design', 'software-design', 'challenge-cup', 'csp', 'social-practice', 'other'
 ])
 function jobPath(id) {
-  if (typeof id !== 'string' || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id)) {
+  if (typeof id !== 'string' || !/^(?:[0-9a-f]{32}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$/i.test(id)) {
     throw new TypeError('识别任务编号无效')
   }
   return `${base}/jobs/${id}`

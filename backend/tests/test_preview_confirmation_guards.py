@@ -7,6 +7,8 @@ from PIL import Image
 
 from certificate_models import CertificateAssessment
 from conftest import login
+
+pytestmark = pytest.mark.usefixtures("active_cycle")
 from extensions import db
 from models import Rule
 from services.certificates.preview import FIELDS

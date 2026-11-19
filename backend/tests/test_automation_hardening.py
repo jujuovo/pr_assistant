@@ -8,6 +8,8 @@ from unittest.mock import patch
 
 import pytest
 
+pytestmark = pytest.mark.usefixtures("active_cycle_2025")
+
 from conftest import env as memory_env, login
 from extensions import db
 from models import Application, Student
@@ -50,6 +52,15 @@ def file_env(tmp_path):
         generator = memory_env.__wrapped__(tmp_path)
         context = next(generator)
     engine = db.engine
+    from datetime import date
+    from models import User
+    from use_cases.cycles import activate_cycle_policy, create_cycle_policy
+    admin = db.session.get(User, context[2]["admin"])
+    cycle, _ = create_cycle_policy(
+        admin, 2025, date(2023, 1, 1), date(2025, 12, 31), "2025 推免周期"
+    )
+    activate_cycle_policy(admin, cycle)
+    db.session.commit()
     try:
         yield context
     finally:

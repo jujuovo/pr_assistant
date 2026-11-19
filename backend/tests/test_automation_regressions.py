@@ -3,6 +3,8 @@ import io
 from decimal import Decimal
 
 import pytest
+
+pytestmark = pytest.mark.usefixtures("active_cycle_2025")
 from PIL import Image
 
 from conftest import login

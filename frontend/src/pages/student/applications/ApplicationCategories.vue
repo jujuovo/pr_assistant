@@ -39,6 +39,14 @@ defineEmits(['select', 'navigate'])
 
 const categories = [
   {
+    key: 'competition',
+    title: '学业竞赛（新链路）',
+    description: '进入正式目录、规则包与证明材料链路',
+    icon: 'trophy',
+    color: '#8b5cf6',
+    background: '#f3efff'
+  },
+  {
     key: 'academic-performance',
     title: '学业成绩',
     description: '查看课程成绩与专业排名',
@@ -49,7 +57,7 @@ const categories = [
   {
     key: 'academic-innovation',
     title: '学术创新',
-    description: '科研、竞赛及创新成果',
+    description: '科研与创新成果（非竞赛兼容入口）',
     icon: 'lightbulb',
     color: '#d97706',
     background: '#fff5df'

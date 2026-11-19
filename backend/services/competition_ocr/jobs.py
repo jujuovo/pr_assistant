@@ -24,6 +24,17 @@ def authorized_job(job_id):
         user.role in ("teacher", "admin") and user.faculty_id == row.faculty_id
     ):
         abort(403, description="没有该 OCR 材料的访问权限")
+    if user.role == "teacher" and row.user_id != user.id:
+        from material_models import CompetitionOcrJob, MaterialRecord
+        from ocr_models import OCRMaterialLink
+        from services.materials.service import record_at
+        link = db.session.get(OCRMaterialLink, row.id)
+        bound = CompetitionOcrJob.query.filter_by(job_id=row.id).one_or_none()
+        record_id = link.material_record_id if link else bound.record_id if bound else None
+        if record_id is None:
+            abort(403, description="材料尚未提交教师核验")
+        material = db.session.get(MaterialRecord, record_id)
+        record_at(material.category, material.id, allow_teacher_processed=True)
     return row
 
 
@@ -31,11 +42,16 @@ def job_view(row):
     from ocr_models import OCRMaterialLink
     from material_models import MaterialRecord
     from .mapping import suggestions
+    from material_models import CompetitionOcrJob
+    from workflow_models import CompetitionRulePackage
+    bound = CompetitionOcrJob.query.filter_by(job_id=row.id).one_or_none()
+    bound_record = db.session.get(MaterialRecord, bound.record_id) if bound else None
+    package = db.session.get(CompetitionRulePackage, bound_record.competition_rule_package_id) if bound_record else None
     link = db.session.get(OCRMaterialLink, row.id)
     material = db.session.get(MaterialRecord, link.material_record_id) if link else None
     return {"id": row.id, "category": row.category, "status": row.status, "report": row.report,
             "error": row.error, "authenticity": "not_assessed",
-            "mapping": suggestions(row.category, row.report),
+            "mapping": suggestions(row.category, row.report, package),
             "material_record_id": material.id if material else None,
             "material_url": f"/api/materials/{material.category}/records/{material.id}" if material else None,
             "application_id": material.application_id if material else None,
@@ -44,7 +60,7 @@ def job_view(row):
                               for key in (row.report or {}).get("images", {})}}
 
 
-def enqueue(key, payload, filename):
+def enqueue(key, payload, filename, *, job_id=None, commit=True):
     user = actor()
     category(key)
     if user.role not in ("student", "teacher", "admin") or not user.faculty_id:
@@ -55,7 +71,7 @@ def enqueue(key, payload, filename):
     name = (filename or "upload.png").replace("\\", "/").split("/")[-1]
     if Path(name).suffix.lower() not in IMAGE_EXTENSIONS or len(name) > 255:
         raise ValueError("请输入有效的图片文件名")
-    row = OCRJob(id=str(uuid.uuid4()), user_id=user.id, faculty_id=user.faculty_id, category=key,
+    row = OCRJob(id=job_id or str(uuid.uuid4()), user_id=user.id, faculty_id=user.faculty_id, category=key,
                  filename=name, sha256=sha256(payload).hexdigest())
     folder = job_root(row.id)
     folder.mkdir(parents=True, exist_ok=False)
@@ -63,7 +79,10 @@ def enqueue(key, payload, filename):
     try:
         path.write_bytes(payload)
         db.session.add(row)
-        db.session.commit()
+        if commit:
+            db.session.commit()
+        else:
+            db.session.flush()
     except Exception:
         db.session.rollback()
         path.unlink(missing_ok=True)

@@ -5,7 +5,14 @@ STRING_ARRAYS = {"participants", "advisers", "members", "teams"}
 NUMBER_ARRAYS = {"task_scores"}
 ARRAY_FIELDS = STRING_ARRAYS | NUMBER_ARRAYS
 COMPETITION_PROJECTS = ("manual", "lanqiao", "computer-design", "software-design", "challenge-cup")
+MANUAL_TYPES = {"competition_evidence", "certification", "social_practice", "research"}
 NEW_TYPES = {
+    "competition_evidence": {
+        "name": "目录外竞赛材料", "fields": ["competition_name", "organizer", "competition_level", "award_level",
+            "award_date", "certificate_no", "project_key", "reference_id", "project_name", "participants",
+            "advisers", "school", "edition", "track", "group", "region", "stage_as_printed"],
+        "required": ["competition_name", "award_level", "award_date"],
+        "non_ocr": ["目录外材料仅人工核验", "不生成计分记录，不扩充正式赛事目录"]},
     "certification": {
         "name": "能力认证", "fields": ["document_type", "certification_name", "subject_name", "score", "full_score", "test_date",
             "certificate_no", "batch", "language", "test_site", "task_scores", "reference_id"],

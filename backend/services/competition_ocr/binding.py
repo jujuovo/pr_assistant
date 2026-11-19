@@ -10,8 +10,9 @@ from material_models import MaterialAttachment, MaterialRecord
 from models import Application
 from ocr_models import OCRJob, OCRMaterialLink
 from services.automation import actor
-from services.materials.schemas import normalize, analyze, object_keys, integer
-from services.materials.service import make_record, record_at, version_change, event, stored_path
+from services.materials.schemas import object_keys, integer
+from services.materials.service import record_at, event, stored_path
+from use_cases.materials import create_material, edit_material
 from .jobs import authorized_job, job_root
 from .mapping import suggestions
 from .service import MAX_BYTES
@@ -34,18 +35,20 @@ def _material(job, mapped, payload, user):
     if payload.get("material_record_id") is None:
         object_keys(payload, {"year", "data", "application_id"}, {"year", "data"})
         _draft_application(payload.get("application_id"), user.student_id, user.faculty_id)
-        return make_record(target, payload)
+        return create_material(user, target, payload)
     object_keys(payload, {"material_record_id", "version", "data", "application_id"},
                 {"material_record_id", "version", "data"})
     row = record_at(target, integer(payload["material_record_id"], "material_record_id", 1, 2_000_000_000))
     if row.student_id != user.student_id or row.faculty_id != job.faculty_id:
         abort(403)
+    if target == "competition" and row.status != "draft":
+        abort(409, description="竞赛退回材料须先创建补正版本，不能覆盖原审核依据")
     application_id = payload.get("application_id", row.application_id)
     _draft_application(application_id, user.student_id, row.faculty_id)
-    data = normalize(target, payload["data"])
-    version_change(row, payload["version"], ["draft", "needs_correction"],
-                   {"data": data, "analysis": analyze(target, data), "check_report": None,
-                    "status": "draft", "application_id": application_id})
+    if target == "competition" and application_id is not None:
+        abort(409, description="竞赛材料不能关联旧申请")
+    edit_material(user, row, payload["version"], payload["data"])
+    row.application_id = application_id
     return row
 
 
@@ -85,9 +88,32 @@ def confirm(job_id, payload):
         abort(409, description="该识别任务已关联材料，请编辑原材料记录")
     if job.status not in ("extracted", "manual_review") or not job.report:
         abort(409, description="识别未完成或失败，不能确认")
-    mapped = suggestions(job.category, job.report)
+    from material_models import CompetitionOcrJob
+    from workflow_models import CompetitionRulePackage
+    bound = CompetitionOcrJob.query.filter_by(job_id=job.id).one_or_none()
+    package = None
+    if bound:
+        record = db.session.get(MaterialRecord, bound.record_id)
+        if (payload.get("material_record_id") != bound.record_id or bound.cancelled
+            or bound.status != "completed" or record.version != bound.material_version):
+            abort(409, description="识别结果已过期、被取消或不属于当前材料，请重新识别")
+        package = db.session.get(CompetitionRulePackage, record.competition_rule_package_id)
+    mapped = suggestions(job.category, job.report, package)
     if not mapped or not mapped["material_category"]:
         abort(409, description="尚未识别出可关联的材料类型")
+    manual_only = payload.get("manual_only", False)
+    if type(manual_only) is not bool:
+        raise ValueError("manual_only必须为布尔值")
+    if manual_only and bound:
+        abort(409, description="正式材料绑定任务不能改写为其他材料，请另行上传人工核验材料")
+    if manual_only:
+        from .mapping import raw_suggestions
+        mapped = raw_suggestions(job.category, job.report)
+        if job.category in {"lanqiao", "computer-design", "software-design", "challenge-cup"}:
+            mapped = {**mapped, "material_category": "competition_evidence", "manual_only": True}
+        elif job.category != "csp":
+            raise ValueError("该材料已经使用人工核验通道，无需另行转换")
+    payload = {key:value for key,value in payload.items() if key != "manual_only"}
     data = _original(job)
     created = None
     try:
@@ -102,6 +128,7 @@ def confirm(job_id, payload):
                 output.write(data)
             db.session.add(MaterialAttachment(record_id=row.id, filename=job.filename,
                 stored_name=stored, sha256=job.sha256, size=len(data)))
+        row.ocr_raw_terms = deepcopy(job.report)
         db.session.add(OCRMaterialLink(job_id=job.id, material_record_id=row.id,
             suggestions=deepcopy(mapped), confirmed_snapshot=deepcopy(row.data), actor_id=user.id))
         event(row, "ocr_confirmed", {"job_id": job.id, "source_sha256": job.sha256,

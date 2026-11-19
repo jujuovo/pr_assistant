@@ -2,8 +2,28 @@
   "openapi": "3.0.3",
   "info": {
     "title": "pr_assistant 材料核验接口",
-    "version": "1.1.0",
-    "description": "结构化材料、OCR字段关联与人工核验；识别建议须学生确认，不自动加分或判定真实性。"
+    "version": "2.0.0",
+    "description": "正式竞赛使用材料记录与固定规则包，教师核验后计分；目录外及其他OCR材料可人工核验，识别不直接认定真实性。"
+  },
+  "x-authority-contract": {
+    "source_of_truth": "backend",
+    "presentation_fields": [
+      "version",
+      "status",
+      "scope",
+      "reason_code",
+      "updated_at",
+      "allowed_actions"
+    ],
+    "client_rule": "客户端只按 allowed_actions 展示操作并携带 version；不得推导状态转换、计分或排名。",
+    "derived_read_only_fields": [
+      "academic_specialty_total",
+      "comprehensive_performance_total",
+      "comprehensive_score",
+      "major_ranking",
+      "total_students"
+    ],
+    "version_conflict": "HTTP 409 要求刷新权威 DTO 并由用户重新确认影响，客户端不得重放旧值。"
   },
   "servers": [
     {
@@ -98,6 +118,7 @@
               "language",
               "student_work",
               "honor",
+              "competition_evidence",
               "certification",
               "social_practice",
               "research"
@@ -313,17 +334,17 @@
                   }
                 },
                 "competition": {
-                  "summary": "学科竞赛",
+                  "summary": "正式目录竞赛事实",
                   "value": {
-                    "year": 2026,
+                    "year": 2028,
                     "data": {
-                      "competition_name": "蓝桥杯",
-                      "organizer": "比赛主办单位",
-                      "competition_level": "省级",
-                      "award_level": "二等奖",
+                      "competition_id": "c09-computer-design",
+                      "project_name": "测试作品",
                       "award_date": "2026-05-08",
-                      "certificate_no": "1234567890",
-                      "project_key": "lanqiao"
+                      "level": "national",
+                      "award": "second",
+                      "event_year": 2026,
+                      "participation_mode": "individual"
                     }
                   }
                 },
@@ -423,8 +444,51 @@
                       "database": "Web of Science"
                     }
                   }
+                },
+                "competition_evidence": {
+                  "summary": "目录外竞赛，仅人工核验",
+                  "value": {
+                    "year": 2026,
+                    "data": {
+                      "competition_name": "中国软件杯",
+                      "award_level": "二等奖",
+                      "award_date": "2026-05-08",
+                      "project_key": "software-design"
+                    }
+                  }
                 }
               }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "year",
+                  "data",
+                  "files"
+                ],
+                "properties": {
+                  "year": {
+                    "type": "integer",
+                    "minimum": 2000,
+                    "maximum": 2100
+                  },
+                  "data": {
+                    "type": "string",
+                    "description": "JSON编码的人工材料字段"
+                  },
+                  "files": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 10,
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    }
+                  }
+                }
+              },
+              "description": "人工类别专用；字段与原件同事务创建，不启动OCR、不计分"
             }
           }
         },
@@ -445,6 +509,7 @@
               "language",
               "student_work",
               "honor",
+              "competition_evidence",
               "certification",
               "social_practice",
               "research"
@@ -618,6 +683,7 @@
               "language",
               "student_work",
               "honor",
+              "competition_evidence",
               "certification",
               "social_practice",
               "research"
@@ -711,6 +777,248 @@
         "operationId": "submitMaterial"
       }
     },
+    "/api/materials/{category}/records/{record_id}/reconfirm-submit": {
+      "parameters": [
+        {
+          "name": "category",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "enum": [
+              "academic",
+              "competition",
+              "language",
+              "student_work",
+              "honor"
+            ]
+          }
+        },
+        {
+          "name": "record_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "post": {
+        "summary": "学生确认当前规则和申报信息后重新提交",
+        "operationId": "reconfirmAndSubmitMaterial",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "version",
+                  "rule_version_id",
+                  "confirmed"
+                ],
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "rule_version_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "confirmed": {
+                    "type": "boolean",
+                    "const": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "已固定规则版本并正式提交",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Material"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "没有权限",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "未确认、材料版本或规则版本冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/materials/{category}/records/{record_id}/corrections": {
+      "parameters": [
+        {
+          "name": "category",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "enum": [
+              "academic",
+              "competition",
+              "language",
+              "student_work",
+              "honor"
+            ]
+          }
+        },
+        {
+          "name": "record_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "post": {
+        "summary": "从旧审核记录创建追加式补正版本",
+        "operationId": "createMaterialCorrectionVersion",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "version",
+                  "confirmed_terms"
+                ],
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "confirmed_terms": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "补正版本已创建，旧记录保持不变",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Material"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "确认字段无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "非材料本人",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "材料不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态、版本或规则歧义冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/materials/{category}/records/{record_id}/withdraw": {
       "parameters": [
         {
@@ -725,6 +1033,7 @@
               "language",
               "student_work",
               "honor",
+              "competition_evidence",
               "certification",
               "social_practice",
               "research"
@@ -832,6 +1141,7 @@
               "language",
               "student_work",
               "honor",
+              "competition_evidence",
               "certification",
               "social_practice",
               "research"
@@ -939,6 +1249,7 @@
               "language",
               "student_work",
               "honor",
+              "competition_evidence",
               "certification",
               "social_practice",
               "research"
@@ -1046,6 +1357,7 @@
               "language",
               "student_work",
               "honor",
+              "competition_evidence",
               "certification",
               "social_practice",
               "research"
@@ -1143,6 +1455,7 @@
               "language",
               "student_work",
               "honor",
+              "competition_evidence",
               "certification",
               "social_practice",
               "research"
@@ -1247,6 +1560,7 @@
               "language",
               "student_work",
               "honor",
+              "competition_evidence",
               "certification",
               "social_practice",
               "research"
@@ -1374,6 +1688,7 @@
               "language",
               "student_work",
               "honor",
+              "competition_evidence",
               "certification",
               "social_practice",
               "research"
@@ -1753,6 +2068,114 @@
         },
         "operationId": "materialOpenApi"
       }
+    },
+    "/api/materials/competition/rules/current": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "当前竞赛规则包"
+          }
+        }
+      }
+    },
+    "/api/materials/competition/context": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "后端权威竞赛上下文"
+          }
+        }
+      }
+    },
+    "/api/materials/competition/workbench-summary": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "角色化竞赛工作台摘要"
+          }
+        }
+      }
+    },
+    "/api/materials/competition/catalog": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "原子竞赛目录"
+          }
+        }
+      }
+    },
+    "/api/materials/competition/catalog/{competition_id}": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "竞赛字段模式"
+          }
+        }
+      }
+    },
+    "/api/materials/competition/records/{record_id}/review-context": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "只读审核上下文"
+          }
+        }
+      }
+    },
+    "/api/materials/competition/students/{student_id}/summary": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "授权学生竞赛汇总"
+          }
+        }
+      }
+    },
+    "/api/materials/competition/feedback": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "学生本人竞赛反馈"
+          }
+        }
+      }
+    },
+    "/api/materials/competition/records/{record_id}/ocr": {
+      "post": {
+        "responses": {
+          "201": {
+            "description": "启动 OCR"
+          }
+        }
+      }
+    },
+    "/api/materials/competition/records/{record_id}/ocr/{job_id}": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OCR 状态"
+          }
+        }
+      }
+    },
+    "/api/materials/competition/records/{record_id}/ocr/{job_id}/cancel": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "逻辑取消 OCR"
+          }
+        }
+      }
+    },
+    "/api/materials/{category}/records/{record_id}/abandon": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "放弃退回材料"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1900,96 +2323,58 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "competition_name",
-          "organizer",
-          "competition_level",
-          "award_level",
-          "award_date"
+          "competition_id",
+          "project_name",
+          "award_date",
+          "level",
+          "award",
+          "event_year",
+          "participation_mode"
         ],
         "properties": {
-          "competition_name": {
-            "type": "string",
-            "maxLength": 200
+          "level": {
+            "type": "string"
           },
-          "organizer": {
-            "type": "string",
-            "maxLength": 200
+          "event_format": {
+            "type": "string"
           },
-          "competition_level": {
-            "type": "string",
-            "maxLength": 200
+          "team_size": {
+            "type": "integer"
           },
-          "award_level": {
-            "type": "string",
-            "maxLength": 200
+          "award": {
+            "type": "string"
           },
-          "award_date": {
-            "type": "string",
-            "format": "date",
-            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
-          },
-          "certificate_no": {
-            "type": "string",
-            "maxLength": 200
-          },
-          "project_key": {
-            "type": "string",
-            "enum": [
-              "manual",
-              "lanqiao",
-              "computer-design",
-              "software-design",
-              "challenge-cup"
-            ]
-          },
-          "reference_id": {
-            "type": "string",
-            "maxLength": 128,
-            "description": "匹配本院本学生本年度来源数据的external_id"
-          },
-          "project_name": {
-            "type": "string",
-            "maxLength": 200
-          },
-          "participants": {
-            "type": "array",
-            "maxItems": 300,
-            "items": {
-              "type": "string",
-              "maxLength": 200
-            }
-          },
-          "advisers": {
-            "type": "array",
-            "maxItems": 300,
-            "items": {
-              "type": "string",
-              "maxLength": 200
-            }
-          },
-          "school": {
-            "type": "string",
-            "maxLength": 200
-          },
-          "edition": {
-            "type": "string",
-            "maxLength": 200
-          },
-          "track": {
-            "type": "string",
-            "maxLength": 200
+          "csp_percentile": {
+            "type": "string"
           },
           "group": {
-            "type": "string",
-            "maxLength": 200
+            "type": "string"
           },
-          "region": {
-            "type": "string",
-            "maxLength": 200
+          "track": {
+            "type": "string"
           },
-          "stage_as_printed": {
-            "type": "string",
-            "maxLength": 200
+          "participation_mode": {
+            "type": "string"
+          },
+          "competition_id": {
+            "type": "string"
+          },
+          "project_name": {
+            "type": "string"
+          },
+          "event_year": {
+            "type": "integer"
+          },
+          "award_date": {
+            "type": "string"
+          },
+          "personal_rank": {
+            "type": "integer"
+          },
+          "evidence": {
+            "type": "object",
+            "description": "学生确认的证书补充字段，不作为规则或分数覆盖来源",
+            "additionalProperties": true
           }
         }
       },
@@ -2179,8 +2564,15 @@
               },
               {
                 "$ref": "#/components/schemas/ResearchData"
+              },
+              {
+                "$ref": "#/components/schemas/CompetitionEvidenceData"
               }
             ]
+          },
+          "manual_only": {
+            "type": "boolean",
+            "description": "显式选择人工核验，仅适用于人工材料类别及学生工作"
           }
         }
       },
@@ -2222,6 +2614,9 @@
               },
               {
                 "$ref": "#/components/schemas/ResearchData"
+              },
+              {
+                "$ref": "#/components/schemas/CompetitionEvidenceData"
               }
             ]
           }
@@ -2267,6 +2662,12 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 2000
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "客户端重试同一审核命令时复用；省略时旧客户端按材料版本和结论生成兼容键"
           }
         }
       },
@@ -2275,6 +2676,10 @@
         "properties": {
           "error": {
             "type": "string"
+          },
+          "code": {
+            "type": "string",
+            "description": "可选的稳定错误代码，例如 version_conflict、invalid_transition、idempotency_conflict"
           }
         }
       },
@@ -2326,6 +2731,7 @@
           "year",
           "status",
           "version",
+          "allowed_actions",
           "data",
           "analysis",
           "bonus_result"
@@ -2342,6 +2748,7 @@
               "language",
               "student_work",
               "honor",
+              "competition_evidence",
               "certification",
               "social_practice",
               "research"
@@ -2375,6 +2782,23 @@
             "minimum": 1,
             "maximum": 2000000000
           },
+          "allowed_actions": {
+            "type": "array",
+            "description": "后端按当前用户、组织范围和状态计算的可执行操作；前端仍不能用它替代后端授权",
+            "items": {
+              "type": "string",
+              "enum": [
+                "view",
+                "download_attachment",
+                "edit",
+                "add_attachment",
+                "submit",
+                "withdraw",
+                "check",
+                "review"
+              ]
+            }
+          },
           "data": {
             "oneOf": [
               {
@@ -2400,6 +2824,12 @@
               },
               {
                 "$ref": "#/components/schemas/ResearchData"
+              },
+              {
+                "$ref": "#/components/schemas/CompetitionEvidenceData"
+              },
+              {
+                "$ref": "#/components/schemas/LegacyCompetitionReadData"
               }
             ]
           },
@@ -2470,6 +2900,10 @@
               "description": "OCR任务、字段建议、确认快照及受保护原件地址",
               "additionalProperties": true
             }
+          },
+          "manual_only": {
+            "type": "boolean",
+            "description": "仅人工核验，不计分"
           }
         }
       },
@@ -2496,6 +2930,7 @@
               "language",
               "student_work",
               "honor",
+              "competition_evidence",
               "certification",
               "social_practice",
               "research"
@@ -2541,6 +2976,9 @@
               },
               {
                 "$ref": "#/components/schemas/ResearchData"
+              },
+              {
+                "$ref": "#/components/schemas/CompetitionEvidenceData"
               }
             ]
           }
@@ -2819,6 +3257,186 @@
             "maxLength": 128
           }
         }
+      },
+      "CompetitionEvidenceData": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "competition_name",
+          "award_level",
+          "award_date"
+        ],
+        "properties": {
+          "competition_name": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "organizer": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "competition_level": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "award_level": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "award_date": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "certificate_no": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "project_key": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "reference_id": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "project_name": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "participants": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 300
+          },
+          "advisers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 300
+          },
+          "school": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "edition": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "track": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "group": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "region": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "stage_as_printed": {
+            "type": "string",
+            "maxLength": 200
+          }
+        }
+      },
+      "LegacyCompetitionData": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "competition_name",
+          "organizer",
+          "competition_level",
+          "award_level",
+          "award_date"
+        ],
+        "properties": {
+          "competition_name": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "organizer": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "competition_level": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "award_level": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "award_date": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          },
+          "certificate_no": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "project_key": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "lanqiao"
+            ]
+          },
+          "reference_id": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "匹配本院本学生本年度来源数据的external_id"
+          }
+        },
+        "description": "历史竞赛及校方来源导入的兼容字段；正式竞赛创建使用CompetitionData"
+      },
+      "LegacyCompetitionReadData": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "competition_name": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "organizer": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "competition_level": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "award_level": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "award_date": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          },
+          "certificate_no": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "project_key": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "lanqiao"
+            ]
+          },
+          "reference_id": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "匹配本院本学生本年度来源数据的external_id"
+          }
+        },
+        "description": "历史竞赛及校方来源导入的兼容字段；正式竞赛创建使用CompetitionData"
       }
     }
   }

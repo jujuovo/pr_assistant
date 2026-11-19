@@ -93,7 +93,10 @@ async function apiRequest(endpoint, method = 'GET', data = null, token = null, t
 
     // 检查响应状态
     if (!response.ok) {
-      throw new Error(responseData.error || responseData.message || '请求失败')
+      const requestError = new Error(responseData.error || responseData.message || '请求失败')
+      requestError.status = response.status
+      requestError.code = responseData.code
+      throw requestError
     }
 
     return responseData
@@ -172,8 +175,14 @@ export default {
     return apiRequest(`/rules?${queryParams}`)
   },
   getRule: (id) => apiRequest(`/rules/${id}`),
-  createRule: (data) => apiRequest('/rules', 'POST', data),
-  updateRule: (id, data) => apiRequest(`/rules/${id}`, 'PUT', data),
+  createRule: (data) => {
+    if (data?.sub_type === 'competition') throw new TypeError('竞赛规则必须使用规则包工作台')
+    return apiRequest('/rules', 'POST', data)
+  },
+  updateRule: (id, data) => {
+    if (data?.sub_type === 'competition') throw new TypeError('竞赛规则必须使用规则包工作台')
+    return apiRequest(`/rules/${id}`, 'PUT', data)
+  },
   deleteRule: (id) => apiRequest(`/rules/${id}`, 'DELETE'),
   toggleRuleStatus: (id) => apiRequest(`/rules/${id}/status`, 'PATCH'),
   batchDeleteRules: (ids) => apiRequest('/rules/batch-delete', 'POST', { ids }),

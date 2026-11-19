@@ -108,4 +108,9 @@ def view(row):
             "report": row.report, "error": row.error,
             "preview_flow": bool(row.claims.get("preview_flow")),
             "student_values": row.claims.get("student_values"),
+            "ocr_raw_terms": row.claims.get("ocr_raw_terms"),
+            "confirmed_terms": row.claims.get("confirmed_terms"),
+            "normalized_terms": row.claims.get("normalized_terms"),
+            "normalization_version": row.claims.get("normalization_version"),
+            "confirmation_history": row.claims.get("confirmation_history", []),
             "application_status": row.application.status, "authenticity": "not_assessed"}

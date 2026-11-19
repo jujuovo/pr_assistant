@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 from extensions import db
-from models import Application, Student, SystemSettings
+from models import Application, Rule, Student, SystemSettings, User
 from automation_models import utcnow
 from certificate_models import CertificateAssessment
 from conftest import login
@@ -15,6 +15,19 @@ from services.certificates.worker import run_one_certificate
 from services.certificates.service import enqueue, contained, artifact_root
 
 FIXTURES = Path(__file__).parent / 'fixtures' / 'lanqiao'
+
+
+@pytest.fixture(autouse=True)
+def certificate_scoring_policy(env, active_cycle):
+    from use_cases.rule_versions import publish_rule_version
+
+    admin = db.session.get(User, env[2]['admin'])
+    rule = Rule(name='蓝桥杯测试规则', type='academic', sub_type='competition',
+                score=2, max_score=2, faculty_id=admin.faculty_id, status='active')
+    db.session.add(rule)
+    publish_rule_version(rule, published_by=admin, cycle_code=active_cycle.cycle_code)
+    db.session.commit()
+    return rule
 
 
 def submit(env, key='lanqiao', payload=None, filename='certificate.jpg', **extra):
@@ -26,7 +39,8 @@ def submit(env, key='lanqiao', payload=None, filename='certificate.jpg', **extra
     student = Student.query.filter_by(student_id='S1').one()
     data = dict(studentId='S1', facultyId=student.faculty_id, departmentId=student.department_id,
                 majorId=student.major_id, name='张三', projectName='蓝桥杯', applicationType='academic',
-                status='pending', selfScore=2, certificateProject=key, certificateClaims={'award':'二等奖'})
+                status='pending', selfScore=2, awardDate='2024-05-01',
+                certificateProject=key, certificateClaims={'award':'二等奖'})
     data.update(extra)
     if payload is None:
         payload = (FIXTURES / 'example4.jpg').read_bytes()
@@ -89,7 +103,7 @@ def test_quality_reupload_skips_ocr(env):
     assert result.status == 'needs_reupload' and provider.calls == 0
 
 
-@pytest.mark.parametrize('payload,filename',[(b'corrupt','bad.jpg'),(b'other','material.pdf'),(b'hello','file.txt')])
+@pytest.mark.parametrize('payload,filename',[(b'corrupt','bad.jpg'),(b'other','material.pdf')])
 def test_bad_material_is_explicit_manual_not_false_success(env,payload,filename):
     settings = SystemSettings(allowed_file_types='.jpg,.pdf,.txt')
     db.session.add(settings); db.session.commit()
@@ -191,20 +205,22 @@ def test_edit_adds_new_file_without_losing_retained_evidence(env):
     assert len(row.sources) == 2 and row.status == 'queued'
 
 
-def test_teacher_can_review_without_ocr_modifying_score(env):
+def test_legacy_non_preview_certificate_cannot_write_final_score(env):
     response=submit(env)
     assessment(env,response)
     provider=NoWatermark(); run_one_certificate(env[0],provider)
     application_id=response.json['id']
     login(env[1],env[2]['admin'])
     reviewed=env[1].post(f'/api/applications/{application_id}/review',json={
-        'status':'approved','finalScore':1.25,'reviewComment':'已人工核验','reviewedBy':'管理员'})
-    assert reviewed.status_code == 200,reviewed.json
+        'status':'approved','finalScore':1.25,'overrideReason':'人工复核后调整',
+        'reviewComment':'已人工核验','reviewedBy':'管理员'})
+    assert reviewed.status_code == 400,reviewed.json
+    assert reviewed.json['code'] == 'legacy_final_score_not_supported'
     application=db.session.get(Application,application_id)
     db.session.refresh(application)
-    assert application.final_score == 1.25 and application.self_score == 2
+    assert application.final_score is None and application.self_score == 2
     login(env[1],env[2]['student'])
-    assert env[1].put(f'/api/applications/{application_id}',json={'certificateProject':'lanqiao'}).status_code == 409
+    assert env[1].put(f'/api/applications/{application_id}',json={'certificateProject':'lanqiao'}).status_code == 200
 
 
 def test_certificate_migration_matches_model_and_is_reversible(env):

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import api from '@/services/api.js'
+import applicationReviewApi from '@/services/applicationReviewApi.js'
 
 export const useApplicationsStore = defineStore('applications', () => {
   // 辅助函数：字段名转换
@@ -248,7 +249,7 @@ export const useApplicationsStore = defineStore('applications', () => {
     applicationId,
     status,
     reviewComment,
-    finalScore,
+    reviewOptions,
     reviewedBy
   ) => {
     loading.value = true
@@ -262,15 +263,9 @@ export const useApplicationsStore = defineStore('applications', () => {
         reviewComment.rejectComment ||
         reviewComment
 
-      const updatedData = {
-        status,
-        reviewComment: comment,
-        finalScore,
-        reviewedBy
-      }
-
-      // 使用审核接口而不是通用更新接口，以触发自动评分逻辑
-      await api.apiRequest(`/applications/${applicationId}/review`, 'POST', updatedData)
+      const result = await applicationReviewApi.reviewApplication(applicationId, {
+        status, comment, ...(reviewOptions || {})
+      })
 
       // 更新本地状态
       const application = applications.value.find((app) => app.id === applicationId)
@@ -278,30 +273,30 @@ export const useApplicationsStore = defineStore('applications', () => {
         Object.assign(application, {
           status,
           reviewComment,
-          finalScore,
+          finalScore: result.score?.effective_score ?? application.finalScore,
           reviewedAt: new Date().toISOString(),
           reviewedBy
         })
       }
 
-      return true
+      return result
     } catch (err) {
       console.error('更新申请状态失败:', err)
-      error.value = '更新申请状态失败'
-      return false
+      error.value = err
+      throw err
     } finally {
       loading.value = false
     }
   }
 
   // 批准申请
-  const approveApplication = async (applicationId, finalScore, comment, reviewedBy) => {
-    return await updateApplicationStatus(applicationId, 'approved', comment, finalScore, reviewedBy)
+  const approveApplication = async (applicationId, reviewOptions, comment, reviewedBy) => {
+    return await updateApplicationStatus(applicationId, 'approved', comment, reviewOptions, reviewedBy)
   }
 
   // 驳回申请
   const rejectApplication = async (applicationId, comment, reviewedBy) => {
-    return await updateApplicationStatus(applicationId, 'rejected', comment, 0, reviewedBy)
+    return await updateApplicationStatus(applicationId, 'rejected', comment, null, reviewedBy)
   }
 
   // 删除申请

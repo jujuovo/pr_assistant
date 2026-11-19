@@ -16,7 +16,7 @@ from material_models import MaterialRecord, MaterialAttachment
 from models import Application, Student, User
 from ocr_models import OCRJob, OCRMaterialLink
 from services.competition_ocr.jobs import job_root
-from services.competition_ocr.mapping import suggestions
+from services.competition_ocr.mapping import suggestions, raw_suggestions
 from services.materials.service import stored_path
 
 AWARD = {"event": "测试竞赛", "edition": "第十届", "participants": ["张三", "李四"],
@@ -31,7 +31,8 @@ CSP = {"document_type": "csp_transcript", "name": "张三", "certificate_no": "C
        "task_scores": [100, 100, 40, 0, 20], "total_score": 260}
 CASES = [
     ("lanqiao", LANQIAO, "competition"),
-    *((key, AWARD, "competition") for key in ("computer-design", "software-design", "challenge-cup")),
+    *((key, AWARD, "competition") for key in ("computer-design", "challenge-cup")),
+    ("software-design", AWARD, "competition_evidence"),
     ("csp", CSP, "certification"),
     ("social-practice", {"document_type": "practice_proof", "team": "测试实践队", "period_as_printed": "2025年暑假",
                          "issuer": "学校", "members": ["张三"], "issue_date": "2025-09-01"}, "social_practice"),
@@ -50,7 +51,8 @@ def completed_data(key, fields):
     mapped = suggestions(key, {"fields": fields})
     data = copy.deepcopy(mapped["data"])
     if mapped["material_category"] == "competition":
-        data.update(organizer="主办单位", competition_level="国家级")
+        data.update(project_name=data.get("project_name") or "测试项目", level="national",
+                    award=data.get("award") or "second", event_year=2026, participation_mode="individual")
     elif key == "csp":
         data["full_score"] = 500
     elif mapped["material_category"] == "student_work":
@@ -61,6 +63,9 @@ def completed_data(key, fields):
 
 
 def prepared_job(env, key="csp", fields=None):
+    if key in {"lanqiao", "computer-design", "challenge-cup"}:
+        from test_ocr_workflow_integration import setup_formal
+        setup_formal(env)
     login(env[1], env[2]["student"])
     image = io.BytesIO()
     Image.new("RGB", (600, 600), "white").save(image, format="PNG")
@@ -88,7 +93,7 @@ def test_every_adapter_maps_confirms_and_preserves_raw_facts(env, key, fields, t
     mapping = preview["mapping"]
     assert mapping["material_category"] == target
     assert env[1].get(f"/api/ocr/jobs/{job_id}/mapping").json["mapping"] == mapping
-    response = env[1].post(confirm_url(job_id), json={"year": 2026, "data": completed_data(key, fields)})
+    response = env[1].post(confirm_url(job_id), json={"year": 2028 if target == "competition" else 2026, "data": completed_data(key, fields)})
     assert response.status_code == 201, response.json
     material = response.json["material"]
     assert material["category"] == target and material["status"] == "draft"
@@ -101,26 +106,26 @@ def test_every_adapter_maps_confirms_and_preserves_raw_facts(env, key, fields, t
     poll = env[1].get(preview["result_url"]).json
     assert poll["material_record_id"] == material["id"] and poll["application_id"] is None
     assert env[1].get(poll["material_url"]).json["data"] == material["data"]
-    assert env[1].post(confirm_url(job_id), json={"year": 2026, "data": completed_data(key, fields)}).status_code == 409
+    assert env[1].post(confirm_url(job_id), json={"year": 2028 if target == "competition" else 2026, "data": completed_data(key, fields)}).status_code == 409
     assert MaterialRecord.query.count() == MaterialAttachment.query.count() == OCRMaterialLink.query.count() == 1
     assert Application.query.count() == 0
     assert Student.query.filter_by(student_id="S1").one().academic_score == 80
 
 
 def test_missing_fields_dates_and_months_are_not_guessed():
-    mapped = suggestions("computer-design", {"fields": AWARD})
+    mapped = raw_suggestions("computer-design", {"fields": AWARD})
     assert mapped["data"]["award_date"] == "2026-05-08"
     assert mapped["missing_fields"] == ["organizer", "competition_level"]
     assert "competition_level" not in mapped["data"]
     missing_date = {**LANQIAO, "date": "2026年5月"}
-    assert "award_date" in suggestions("lanqiao", {"fields": missing_date})["missing_fields"]
-    mapped = suggestions("csp", {"fields": {**CSP, "total_score": 0, "task_scores": [0]*5}})
+    assert "award_date" in raw_suggestions("lanqiao", {"fields": missing_date})["missing_fields"]
+    mapped = raw_suggestions("csp", {"fields": {**CSP, "total_score": 0, "task_scores": [0]*5}})
     assert mapped["data"]["score"] == 0 and mapped["missing_fields"] == ["full_score"]
-    appointment = suggestions("other", {"fields": CASES[-2][1]})
+    appointment = raw_suggestions("other", {"fields": CASES[-2][1]})
     assert appointment["data"]["appointments"][0]["start_date"] is None
     assert appointment["data"]["start_month_as_printed"] == "2025年9月"
     assert appointment["data"]["subject_name"] == "张三"
-    assert suggestions("other", {"fields": {"document_type": None}})["material_category"] is None
+    assert raw_suggestions("other", {"fields": {"document_type": None}})["material_category"] is None
 
 
 @pytest.mark.parametrize("bad", ["missing", "too_high", "nan", "wrong_sum", "invalid_date", "unknown_field"])

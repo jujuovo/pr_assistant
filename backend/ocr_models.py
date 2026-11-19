@@ -1,4 +1,4 @@
-"""Authenticated OCR suggestions, independent from applications and scores."""
+"""Private recognition jobs and immutable student-confirmed material associations."""
 import uuid
 from extensions import db
 from automation_models import utcnow

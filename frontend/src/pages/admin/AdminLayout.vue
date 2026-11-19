@@ -28,8 +28,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { useToastStore } from '@/stores/toast.js'
 
@@ -41,19 +41,23 @@ import Sidebar from '@/components/common/Sidebar.vue'
 import UserManagement from '@/pages/admin/users/UserManagement.vue'
 import ApplicationManagement from '@/pages/admin/applications/ApplicationManagement.vue'
 import RuleManagement from '@/pages/admin/rules/RuleManagement.vue'
+import CompetitionRulePackages from '@/pages/admin/rules/CompetitionRulePackages.vue'
 import StatisticsReport from '@/pages/common/statistics/StatisticsReport.vue'
 import SystemSettings from '@/pages/admin/settings/SystemSettings.vue'
 import Profile from '@/pages/common/profile/Profile.vue'
 import FacultyManagement from '@/pages/admin/organization/FacultyManagement.vue'
 import ScoreManagement from '@/pages/admin/scores/ScoreManagement.vue'
 import GraduateFileManagement from '@/pages/admin/files/GraduateFileManagement.vue'
+import RankingBatch from '@/pages/common/statistics/RankingBatch.vue'
+import RankingPublication from '@/pages/admin/rankings/RankingPublication.vue'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 const toastStore = useToastStore()
 
 // 当前活动页面
-const currentPage = ref('home')
+const currentPage = ref(route.query.page || 'home')
 
 // 页面组件映射
 const pageComponents = {
@@ -61,11 +65,13 @@ const pageComponents = {
   'score-management': ScoreManagement,
   'data-management': ApplicationManagement,
   'rule-management': RuleManagement,
+  'competition-rule-packages': CompetitionRulePackages,
   'faculty-management': FacultyManagement,
   'statistics-report': StatisticsReport,
   'system-settings': SystemSettings,
   profile: Profile,
-  'graduate-file-management': GraduateFileManagement
+  'graduate-file-management': GraduateFileManagement,
+  rankings: RankingPublication
 }
 
 const currentPageComponent = computed(() => pageComponents[currentPage.value])
@@ -89,7 +95,9 @@ const handleSidebarToggle = (isOpen) => {
 // 切换页面
 const switchPage = (page) => {
   currentPage.value = page
+  router.replace({ query: { ...route.query, page } })
 }
+watch(() => route.query.page, page => { if (page) currentPage.value = page })
 
 // 切换到个人信息页面
 const goToProfile = () => {

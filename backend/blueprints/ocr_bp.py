@@ -99,3 +99,17 @@ def image(job_id, name):
     response.headers["Cache-Control"] = "private, no-store"
     response.headers["X-Content-Type-Options"] = "nosniff"
     return response
+
+
+from use_cases.materials import MaterialUseCaseError
+from use_cases.cycles import CycleUseCaseError
+
+@ocr_bp.errorhandler(MaterialUseCaseError)
+def material_workflow_error(error):
+    db.session.rollback()
+    return jsonify({"error": str(error), "code": error.code}), error.status_code
+
+@ocr_bp.errorhandler(CycleUseCaseError)
+def cycle_workflow_error(error):
+    db.session.rollback()
+    return jsonify({"error": str(error), "code": error.code}), 409

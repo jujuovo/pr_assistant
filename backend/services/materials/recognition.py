@@ -32,4 +32,10 @@ def recognize_attachment(category, record_id, payload):
         abort(409, description="原件缺失")
     if len(content) != attachment.size or sha256(content).hexdigest() != attachment.sha256:
         abort(409, description="原件校验失败")
+    if category == "competition":
+        from extensions import db
+        from ocr_models import OCRJob
+        from services.competition_ocr.bridge import queue_material
+        job, _ = queue_material(row, payload["version"], attachment_id=attachment_id, expected_key=key)
+        return db.session.get(OCRJob, job.job_id)
     return enqueue(key, content, attachment.filename)

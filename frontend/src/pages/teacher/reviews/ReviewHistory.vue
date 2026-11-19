@@ -3,6 +3,9 @@
     <div class="page-title">
       <span>审核记录</span>
     </div>
+    <TeacherCompetitionReview mode="history" />
+    <ManualMaterialReview history />
+    <div class="page-title"><span>非竞赛兼容审核记录</span></div>
     <!-- 筛选区域 -->
     <div class="filters primary-section-frame">
       <div class="filter-group">
@@ -237,12 +240,15 @@
 </template>
 
 <script setup>
+import ManualMaterialReview from '@/components/common/ManualMaterialReview.vue'
 import { ref, computed, onMounted } from 'vue'
 import ApplicationDetailModal from '@/components/common/ApplicationDetailModal.vue'
+import TeacherCompetitionReview from './TeacherCompetitionReview.vue'
 import { useApplicationsStore } from '@/stores/applications.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useToastStore } from '@/stores/toast.js'
 import api from '@/services/api.js'
+import { isNonCompetitionCompatibilityApplication, nonCompetitionRules } from '@/services/teacherApplicationBoundary.js'
 
 const applicationsStore = useApplicationsStore()
 const authStore = useAuthStore()
@@ -309,7 +315,8 @@ const paginatedApplications = computed(() => {
   })
 
   // 只保留已审核的
-  filtered = filtered.filter((app) => app.status === 'approved' || app.status === 'rejected')
+  filtered = filtered.filter((app) =>
+    (app.status === 'approved' || app.status === 'rejected') && isNonCompetitionCompatibilityApplication(app))
 
   // 如果有状态筛选
   if (filters.value.status !== 'all') {
@@ -364,7 +371,8 @@ const totalApplications = computed(() => {
     studentName: filters.value.studentName || undefined
   })
 
-  filtered = filtered.filter((app) => app.status === 'approved' || app.status === 'rejected')
+  filtered = filtered.filter((app) =>
+    (app.status === 'approved' || app.status === 'rejected') && isNonCompetitionCompatibilityApplication(app))
 
   if (filters.value.status !== 'all') {
     filtered = filtered.filter((app) => app.status === filters.value.status)
@@ -514,10 +522,10 @@ const closeEditDialog = () => {
 // 审核操作处理
 const handleApproveApplication = async (approveData) => {
   try {
-    const { applicationId, finalScore, approveComment } = approveData
+    const { applicationId, approveComment, idempotencyKey } = approveData
     const success = await applicationsStore.approveApplication(
       applicationId,
-      finalScore,
+      { idempotencyKey },
       approveComment,
       authStore.userName
     )
@@ -529,7 +537,8 @@ const handleApproveApplication = async (approveData) => {
     }
   } catch (error) {
     console.error('审核通过失败:', error)
-    toastStore.error('审核通过失败，请重试')
+    toastStore.error(error.code === 'needs_rule' ? '材料已核验，但缺少适用的已发布规则' :
+      error.code === 'source_version_conflict' ? '材料版本已变化，请刷新后重试' : '审核通过失败，请重试')
   }
 }
 
@@ -674,7 +683,7 @@ const fetchRules = async () => {
     const teacherFacultyId = authStore.user?.faculty_id || authStore.user?.facultyId
     // 使用正确的API方法获取规则，传递学院ID
     const response = await api.getRules({ faculty_id: teacherFacultyId })
-    availableRules.value = response.rules
+    availableRules.value = nonCompetitionRules(response.rules)
   } catch (error) {
     console.error('获取规则列表失败:', error)
     availableRules.value = []

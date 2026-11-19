@@ -131,11 +131,38 @@
             <button class="btn btn-outline" @click="resetFilter">清空筛选</button>
           </div>
           <div class="filter-group">
-            <button class="btn btn-outline" @click="recalculateComprehensiveScores">
-              <font-awesome-icon :icon="['fas', 'calculator']" class="me-1" /> 重新计算综合成绩
+            <input v-model.number="recalculationYear" class="form-control small" type="number" min="2000" max="2100" aria-label="重算周期" />
+            <button class="btn btn-outline" :disabled="loading" @click="previewRecalculation">
+              <font-awesome-icon :icon="['fas', 'calculator']" class="me-1" /> 预览重算影响
             </button>
           </div>
         </div>
+
+        <section v-if="recalculationPreview" class="recalculation-preview" data-testid="recalculation-preview">
+          <h3>重算影响预览</h3>
+          <p>范围学生 {{ recalculationPreview.input_summary.student_count }} 人；预计变化
+            {{ recalculationPreview.expected_changes.changed_count }} 人；失败
+            {{ recalculationPreview.input_summary.failed_count }} 人；受影响 draft 排名
+            {{ recalculationPreview.affected_draft_rankings.length }} 个。</p>
+          <ul v-if="recalculationPreview.failed_objects.length">
+            <li v-for="item in recalculationPreview.failed_objects" :key="item.student_id">
+              {{ item.student_id }}：{{ item.error }}
+            </li>
+          </ul>
+          <button class="btn btn-primary" :disabled="loading || !recalculationPreview.complete" @click="executeRecalculation">
+            确认按此预览重算
+          </button>
+        </section>
+        <section v-if="recalculationResult" class="recalculation-result" data-testid="recalculation-result">
+          <h3>重算结果：{{ recalculationResult.complete ? '完成' : '失败' }}</h3>
+          <p>成功对象 {{ recalculationResult.objects.length }} 个；失效 draft 排名
+            {{ recalculationResult.stale_ranking_batch_ids.length }} 个。</p>
+          <ul v-if="recalculationResult.failed_objects.length">
+            <li v-for="item in recalculationResult.failed_objects" :key="item.student_id">
+              {{ item.student_id }}：{{ item.error }}
+            </li>
+          </ul>
+        </section>
 
         <!-- 成绩表格 -->
         <div class="table-container">
@@ -154,6 +181,7 @@
                 <th>综合成绩</th>
                 <th>专业排名</th>
                 <th>排名人数</th>
+                <th>权威快照</th>
                 <th>操作</th>
               </tr>
             </thead>
@@ -171,6 +199,7 @@
                 <td>{{ student.comprehensive_score || '-' }}</td>
                 <td>{{ student.major_ranking || '-' }}</td>
                 <td>{{ student.total_students || '-' }}</td>
+                <td>v{{ student.snapshot_version || '-' }} · {{ student.snapshot_status || '暂无快照' }} · {{ student.snapshot_updated_at || '-' }}</td>
                 <td>
                   <div class="action-buttons">
                     <button class="btn-outline btn small-btn" @click="openEditModal(student)">
@@ -180,7 +209,7 @@
                 </td>
               </tr>
               <tr v-if="paginatedScores.length === 0">
-                <td :colspan="14" class="no-data">暂无成绩数据</td>
+                <td :colspan="15" class="no-data">暂无成绩数据</td>
               </tr>
             </tbody>
           </table>
@@ -483,6 +512,8 @@
 
 <script>
 import api from '@/services/api.js'
+import workflowApi from '@/services/workflowApi.js'
+import { buildStudentBaseUpdate } from '@/services/adminScorePresentation.js'
 import { useApplicationsStore } from '@/stores/applications.js'
 import { useToastStore } from '@/stores/toast.js'
 import { useAuthStore } from '@/stores/auth.js'
@@ -502,6 +533,9 @@ export default {
       scores: [],
       total: 0,
       loading: false,
+      recalculationYear: new Date().getFullYear(),
+      recalculationPreview: null,
+      recalculationResult: null,
       // 分页
       currentPage: 1,
       pageSize: 10,
@@ -954,7 +988,8 @@ export default {
       if (this.validateForm()) {
         try {
           // 更新学生
-          await api.updateStudentAdmin(this.formData.id, this.formData)
+          const payload = buildStudentBaseUpdate(this.formData)
+          await api.updateStudentAdmin(this.formData.id, payload)
 
           // 关闭模态框并刷新数据
           this.dialogVisible = false
@@ -967,27 +1002,40 @@ export default {
       }
     },
 
-    // 重新计算所有学生的综合成绩
-    async recalculateComprehensiveScores() {
+    async previewRecalculation() {
       try {
-        // 显示确认对话框
-        if (confirm('确定要重新计算所有学生的综合成绩吗？此操作可能需要一些时间。')) {
-          this.loading = true
-
-          // 获取当前登录用户信息
-          const userInfo = JSON.parse(localStorage.getItem('user'))
-
-          // 调用API重新计算综合成绩
-          await api.recalculateComprehensiveScores({ username: userInfo?.username })
-
-          // 刷新成绩数据
-          await this.loadScoresFromAPI()
-
-          this.toastStore.success('综合成绩重新计算完成')
-        }
+        this.loading = true
+        this.recalculationResult = null
+        const facultyId = this.authStore.user?.faculty_id || this.authStore.user?.facultyId
+        const payload = { year: this.recalculationYear, faculty_id: facultyId }
+        if (this.filters.major !== 'all') payload.major_id = Number(this.filters.major)
+        this.recalculationPreview = await workflowApi.previewScoreRecalculation(payload)
       } catch (error) {
-        console.error('Error recalculating comprehensive scores:', error)
-        this.toastStore.error('重新计算综合成绩失败')
+        this.toastStore.error(error.message || '重算预览失败')
+      } finally {
+        this.loading = false
+      }
+    },
+
+    async executeRecalculation() {
+      if (!this.recalculationPreview?.complete) return
+      try {
+        this.loading = true
+        const preview = this.recalculationPreview
+        this.recalculationResult = await workflowApi.executeScoreRecalculation({
+          scope: preview.scope,
+          preview_digest: preview.preview_digest,
+          preview_expires_at: preview.preview_expires_at,
+          idempotency_key: crypto.randomUUID()
+        })
+        await this.loadScoresFromAPI()
+        this.toastStore.success('综合成绩重算完成')
+      } catch (error) {
+        this.recalculationResult = error.payload || {
+          complete: false, objects: [], stale_ranking_batch_ids: [],
+          failed_objects: [{ student_id: 'scope', error: error.message }]
+        }
+        this.toastStore.error(error.message || '重算执行失败')
       } finally {
         this.loading = false
       }

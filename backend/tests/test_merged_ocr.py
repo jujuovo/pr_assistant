@@ -151,8 +151,10 @@ def test_real_merged_worker_uses_only_backend_samples_and_models(env):
         if key == "csp":
             data["full_score"] = 500
         else:
+            from services.competition_ocr.mapping import raw_suggestions
+            data = raw_suggestions(key, report["report"])["data"]
             data.update(organizer="学生补充的主办单位", competition_level="省级")
         confirmed = env[1].post(f"/api/ocr/jobs/{response.json['id']}/confirm-material",
-                                json={"year": 2026, "data": data})
+                                json={"year": 2026, "data": data, "manual_only":key == "lanqiao"})
         assert confirmed.status_code == 201, confirmed.json
-        assert confirmed.json["material"]["ocr_links"][0]["suggestions"] == report["mapping"]
+        assert confirmed.json["material"]["ocr_links"][0]["suggestions"]["data"] == (report["mapping"]["data"] if key=="csp" else raw_suggestions(key,report["report"])["data"])

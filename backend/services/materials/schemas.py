@@ -184,6 +184,16 @@ def analyze(category, data):
 
 
 def type_view():
-    return {'types':[{'key':key, **value, 'recognition_status':'available' if key in OCR_CATEGORIES else 'not_implemented', 'auto_bonus_enabled':False} for key,value in TYPES.items()],
-            'course_fields':sorted(COURSE_FIELDS), 'appointment_fields':sorted(APPOINTMENT_FIELDS),
-            'note':'识别按需启动；建议字段经学生确认后保存，不认定真实性，不自动加分。'}
+    from domain.competition_rules import COMPETITION_FACT_FIELDS
+    from .ocr_schemas import MANUAL_TYPES
+    types = []
+    for key, value in TYPES.items():
+        spec = dict(value)
+        if key == 'competition':
+            spec.update(fields=sorted(COMPETITION_FACT_FIELDS),
+                        required=['competition_id','project_name','award_date','level','award','event_year','participation_mode'],
+                        field_schema_url='/api/materials/competition/context')
+        types.append({'key':key, **spec, 'recognition_status':'available' if key in OCR_CATEGORIES else 'not_implemented',
+                      'auto_bonus_enabled':key == 'competition', 'manual_only':key in MANUAL_TYPES})
+    return {'types':types, 'course_fields':sorted(COURSE_FIELDS), 'appointment_fields':sorted(APPOINTMENT_FIELDS),
+            'note':'识别建议经学生确认保存；正式竞赛教师核验后按固定规则计分，目录外材料仅人工核验。'}

@@ -1,7 +1,7 @@
 """Shared Windows/macOS development seed. Only writes an explicitly selected SQLite copy."""
 import argparse
 import json
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 import sys
 
@@ -14,7 +14,13 @@ from models import Faculty, Department, Major, Student, User, Rule, RuleCalculat
 CONFIG = json.loads((Path(__file__).resolve().parents[1] / 'seed/demo.json').read_text(encoding='utf-8'))
 
 
-def seed_demo(reset_password=False, with_test_rule=False, with_test_settings=False):
+def seed_demo(
+    reset_password=False,
+    with_test_rule=False,
+    with_test_settings=False,
+    enforce_configured_active_cycle=True,
+    commit=True,
+):
     """One transaction; repeats preserve existing passwords, scores and business records."""
     try:
         required = {'faculty', 'department', 'major', 'student', 'user'}
@@ -66,6 +72,27 @@ def seed_demo(reset_password=False, with_test_rule=False, with_test_settings=Fal
                     user.set_password(account['password'])
             result.append({'username': username, 'role': role,
                            'action': 'created' if created else 'password_reset' if reset_password else 'preserved'})
+        db.session.flush()
+        if with_test_rule or with_test_settings:
+            from use_cases.cycles import (
+                activate_cycle_policy,
+                create_cycle_policy,
+                current_cycle_policy,
+            )
+            cycle = CONFIG['recommendation_cycle']
+            admin = User.query.filter_by(username='admin001').one()
+            policy, _created = create_cycle_policy(
+                admin,
+                cycle['cycle_code'],
+                date.fromisoformat(cycle['eligible_award_start_date']),
+                date.fromisoformat(cycle['eligible_award_end_date']),
+                cycle['display_name'],
+            )
+            active = current_cycle_policy(required=False)
+            if active is None:
+                activate_cycle_policy(admin, policy)
+            elif active.id != policy.id and enforce_configured_active_cycle:
+                raise ValueError('已有不同的活动推免周期，已停止；不会覆盖现有周期')
         if with_test_rule:
             spec = CONFIG['rule']
             rule = Rule.query.filter_by(faculty_id=faculty.id, name=spec['name']).one_or_none()
@@ -76,6 +103,9 @@ def seed_demo(reset_password=False, with_test_rule=False, with_test_settings=Fal
                 db.session.flush()
                 db.session.add(RuleCalculation(rule_id=rule.id, calculation_type='tree',
                     parameters=spec['parameters'], max_score=spec['max_score'], precision=2, status='active'))
+            db.session.flush()
+            from use_cases.rule_versions import publish_rule_version
+            publish_rule_version(rule, published_by=admin, cycle_code=policy.cycle_code)
         if with_test_settings:
             settings = SystemSettings.query.one_or_none()
             if settings is None:
@@ -83,7 +113,10 @@ def seed_demo(reset_password=False, with_test_rule=False, with_test_settings=Fal
                 db.session.add(settings)
             for key, value in CONFIG['system_settings'].items():
                 setattr(settings, key, datetime.fromisoformat(value) if key in ('application_start', 'application_end') else value)
-        db.session.commit()
+        if commit:
+            db.session.commit()
+        else:
+            db.session.flush()
         return result
     except Exception:
         db.session.rollback()

@@ -1,5 +1,5 @@
 """学生/同院教师访问持久化证书结果和受保护原件。"""
-from flask import Blueprint, abort, jsonify, request, send_file
+from flask import Blueprint, abort, current_app, jsonify, request, send_file
 from werkzeug.exceptions import HTTPException
 from extensions import db
 from models import Application
@@ -14,6 +14,8 @@ certificate_bp = Blueprint("certificates", __name__, url_prefix="/api/certificat
 @certificate_bp.errorhandler(HTTPException)
 def api_error(error):
     db.session.rollback()
+    if isinstance(error.description, dict):
+        return jsonify(error.description), error.code
     return jsonify({"error": error.description}), error.code
 
 
@@ -84,6 +86,11 @@ def artifact(application_id, version, filename):
 
 @certificate_bp.post('/previews')
 def preview_upload():
+    if not current_app.config.get('ALLOW_LEGACY_CERTIFICATE_PREVIEWS', False):
+        actor()
+        return jsonify({'error':'竞赛已统一使用材料申报，请从正式竞赛入口上传识别',
+                        'code':'competition_material_route_required',
+                        'next_url':'/api/materials/competition/context'}),409
     from services.certificates.preview import create_preview
     return jsonify(view(create_preview(request.files.getlist('files')))), 202
 
@@ -94,3 +101,17 @@ def confirm_preview(application_id):
     row, application = row_for(application_id)
     result = save_preview(row, application, request.get_json(silent=True))
     return jsonify(view(result))
+
+
+from use_cases.materials import MaterialUseCaseError
+from use_cases.cycles import CycleUseCaseError
+
+@certificate_bp.errorhandler(MaterialUseCaseError)
+def material_workflow_error(error):
+    db.session.rollback()
+    return jsonify({"error": str(error), "code": error.code}), error.status_code
+
+@certificate_bp.errorhandler(CycleUseCaseError)
+def cycle_workflow_error(error):
+    db.session.rollback()
+    return jsonify({"error": str(error), "code": error.code}), 409

@@ -1,5 +1,7 @@
 # 推免加分系统
 
+> GitHub 提交与合并步骤见 [提交说明](docs/GITHUB-SUBMISSION.md)。当前为开发整合版本，三角色审计发现的产品化缺口和最终验收仍待完成，详见 [审计收尾](openspec/changes/align-three-role-core-workflows/evidence/9.1-audit-closeout.md)。源码、迁移、测试和文档入库，本地数据库、上传材料、日志及模型不入库。
+
 Vue 3 / Vite 前端、Flask 后端与独立 OCR worker。源码目录固定为 `frontend` 和 `backend`。以下命令均从**仓库根目录**开始执行，路径中有空格时使用引号。
 
 ## 环境与功能范围
@@ -7,8 +9,8 @@ Vue 3 / Vite 前端、Flask 后端与独立 OCR worker。源码目录固定为 `
 - Python **3.12**；Node.js `^20.19.0` 或 `>=22.12.0`，建议团队统一 Node 22；npm。
 - 本地开发使用 SQLite，无需先装 PostgreSQL。首次安装 Python/npm 依赖和 OCR 模型需要网络。
 - 后端端口5001，前端5173；Vite代理 `/api` 与 `/uploads`。浏览器统一使用 `http://localhost:5173`，真实联调不要运行 `npm run demo`。
-- 蓝桥杯：上传→OCR预览→学生修改申报值→提交→教师对照原图与OCR审核。OCR不会自动认定真实性或批准加分。
-- 志愿工时有后端和请求模块，但学生页面闭环尚未接入；五类材料有结构化核验接口，通用 `recognize` 返回501。不能把这些未完成功能视为操作系统兼容问题。
+- 正式竞赛：上传→七类适配中的OCR预览→学生核对并保存材料事实→提交→教师对照原件审核→按固定规则计分。OCR不认定真实性或批准加分。
+- 支持蓝桥杯、计算机设计大赛、中国软件杯、挑战杯、CSP、社会实践和其他证明的图片识别。目录外材料及显式不申请计分材料走人工核验；学业成绩、外语、荣誉尚无OCR适配器，仍明确返回501。志愿工时保留既有后端接口。
 
 ## Windows 首次准备与启动
 
@@ -27,7 +29,7 @@ npm.cmd ci --prefix frontend
 
 打开 `http://localhost:5173`。日志在 `backend/logs/local-web.*.log`、`local-worker.*.log`。按 Ctrl+C 退出；之后只需运行 `./start-local.ps1`。只准备数据库与模型可运行 `./start-local.ps1 -PrepareOnly`。
 
-Windows 本地数据库为 `backend/instance/certificate-local.db`，模型为 `backend/ocr-models`。均不提交Git。
+Windows 本地数据库为 `backend/instance/gradpush-dev.db`，模型为 `backend/ocr-models`。均不提交Git。
 
 ## macOS 首次准备
 
@@ -60,7 +62,7 @@ npm --prefix frontend run dev -- --host localhost --port 5173 --strictPort
 .venv-mac/bin/python mac-local.py worker
 ```
 
-打开 `http://localhost:5173`。Mac数据、模型和会话在 `.local-mac`；重启不必重复安装或准备。各窗口按 Ctrl+C 结束。详见 [Mac 操作说明](MAC-运行指南.md)。
+打开 `http://localhost:5173`。Mac数据、模型和会话在 `.local-mac`；重启不必重复安装或准备。各窗口按 Ctrl+C 结束。详见上文「macOS 首次准备」。
 
 ## 共享测试数据与登录
 
@@ -78,25 +80,60 @@ npm --prefix frontend run dev -- --host localhost --port 5173 --strictPort
 
 ```powershell
 # Windows
-.\.venv\Scripts\python.exe -B backend/tools/seed_demo.py --database-file backend/instance/certificate-local.db --all
+.\.venv\Scripts\python.exe -B backend/tools/seed_demo.py --database-file backend/instance/gradpush-dev.db --all
 ```
 
 ```sh
 # Mac
-.venv-mac/bin/python -B backend/tools/seed_demo.py --database-file .local-mac/app.db --all
+.venv-mac/bin/python -B backend/tools/seed_demo.py --database-file .local-mac/gradpush-dev.db --all
 ```
 
-只有明确需要重置三个开发密码时增加 `--reset-password`。开发账号不得用于生产。完整说明见 [demo-seed](backend/docs/demo-seed.md)。
+只有明确需要重置三个开发密码时增加 `--reset-password`。开发账号不得用于生产。完整说明见 [demo-seed](docs/demo-seed.md)。
 
-## 蓝桥杯验收
+## OCR及材料验收
 
-1. 三个服务运行后，以学生账号登录，刷新页面确认会话仍有效。
-2. 新建科创竞赛申请，证书项目选择蓝桥杯，上传清晰图片；可用 `backend/tests/fixtures/lanqiao` 内测试样本。
-3. 等待预览表格出现；核对OCR值，修改一个“学生申报值”，填写项目名称和获得日期，提交审核。
-4. 以教师账号登录，在待审核申请详情查看OCR、学生申报值与原图，然后审核整份申请。
-5. 学生查看审核结果。原OCR与原图应保留，不能被学生修改覆盖。
+1. 以学生账号登录，从“学业竞赛”进入正式竞赛，或从“我的材料→其他证书识别与核验”进入人工材料。
+2. 选择识别项目、上传清晰图片，核对识别结果后明确点击使用建议；填写缺失日期、赛事年份、级别及团队字段。CSP百分位须另行提供，不从总分推算。
+3. 正式目录内且符合级别要求的材料保存后提交；目录外中国软件杯或仅核验的证明保存至人工通道。省级蓝桥杯样本不能冒充正式目录的国家级材料。
+4. 以教师登录，核对原图、原始识别和学生确认字段并审核。正式竞赛通过后按固定规则计分；人工材料核验不入分。
+5. 学生查看材料和计分反馈，管理员查看规则包、人工核验记录和授权成绩。已发布规则及排名保持审计历史。
 
-替换材料会创建新的识别草稿，未使用的旧草稿可在申请记录中处理。旧流程申请结果保留；验证新流程请新建申请。
+旧 `/api/certificates/previews` 默认停止新建，返回409及新入口提示；历史预览与审核继续兼容。完整接口见[本次整合说明](docs/ocr-main-integration.md)。
+
+原开发库 `backend/instance/certificate-local.db` 和Mac `.local-mac/app.db` 保留，新的默认开发库独立准备2028周期及28项正式竞赛目录。原库不会被默认初始化工具替换。
+
+## 前端页面与运行方式
+
+浏览器统一访问 `http://localhost:5173`（见上文）。真实联调用 `npm run dev`，Vite 把 `/api` 与 `/uploads` 代理到后端 5001；`npm run demo` 仅用于页面演示，使用 hash 路由与浏览器内置演示数据，不运行真实 OCR，也不需要后端。
+
+演示模式（`npm run demo`）入口：学生端 `/#/student`、教师端 `/#/teacher`、管理员端 `/#/admin`、登录页 `/#/login`。切换角色时打开对应地址并刷新页面，以重新初始化该角色账号；演示数据保存在当前浏览器中。显示 `Local: http://127.0.0.1:5173/` 后即可在浏览器打开，期间保持终端运行。
+
+前端目录约定：
+
+```text
+frontend/
+├── index.html                 # 唯一 HTML 入口
+├── public/                    # 图片等静态资源
+├── src/
+│   ├── main.js / App.vue      # 应用初始化、路由出口
+│   ├── pages/                 # 按角色：student / teacher / admin / common
+│   ├── components/            # 可复用组件（common、student、admin/rules）
+│   ├── assets/styles/         # 全局、布局、页面、组件、共享样式
+│   ├── composables/           # 可复用响应式逻辑
+│   ├── config/                # 导航配置
+│   ├── services/              # 后端 API 与文件 URL 处理
+│   ├── stores/                # Pinia 状态（登录、申请、文件、提示）
+│   ├── router/                # 三端路由及权限守卫
+│   └── demo/                  # 演示数据与工具
+├── tests/
+├── jsconfig.json              # @/* → src/* 别名
+├── vite.config.js             # 开发与正式构建
+└── vite.homepage.config.js    # 演示主页构建
+```
+
+脚本（在 `frontend` 目录执行，或用 `npm --prefix frontend`）：`npm ci`、`npm run dev`、`npm run demo`、`npm run build`、`npm run build:demo`、`npm run build:homepage`、`npm run format`、`npm run format:check`。
+
+维护约定：新页面放入 `pages/<角色>/<功能>/` 并使用 PascalCase；复用组件放入 `components/`，多页共用放入 `components/common/`；页面 CSS 放入 `assets/styles/pages/` 对应路径并保持 scoped；源码内统一用 `@/` 引用 `src/`；接口继续复用 `services/`，改动接口须单独联调后端。仅交付源码时不要携带 `node_modules`（历史交付中的该目录可能是指向相邻目录的软链接，独立安装前先删除链接本身再 `npm ci`）。
 
 ## 测试与生产构建
 
@@ -108,21 +145,21 @@ node --test frontend/tests/material-api.test.mjs
 npm --prefix frontend run build
 ```
 
-普通测试跳过真实模型测试；真实OCR测试详见 [证书说明](backend/docs/certificate-ocr.md)。GitHub Actions提供Windows/macOS安装、建库、回归与构建检查，推送后查看Actions结果；CI不替代浏览器手工验收。
+普通测试跳过真实模型测试；真实OCR测试详见 [证书说明](docs/certificate-ocr.md)。GitHub Actions提供Windows/macOS安装、建库、回归与构建检查，推送后查看Actions结果；CI不替代浏览器手工验收。
 
 当前已验证Mac ARM64真实OCR及隔离库申报审核。Windows修改后尚未实机运行，不能声称两端均已完整验收。前端构建仍有大包提示；后端有既有SQLAlchemy/Flask-Session告警。
 
 ## 项目结构与提交范围
 
-- `frontend/src`：页面、组件、状态和API请求。
+- `frontend`：Vue 3 前端单页应用，仅保留源码（`src`）、静态资源、测试与构建配置；不再单独放置 README 或 docs，说明文档统一在仓库根 `docs/`。
 - `backend/blueprints`、`services`：接口与业务；`models.py`及其他models文件：数据结构。
 - `backend/seed`、`tools`：共享数据和初始化/模型准备工具。
 - `backend/tests`、`frontend/tests`：测试；`backend/migrations`：保留的迁移历史。
 - `backend/third_party`：第三方算法及许可证，必须保留。
-- `.github/workflows`：跨平台回归；`docs/RELEASE-CHECKLIST.md`：发布检查与当前边界。
+- `.github/workflows`：跨平台回归；`docs`：除 README 外的全部说明文档集中存放，发布检查见 `docs/RELEASE-CHECKLIST.md`。
 
 不要提交虚拟环境、node_modules、dist、模型、数据库、上传原件、日志、会话、密钥或.env。`.gitignore`已覆盖；测试样本、依赖锁文件、源码和seed必须保留。
 
 生产部署另行配置 `DATABASE_URL` 和稳定的 `SECRET_KEY` 环境变量，并配置Web/worker相同存储及数据库。程序不会自动读取.env。不要在源码中写真实凭据，不要在已有仓库重新执行 `flask db init` / 自动生成迁移。本文本地SQLite建表流程不等于生产PostgreSQL迁移验收。
 
-更多接口：[证书OCR](backend/docs/certificate-ocr.md)、[志愿工时](backend/docs/volunteer-automation.md)、[五类材料](backend/docs/material-interfaces.md)、[前端对接](frontend/docs/material-api-integration.md)。
+更多接口：[证书OCR](docs/certificate-ocr.md)、[志愿工时](docs/volunteer-automation.md)、[五类材料](docs/material-interfaces.md)、[前端对接](docs/material-api-integration.md)。

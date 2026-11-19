@@ -48,8 +48,11 @@ def run_one_ocr(app, provider):
     except Exception:
         app.logger.exception("分类 OCR 任务失败：%s", job_id)
         report, status, error = None, "failed", "识别失败，请检查原件、模型或重新上传材料"
-    OCRJob.query.filter_by(id=job_id, lease_token=token, status="processing").update({
+    published = OCRJob.query.filter_by(id=job_id, lease_token=token, status="processing").update({
         "report": report, "status": status, "error": error,
         "lease_token": None, "lease_until": None}, synchronize_session=False)
+    if published:
+        from .bridge import publish_material_result
+        publish_material_result(job_id, report, error)
     db.session.commit()
     return True

@@ -166,6 +166,10 @@ class Application(db.Model):
     )  # pending, approved, rejected, draft
     project_name = db.Column(db.String(200), nullable=False)
     award_date = db.Column(db.Date, nullable=True)
+    cycle_code = db.Column(db.Integer, nullable=True)
+    cycle_policy_version_id = db.Column(
+        db.Integer, db.ForeignKey("recommendation_cycle_policy.id"), nullable=True
+    )
     description = db.Column(db.Text, nullable=True)
     files = db.Column(db.JSON, nullable=True)  # 存储文件信息的JSON数组
     dynamic_coefficients = db.Column(db.JSON, nullable=True)  # 存储动态系数数据的JSON对象
@@ -304,6 +308,11 @@ class Rule(db.Model):
     calculation_formula = db.Column(
         db.JSON, nullable=True
     )  # 动态分值计算公式，支持多种计算类型
+    # Draft structured matching conditions. Published scoring always reads the
+    # immutable copy in RuleVersion.snapshot.
+    match_terms = db.Column(db.JSON, nullable=True)
+    match_schema_version = db.Column(db.String(32), nullable=True)
+    draft_version = db.Column(db.Integer, nullable=False, default=1)
 
     # 关系定义
     faculty = db.relationship("Faculty", backref=db.backref("rules", lazy=True))
@@ -396,6 +405,9 @@ class SystemSettings(db.Model):
 
     # 学术年度设置
     academic_year = db.Column(db.String(10), default="2023")
+    active_cycle_policy_id = db.Column(
+        db.Integer, db.ForeignKey("recommendation_cycle_policy.id"), nullable=True
+    )
     application_start = db.Column(db.DateTime, nullable=True)
     application_end = db.Column(db.DateTime, nullable=True)
 
