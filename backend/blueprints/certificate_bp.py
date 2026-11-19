@@ -14,6 +14,8 @@ certificate_bp = Blueprint("certificates", __name__, url_prefix="/api/certificat
 @certificate_bp.errorhandler(HTTPException)
 def api_error(error):
     db.session.rollback()
+    if isinstance(error.description, dict):
+        return jsonify(error.description), error.code
     return jsonify({"error": error.description}), error.code
 
 

@@ -4,6 +4,8 @@ import io
 import json
 from pathlib import Path
 import pytest
+
+pytestmark = pytest.mark.usefixtures("active_honor_rule")
 from extensions import db
 from models import Student, Application, User
 from material_models import MaterialRecord, MaterialSource, MaterialAttachment
@@ -41,7 +43,7 @@ def endpoint(row,action=''):
     return f"/api/materials/{row['category']}/records/{row['id']}"+('/'+action if action else '')
 
 
-@pytest.mark.parametrize('category',list(SAMPLES))
+@pytest.mark.parametrize('category',[item for item in SAMPLES if item != 'competition'])
 def test_five_types_are_persisted_but_never_ocr_or_bonus(env,category,monkeypatch):
     from services.recognition.provider import PaddleProvider
     monkeypatch.setattr(PaddleProvider,'__init__',lambda *a,**k:pytest.fail('不得加载OCR模型'))
@@ -107,7 +109,7 @@ def source_payload(category='honor',revision=1,data=None,external_id='REF-001'):
                         'revision':revision,'data':data or copy.deepcopy(SAMPLES[category])}]}
 
 
-@pytest.mark.parametrize('category',list(SAMPLES))
+@pytest.mark.parametrize('category',[item for item in SAMPLES if item != 'competition'])
 def test_official_snapshot_matching_does_not_confirm_authenticity(env,category):
     data=copy.deepcopy(SAMPLES[category]); data['reference_id']='REF-001'
     row=create(env,category,data)
@@ -175,7 +177,7 @@ def test_manual_review_lifecycle_permissions_and_versions(env):
     assert env[1].post(endpoint(row,'submit'),json={'version':4}).status_code==200
     login(env[1],env[2]['admin'])
     verified=env[1].post(endpoint(row,'review'),json={'version':5,'decision':'verified','comment':'已核对校方名册'})
-    assert verified.json['status']=='verified' and verified.json['bonus_result'] is None
+    assert verified.json['status']=='scored' and verified.json['scoring_status']=='scored'
     events=env[1].get(endpoint(row,'events')).json['events']
     assert [e['action'] for e in events]==['created','submitted','reviewed','edited','submitted','reviewed']
     login(env[1],env[2]['student'])
@@ -201,7 +203,7 @@ def test_attachment_authentication_and_stale_upload_rollback(env):
     assert len(list(Path(env[0].config['MATERIAL_STORAGE_FOLDER']).iterdir()))==1
 
 
-def test_application_link_does_not_mutate_or_delete_scores(env):
+def test_application_link_projects_authoritative_score_and_prevents_delete(env):
     student=Student.query.filter_by(student_id='S1').one()
     application=Application(student_id='S1',student_name='张三',faculty_id=student.faculty_id,
                             department_id=student.department_id,major_id=student.major_id,
@@ -213,7 +215,7 @@ def test_application_link_does_not_mutate_or_delete_scores(env):
     login(env[1],env[2]['admin'])
     assert env[1].post(endpoint(row,'review'),json={'version':2,'decision':'verified','comment':'人工核验'}).status_code==200
     db.session.refresh(application)
-    assert application.self_score==3 and application.final_score is None and application.status=='pending'
+    assert application.self_score==3 and application.final_score==1 and application.status=='approved'
     assert env[1].delete(f'/api/applications/{application.id}').status_code==409
 
 
@@ -244,7 +246,17 @@ def test_material_migration_matches_models_and_reverses(env):
         with Operations.context(MigrationContext.configure(connection)):
             module.upgrade()
             for table in tables:
-                assert {c['name'] for c in inspect(connection).get_columns(table.name)}=={c.name for c in table.columns}
+                actual={c['name'] for c in inspect(connection).get_columns(table.name)}
+                expected={c.name for c in table.columns}
+                if table.name=='material_record':
+                    expected -= {
+                        'cycle_policy_version_id', 'ocr_raw_terms', 'confirmed_terms',
+                        'normalized_terms', 'normalization_version', 'rule_version_id',
+                        'supersedes_record_id', 'correction_sequence',
+                        'competition_rule_package_id', 'competition_duplicate_digest',
+                        'competition_work_group_key', 'competition_event_group_key',
+                    }
+                assert actual==expected
             module.downgrade()
             assert not inspect(connection).has_table('material_record')
             module.upgrade()

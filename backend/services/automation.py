@@ -9,7 +9,8 @@ from flask import abort, session
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import defer, joinedload, selectinload
 from extensions import db
-from models import User, Application, Student
+from models import User, Application, Student, Rule
+from workflow_models import RuleVersion
 from automation_models import (AutomationBatch, AutomationItem, AutomationPolicy,
                                AutomationFingerprint, AutomationReview)
 from services.volunteer_rules import CREDIT_MAX_HOURS, parse_number, positive_int
@@ -431,6 +432,7 @@ def recalculate_year(batch):
     ).filter(AutomationBatch.student_id == batch.student_id, AutomationBatch.faculty_id == batch.faculty_id,
              AutomationBatch.year == batch.year, AutomationBatch.status == "approved").all()} if approved else {}
     accumulated = Decimal(0)
+    from use_cases.scoring import adapt_legacy_application
     for other in approved:
         policy = other.policy_snapshot
         confirmed = [item for item in other.items if item.status == "approved" and item.submitted]
@@ -438,9 +440,21 @@ def recalculate_year(batch):
         score = score_increment(accumulated, raw, number(policy["max_score"]))
         accumulated += raw
         application = applications[other.application_id]
+        rule = Rule.query.filter_by(type="comprehensive", sub_type=other.material_type,
+                                    faculty_id=other.faculty_id).first()
+        if rule is None:
+            rule = Rule(name=f"志愿自动化政策-{other.material_type}", type="comprehensive",
+                        sub_type=other.material_type, score=0, status="active",
+                        faculty_id=other.faculty_id)
+            db.session.add(rule); db.session.flush()
+        rule.calculation_formula = {"automation_policy": policy}
+        from use_cases.rule_versions import publish_rule_version
+        version, _created = publish_rule_version(rule, cycle_code=application.cycle_code)
+        application.rule_id = rule.id
         application.final_score = float(score)
         other.score_snapshot = {"raw_score": str(raw), "final_score": str(score), "policy": policy,
                                 "confirmed_item_ids": [x.id for x in confirmed]}
+        adapt_legacy_application(application, source_type="volunteer_automation")
     from blueprints.score_bp import update_student_statistics
     db.session.flush()
     update_student_statistics(batch.student_id, commit=False)
@@ -536,5 +550,9 @@ def review_batch(batch, data):
     db.session.add(AutomationReview(batch_id=batch.id, reviewer_id=user.id,
                                    details={"decision": decision, "items": data.get("items", []), "policy": policy}))
     recalculate_year(batch)
+    if decision == "rejected":
+        from use_cases.scoring import invalidate_score_entries
+        invalidate_score_entries("volunteer_automation", application.id,
+                                 "automation recognition rejected or revoked")
     db.session.commit()
     return preview(batch)

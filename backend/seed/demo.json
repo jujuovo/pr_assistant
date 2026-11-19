@@ -82,9 +82,15 @@
     }
   },
   "system_settings": {
-    "academic_year": "2025",
+    "academic_year": "2026",
     "application_start": "2026-10-01T10:28:46.965115",
     "application_end": "2027-01-27T10:28:46.965115"
+  },
+  "recommendation_cycle": {
+    "cycle_code": 2026,
+    "display_name": "2026 推免周期",
+    "eligible_award_start_date": "2023-09-01",
+    "eligible_award_end_date": "2026-08-31"
   },
   "volunteer_policy": null
 }

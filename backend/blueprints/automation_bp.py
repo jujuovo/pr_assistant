@@ -238,10 +238,15 @@ def submit(batch_id):
                               status="pending", self_score=float(selected_view["estimated_incremental_score"] or 0),
                               description="自动识别仅为辅助，逐项核定后按年度共用上限计分", files=[],
                               dynamic_coefficients={"project_category": "volunteer", "automation_batch_id": batch.id})
+    from use_cases.cycles import pin_application_cycle
+    cycle_policy = pin_application_cycle(application)
+    batch.year = cycle_policy.cycle_code
+    application.project_name = f"{cycle_policy.cycle_code}推免周期志愿工时（批次{batch.id}）"
     db.session.add(application)
     db.session.flush()
     batch.application_id, batch.status = application.id, "submitted"
-    batch.policy_snapshot = {"revision": policy.revision, **policy.config}
+    batch.policy_snapshot = {"revision": policy.revision,
+                             "source_policy_year": policy.year, **policy.config}
     for item in batch.items:
         item.submitted = item.id in ids
     split_remaining(batch, user)

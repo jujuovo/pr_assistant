@@ -1,0 +1,72 @@
+{
+  "schema_version": "1.0",
+  "package_id": "xmu-se-competition-2028-v1",
+  "cycle_code": 2028,
+  "evidence_period": {"start": "2025-09-01", "end": "2028-08-31", "boundary": "inclusive"},
+  "source": {
+    "document": "厦门大学信息学院（特色化示范性软件学院）推荐优秀应届本科毕业生免试攻读研究生综合成绩计算操作办法（2025年2月修订）",
+    "issued_on": "2025-02-24",
+    "policy_pages": [5, 6],
+    "catalog_pages": [14, 15, 16, 17]
+  },
+  "score_matrix": {
+    "national": {
+      "first_or_above": {"A+": "30", "A": "15", "A-": "10"},
+      "second": {"A+": "15", "A": "10", "A-": "5"},
+      "third": {"A+": "10", "A": "5", "A-": "2"}
+    },
+    "provincial": {
+      "first_or_above": {"A+": "5", "A": "2", "A-": "1"},
+      "second": {"A+": "2", "A": "1", "A-": "0.5"}
+    }
+  },
+  "policy": {
+    "competition_max_count": 3,
+    "academic_specialty_cap": "15",
+    "csp": {"category": "A-", "thresholds": [{"max_percent": "0.2", "award": "first_or_above"}, {"max_percent": "1.5", "award": "second"}, {"max_percent": "3", "award": "third"}], "keep": "highest"},
+    "icpc_ccpc": {"regional_category": "A", "icpc_world_final_category": "A+", "invitation_eligible": false, "same_year_keep": "highest"},
+    "deduplication": {"same_work_keep": "highest", "same_event_same_year_keep": "highest"},
+    "team_allocation": {
+      "special_ranked": {"leader": "1/3", "rank_2_3": "1/4", "rank_4_5": "1/5"},
+      "generic": {"team_size_2": "1/3", "team_size_3_5": "1/team_size", "team_size_over_5": "1/5", "eligible_rank_limit": 5},
+      "individual": "1/3"
+    },
+    "special_ranked_competition_ids": ["c01-china-college-student-innovation", "c02-challenge-cup-academic", "c03-challenge-cup-business-plan"]
+  },
+  "catalog": [
+    {"competition_id":"c01-china-college-student-innovation","source_row":1,"name":"中国国际大学生创新大赛","organizer":"教育部等单位","category":"A+","levels":["national"],"event_family":"china-college-student-innovation"},
+    {"competition_id":"c02-challenge-cup-academic","source_row":2,"name":"“挑战杯”全国大学生课外学术科技作品竞赛","organizer":"共青团中央、中国科协、教育部和全国学联","category":"A+","levels":["national"],"event_family":"challenge-cup-academic"},
+    {"competition_id":"c03-challenge-cup-business-plan","source_row":3,"name":"“挑战杯”中国大学生创业计划大赛","organizer":"共青团中央、中国科协、教育部和全国学联","category":"A+","levels":["national"],"event_family":"challenge-cup-business-plan"},
+    {"competition_id":"c04-icpc","source_row":4,"name":"ICPC国际大学生程序设计竞赛","organizer":"ICPC基金会","category":"A+","levels":["national"],"event_family":"icpc","formats":["regional","world_final"],"excluded_formats":["invitation"]},
+    {"competition_id":"c05-ccpc","source_row":4,"name":"CCPC中国大学生程序设计竞赛","organizer":"中国大学生程序设计竞赛组委会","category":"A","levels":["national"],"event_family":"ccpc","formats":["national"],"excluded_formats":["invitation"]},
+    {"competition_id":"c06-national-electronic-design","source_row":5,"name":"全国大学生电子设计竞赛（含邀请赛）","organizer":"教育部高等教育司和信息产业部人事司","category":"A+","levels":["national"],"event_family":"national-electronic-design"},
+    {"competition_id":"c07-national-software-innovation","source_row":6,"name":"全国大学生软件创新大赛","organizer":"示范性软件学院联盟","category":"A","levels":["national"],"event_family":"national-software-innovation"},
+    {"competition_id":"c08-national-information-security","source_row":7,"name":"全国大学生信息安全竞赛","organizer":"信息安全类专业教学指导委员会、中国互联网发展基金会","category":"A","levels":["national"],"event_family":"national-information-security"},
+    {"competition_id":"c09-computer-design","source_row":8,"name":"中国大学生计算机设计大赛","organizer":"教育部高等学校计算机类专业教学指导委员会等","category":"A-","levels":["national"],"event_family":"computer-design"},
+    {"competition_id":"c10-big-data-challenge","source_row":9,"name":"中国高校计算机大赛—大数据挑战赛","organizer":"教育部高等学校计算机类专业教学指导委员会等","category":"A-","levels":["national"],"event_family":"china-college-computing"},
+    {"competition_id":"c11-group-programming-ladder","source_row":9,"name":"中国高校计算机大赛—团体程序设计天梯赛","organizer":"教育部高等学校计算机类专业教学指导委员会等","category":"A-","levels":["national"],"event_family":"china-college-computing"},
+    {"competition_id":"c12-mobile-application-data-innovation","source_row":9,"name":"中国高校计算机大赛—移动应用数据创新赛","organizer":"教育部高等学校计算机类专业教学指导委员会等","category":"A-","levels":["national"],"event_family":"china-college-computing"},
+    {"competition_id":"c13-network-technology-challenge","source_row":9,"name":"中国高校计算机大赛—网络技术挑战赛","organizer":"教育部高等学校计算机类专业教学指导委员会等","category":"A-","levels":["national"],"event_family":"china-college-computing"},
+    {"competition_id":"c14-ai-innovation","source_row":9,"name":"中国高校计算机大赛—人工智能创意赛","organizer":"教育部高等学校计算机类专业教学指导委员会等","category":"A-","levels":["national"],"event_family":"china-college-computing"},
+    {"competition_id":"c15-lanqiao-cup","source_row":10,"name":"蓝桥杯全国软件和信息技术专业人才大赛","organizer":"工业和信息化部人才交流中心、国信蓝桥教育科技（北京）股份有限公司","category":"A-","levels":["national"],"event_family":"lanqiao-cup"},
+    {"competition_id":"c16-sino-us-young-maker","source_row":11,"name":"中美青年创客大赛","organizer":"教育部主管，教育部留学服务中心、清华大学、英特尔公司承办","category":"A-","levels":["national"],"event_family":"sino-us-young-maker"},
+    {"competition_id":"c17-huawei-ict","source_row":12,"name":"华为ICT大赛","organizer":"华为公司","category":"A-","levels":["national"],"event_family":"huawei-ict"},
+    {"competition_id":"c18-embedded-chip-system-design","source_row":13,"name":"全国大学生嵌入式芯片与系统设计竞赛","organizer":"中国电子学会、东南大学和南京市江北新区管理委员会","category":"A-","levels":["national"],"event_family":"embedded-chip-system-design"},
+    {"competition_id":"c19-robot-ai","source_row":14,"name":"中国机器人及人工智能大赛","organizer":"中国人工智能学会、教育部高等学校计算机课程教学指导委员会","category":"A-","levels":["national"],"event_family":"robot-ai"},
+    {"competition_id":"c20-computer-system-capability","source_row":15,"name":"全国大学生计算机系统能力大赛","organizer":"全国高校计算机教育研究会、全国大学生计算机系统能力大赛组委会","category":"A-","levels":["national"],"event_family":"computer-system-capability"},
+    {"competition_id":"c21-ccf-ccsp","source_row":16,"name":"CCF CCSP大学生计算机系统与程序设计竞赛","organizer":"中国计算机学会","category":"A-","levels":["national"],"event_family":"ccf-ccsp"},
+    {"competition_id":"c22-mathematical-modeling","source_row":17,"name":"全国大学生数学建模竞赛","organizer":"中国工业与应用数学学会（CSIAM）","category":"A-","levels":["national"],"event_family":"mathematical-modeling"},
+    {"competition_id":"c23-innovation-training-annual","source_row":18,"name":"全国大学生创新创业训练计划年会展示","organizer":"教育部、科技部、人力资源社会保障部等","category":"A-","levels":["national"],"event_family":"innovation-training-annual"},
+    {"competition_id":"c24-cybersecurity-elite","source_row":19,"name":"“网信柏鹭杯”全国大学生网络空间安全精英赛","organizer":"厦门市委网信办、厦门大学信息学院、厦门市美亚柏科信息股份有限公司","category":"A-","levels":["provincial"],"event_family":"cybersecurity-elite"},
+    {"competition_id":"c25-strait-information-service","source_row":20,"name":"海峡两岸信息服务创新大赛暨福建省计算机软件设计大赛","organizer":"福建省经济和信息化委员会、教育厅、商务厅、科技厅、人社厅、省总工会、福建团省委","category":"A-","levels":["provincial"],"event_family":"strait-information-service"},
+    {"competition_id":"c26-fujian-ai-creativity","source_row":21,"name":"福建省大学生人工智能创意赛","organizer":"福建省教育厅","category":"A-","levels":["provincial"],"event_family":"fujian-ai-creativity"},
+    {"competition_id":"c27-fujian-programming","source_row":22,"name":"福建省大学生程序设计竞赛","organizer":"福建省计算机学会","category":"A-","levels":["provincial"],"event_family":"fujian-programming"},
+    {"competition_id":"c28-ccf-csp","source_row":0,"name":"全国CCF计算机软件能力认证（CCF CSP认证）","organizer":"中国计算机学会","category":"A-","levels":["national"],"event_family":"csp","special_source":"policy_page_5"}
+  ],
+  "field_schema": {
+    "required": ["competition_id", "project_name", "award_date", "level", "award", "event_year", "participation_mode"],
+    "awards": {"national": ["first_or_above", "second", "third"], "provincial": ["first_or_above", "second"]},
+    "participation_modes": ["individual", "team"],
+    "team_required": ["team_size", "personal_rank"]
+  }
+}

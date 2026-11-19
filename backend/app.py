@@ -81,6 +81,7 @@ from models import User, Application, Rule
 import material_models  # 五类结构化材料接口
 import certificate_models  # 注册独立证书识别任务
 import automation_models  # 注册新增材料、任务、去重、政策及审计表
+import workflow_models  # 注册材料到排名工作流的版本化领域模型
 
 # 导入并注册蓝图
 from blueprints.auth_bp import auth_bp
@@ -94,6 +95,7 @@ from blueprints.score_bp import score_bp
 from blueprints.system_bp import system_bp
 from routes import main_bp
 from blueprints.automation_bp import automation_bp
+from blueprints.workflow_bp import workflow_bp
 
 
 # 配置推免文件的静态服务
@@ -258,6 +260,7 @@ app.register_blueprint(admin_bp)
 app.register_blueprint(score_bp)  # score_bp 已经在定义时设置了 url_prefix='/api'
 app.register_blueprint(organization_bp)  # organization_bp 已经在定义时设置了 url_prefix='/api/organization'
 app.register_blueprint(system_bp)  # system_bp 已经在定义时设置了 url_prefix='/api/system'
+app.register_blueprint(workflow_bp)
 app.register_blueprint(main_bp, url_prefix='/api')
 app.register_blueprint(automation_bp)
 from blueprints.certificate_bp import certificate_bp

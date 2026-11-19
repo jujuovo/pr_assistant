@@ -2,13 +2,17 @@ import io
 from copy import deepcopy
 from pathlib import Path
 import pytest
+
+pytestmark = pytest.mark.usefixtures("active_cycle")
 from extensions import db
-from models import Application, Rule, User
+from models import Application, Rule, Student, User
 from certificate_models import CertificateAssessment
 from conftest import login
 from test_certificates import NoWatermark
 from services.certificates.worker import run_one_certificate
 from services.certificates.preview import FIELDS
+from use_cases.rule_versions import publish_rule_version
+from workflow_models import ScoreEntry, StudentScoreSnapshot
 
 
 def upload(env):
@@ -30,6 +34,8 @@ def ready(env):
     data = {'version': row.version, 'project_name':'蓝桥杯测试', 'award_date':'2026-10-01',
             'rule_id':rule.id, 'submit':True,
             'student_values':[{field: ('学生修正姓名' if field=='student' else str(page.get('raw_fields',{}).get(field) or '')) for field in FIELDS} for page in row.report['pages']]}
+    for fields in data['student_values']:
+        fields['date'] = '2026年10月1日'
     return row, data
 
 
@@ -62,6 +68,110 @@ def test_confirm_preserves_ocr_and_original_then_teacher_reads_both(env):
     assert env[1].get(url+f'/artifacts/{row.version}/'+sources[0]['relative']).status_code==200
     login(env[1],env[2]['other'])
     assert env[1].get(url).status_code==403
+
+
+def test_student001_full_certificate_scoring_acceptance(env):
+    """证明材料确认、教师核验、权威计分与学生展示形成一条闭环。"""
+    student = Student.query.filter_by(student_id='S1').one()
+    student_user = db.session.get(User, env[2]['student'])
+    student.student_id = 'student001'
+    student_user.student_id = 'student001'
+    student_user.username = 'student001'
+    db.session.commit()
+
+    response = upload(env)
+    assert response.status_code == 202, response.json
+    assert run_one_certificate(env[0], NoWatermark())
+    assessment = db.session.get(CertificateAssessment, response.json['id'])
+    db.session.refresh(assessment)
+
+    admin = db.session.get(User, env[2]['admin'])
+    rule = Rule(name='蓝桥杯一等奖', type='academic', sub_type='competition', score=5,
+                max_score=5, faculty_id=student.faculty_id, status='active')
+    db.session.add(rule)
+    publish_rule_version(rule, published_by=admin, cycle_code=2026)
+    db.session.commit()
+    student_values = [
+        {field: str(page.get('raw_fields', {}).get(field) or '') for field in FIELDS}
+        for page in assessment.report['pages']
+    ]
+    for fields in student_values:
+        fields['date'] = '2024年5月1日'
+    confirmed = env[1].post(
+        f'/api/certificates/applications/{assessment.application_id}/confirm-preview',
+        json={'version': assessment.version, 'project_name': '蓝桥杯一等奖',
+              'award_date': '2024-05-01', 'rule_id': rule.id,
+              'student_values': student_values, 'submit': True},
+    )
+    assert confirmed.status_code == 200, confirmed.json
+
+    login(env[1], admin.id)
+    reviewed = env[1].post(
+        f'/api/applications/{assessment.application_id}/review',
+        json={'status': 'approved', 'reviewComment': '仅核验原件，采用规则自动分',
+              'idempotency_key': 'student001-lanqiao-acceptance'},
+    )
+    assert reviewed.status_code == 200, reviewed.json
+    assert reviewed.json['overall_status'] == 'complete'
+    assert reviewed.json['verification_status'] == 'verified'
+    assert reviewed.json['scoring_status'] == 'scored'
+    entry = ScoreEntry.query.filter_by(student_id='student001').one()
+    snapshot = StudentScoreSnapshot.query.filter_by(
+        student_id='student001', year=2026, status='current').one()
+    assert entry.effective_score == 5
+    assert snapshot.specialty_raw_score == 5
+
+    login(env[1], student_user.id)
+    current = env[1].get('/api/workflow/students/student001/score/current')
+    assert current.status_code == 200, current.json
+    assert current.json['entries'][0]['included_score'] == '5.0000'
+    assert current.json['categories']['academic']['effective_score'] == '5.0000'
+
+
+def test_confirmed_ocr_date_is_authoritative_and_conflict_is_atomic(env):
+    row, data = ready(env)
+    application = row.application
+    original_claims = deepcopy(row.claims)
+    data['award_date'] = '2026-11-12'
+    for fields in data['student_values']:
+        fields['date'] = '2026年5月8日'
+    url = f'/api/certificates/applications/{row.application_id}/confirm-preview'
+
+    conflict = env[1].post(url, json=data)
+    assert conflict.status_code == 409
+    assert conflict.json['code'] == 'award_date_confirmation_conflict'
+    db.session.refresh(row); db.session.refresh(application)
+    assert row.version == data['version'] and row.claims == original_claims
+    assert application.status == 'draft' and application.award_date is None
+
+    data['award_date'] = '2026-05-08'
+    accepted = env[1].post(url, json=data)
+    assert accepted.status_code == 200, accepted.json
+    db.session.refresh(row); db.session.refresh(application)
+    assert application.award_date.isoformat() == '2026-05-08'
+    assert row.claims['confirmed_terms']['award_date'] == '2026年5月8日'
+    assert row.claims['normalized_terms']['award_date'] == '2026-05-08'
+    assert row.claims['ocr_raw_terms']
+    assert row.claims['confirmation_history'][-1]['actor_id'] == env[2]['student']
+    fetched = env[1].get(f'/api/certificates/applications/{row.application_id}')
+    assert fetched.json['confirmed_terms']['award_date'] == '2026年5月8日'
+    assert fetched.json['normalized_terms']['award_date'] == '2026-05-08'
+    assert fetched.json['normalization_version'] == 'material-terms-v1'
+
+
+def test_ocr_result_alone_never_confirms_submits_or_selects_rule(env):
+    response = upload(env)
+    assert response.status_code == 202
+    assert run_one_certificate(env[0], NoWatermark())
+    row = db.session.get(CertificateAssessment, response.json['id'])
+    fetched = env[1].get(f'/api/certificates/applications/{row.application_id}')
+    assert fetched.status_code == 200
+    assert fetched.json['report']['pages']
+    assert fetched.json['confirmed_terms'] is None
+    assert fetched.json['normalized_terms'] is None
+    assert fetched.json['confirmation_history'] == []
+    assert row.application.status == 'draft'
+    assert row.application.rule_id is None and row.application.award_date is None
 
 
 def test_saved_draft_roundtrip_and_stale_version(env):

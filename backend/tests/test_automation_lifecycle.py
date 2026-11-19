@@ -4,6 +4,8 @@ import io
 import json
 from pathlib import Path
 import pytest
+
+pytestmark = pytest.mark.usefixtures("active_cycle_2025")
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from conftest import login

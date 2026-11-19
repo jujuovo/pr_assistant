@@ -13,6 +13,7 @@
     "demo": "vite --mode demo --host 127.0.0.1",
     "build:demo": "vite build --mode demo",
     "build:homepage": "vite build --mode demo --config vite.homepage.config.js",
+    "test:mounted": "vitest run --config vite.config.js",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
@@ -26,8 +27,11 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.1",
+    "@vue/test-utils": "^2.5.1",
+    "happy-dom": "^21.0.4",
     "prettier": "3.6.2",
     "vite": "^7.0.6",
-    "vite-plugin-vue-devtools": "^8.0.0"
+    "vite-plugin-vue-devtools": "^8.0.0",
+    "vitest": "^5.1.0"
   }
 }

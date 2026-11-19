@@ -154,11 +154,18 @@ export const useAuthStore = defineStore('auth', () => {
           }
         } catch (error) {
           console.error('会话检查失败:', error)
-          // API调用失败时，保守处理，清除前端状态
-          localStorage.removeItem(storageKey)
-          user.value = null
-          role.value = null
-          isAuthenticated.value = false
+          if (error?.status === 401) {
+            localStorage.removeItem(storageKey)
+            user.value = null
+            role.value = null
+            isAuthenticated.value = false
+          } else {
+            // 网络中断或服务端故障不能证明会话失效。保留本地角色，
+            // 让当前业务页面展示可恢复的 backend-unavailable 状态。
+            user.value = userData
+            role.value = userData.role
+            isAuthenticated.value = true
+          }
         }
       } else {
         // 如果用户数据无效，清除localStorage并重置状态

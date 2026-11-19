@@ -3,6 +3,8 @@
     <div class="page-title">
       <span>待审核申请</span>
     </div>
+    <TeacherCompetitionReview />
+    <div class="page-title"><span>非竞赛兼容申请</span></div>
     <!-- 筛选区域 -->
     <div class="filters primary-section-frame">
       <div class="filter-group">
@@ -172,6 +174,9 @@ import { useApplicationsStore } from '@/stores/applications.js'
 import { useToastStore } from '@/stores/toast.js'
 import ApplicationDetailModal from '@/components/common/ApplicationDetailModal.vue'
 import api from '@/services/api.js'
+import { teacherReviewError } from '@/services/teacherReviewFeedback.js'
+import TeacherCompetitionReview from './TeacherCompetitionReview.vue'
+import { isNonCompetitionCompatibilityApplication, nonCompetitionRules } from '@/services/teacherApplicationBoundary.js'
 
 const authStore = useAuthStore()
 const applicationsStore = useApplicationsStore()
@@ -229,7 +234,7 @@ const filteredAndPaginatedApplications = computed(() => {
   let filtered = applicationsStore.filterApplications(filterParams)
 
   // 只保留待审核的
-  filtered = filtered.filter((app) => app.status === 'pending')
+  filtered = filtered.filter((app) => app.status === 'pending' && isNonCompetitionCompatibilityApplication(app))
 
   // 再分页
   const start = (pagination.value.currentPage - 1) * pagination.value.pageSize
@@ -250,7 +255,7 @@ const totalApplications = computed(() => {
     startDate: filters.value.startDate,
     endDate: filters.value.endDate
   })
-  return filtered.filter((app) => app.status === 'pending').length
+  return filtered.filter((app) => app.status === 'pending' && isNonCompetitionCompatibilityApplication(app)).length
 })
 
 // 计算属性
@@ -349,11 +354,11 @@ const reviewApplication = (application) => {
 const handleApprove = async (approveData) => {
   try {
     // 从对象参数中提取需要的字段
-    const { applicationId, finalScore, approveComment } = approveData
+    const { applicationId, approveComment, idempotencyKey } = approveData
     // 调用API批准申请
     await applicationsStore.approveApplication(
       applicationId,
-      finalScore,
+      { idempotencyKey },
       approveComment,
       authStore.userName || '当前教师'
     )
@@ -363,7 +368,7 @@ const handleApprove = async (approveData) => {
     toastStore.success('申请已通过审核')
   } catch (error) {
     console.error('批准申请失败:', error)
-    toastStore.error('批准申请失败，请稍后重试')
+    toastStore.error(teacherReviewError(error))
   }
 }
 
@@ -511,7 +516,7 @@ const fetchRules = async () => {
     const teacherFacultyId = authStore.user?.faculty_id || authStore.user?.facultyId
     // 使用正确的API方法获取规则，传递学院ID
     const response = await api.getRules({ faculty_id: teacherFacultyId })
-    availableRules.value = response.rules.filter((rule) => rule.status === 'active')
+    availableRules.value = nonCompetitionRules(response.rules).filter((rule) => rule.status === 'active')
   } catch (error) {
     console.error('获取规则列表失败:', error)
     availableRules.value = []

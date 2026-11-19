@@ -51,8 +51,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { useToastStore } from '@/stores/toast.js'
 import { useApplicationsStore } from '@/stores/applications.js'
@@ -64,23 +64,28 @@ import ApplicationCategories from '@/pages/student/applications/ApplicationCateg
 import AcademicPerformance from '@/pages/student/applications/AcademicPerformance.vue'
 const sectionPages = ['regulations', 'my-forms', 'submit-revision', 'feedback']
 import ApplicationForm from '@/pages/student/applications/ApplicationForm.vue'
-import ApplicationHistory from '@/pages/student/applications/ApplicationHistory.vue'
+import StudentMaterialsHub from '@/pages/student/applications/StudentMaterialsHub.vue'
 import Statistics from '@/pages/student/statistics/Statistics.vue'
 import Profile from '@/pages/common/profile/Profile.vue'
+import StudentRanking from '@/pages/student/rankings/StudentRanking.vue'
+import MaterialWorkflow from '@/pages/student/applications/MaterialWorkflow.vue'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 const toastStore = useToastStore()
 const applicationsStore = useApplicationsStore()
 
-const currentPage = ref('home')
+const currentPage = ref(route.query.page || 'home')
 const editApplicationId = ref(null)
 const selectedCategory = ref(null)
 
 const pageComponents = {
-  'application-record': ApplicationHistory,
+  'application-record': StudentMaterialsHub,
   statistics: Statistics,
-  profile: Profile
+  profile: Profile,
+  rankings: StudentRanking,
+  materials: MaterialWorkflow
 }
 
 const currentPageComponent = computed(() => pageComponents[currentPage.value])
@@ -114,13 +119,21 @@ const switchPage = (page) => {
     return
   }
   currentPage.value = page
+  router.replace({ query: { ...route.query, page } })
 }
+
+watch(() => route.query.page, page => { if (page) currentPage.value = page })
 
 const openApplicationForm = (category) => {
   selectedCategory.value = category
   editApplicationId.value = null
   if (category.key === 'academic-performance') {
     currentPage.value = 'academic-performance'
+    return
+  }
+  if (category.key === 'competition') {
+    currentPage.value = 'materials'
+    router.replace({ query: { ...route.query, page: 'materials', category: 'competition' } })
     return
   }
   currentPage.value = 'application-form'

@@ -1,0 +1,26 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "推免权威计分与排名工作流",
+    "version": "2.0.0",
+    "description": "后端是状态、计分、范围、版本和排名的唯一权威来源。"
+  },
+  "x-ranking-contract": {
+    "states": ["draft", "stale", "frozen", "correction_required", "published", "withdrawn"],
+    "commands": ["generate", "freeze", "request_correction", "publish", "withdraw", "create_successor"],
+    "required_command_fields": ["version", "idempotency_key"],
+    "presentation_fields": ["batch_id", "scope", "status", "version", "generated_at", "updated_at", "published_at", "reason_code", "allowed_actions"],
+    "roles": {
+      "student": "personal entry only",
+      "teacher": "authorized full list, read only",
+      "admin": "authorized full list and lifecycle commands"
+    },
+    "audit": ["RankingCommand", "RankingStateEvent", "RankingExportAudit"]
+  },
+  "paths": {
+    "/api/workflow/rankings/generate": {"post": {"summary": "生成排名草稿"}},
+    "/api/workflow/rankings/{batch_id}": {"get": {"summary": "按角色读取排名批次"}},
+    "/api/workflow/rankings/{batch_id}/commands/{action}": {"post": {"summary": "执行单一排名状态命令"}},
+    "/api/workflow/rankings/{batch_id}/export": {"post": {"summary": "审计导出完整名单"}}
+  }
+}
