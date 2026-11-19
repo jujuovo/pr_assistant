@@ -61,6 +61,11 @@ backend/instance/certificate-local.db*
 .venv-mac/
 .local-mac/
 
+# Merged OCR local materials and rendered images
+backend/private-ocr/
+backend/samples/
+backend/outputs/
+
 # Runtime data and secrets are rebuilt locally, never published
 __pycache__/
 *.py[cod]

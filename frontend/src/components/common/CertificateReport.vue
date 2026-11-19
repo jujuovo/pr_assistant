@@ -19,7 +19,7 @@
           <table v-if="page.raw_fields || result.student_values?.[index]">
             <thead><tr><th>字段</th><th>原图识别</th><th>处理图识别</th><th v-if="result.student_values">学生申报值</th></tr></thead>
             <tbody><tr v-for="(label, key) in fields" :key="key" :class="{ difference: differs(page,key) }">
-              <th>{{ label }}</th><td>{{ page.raw_fields?.[key] || '未识别' }}</td><td>{{ page.processed_fields?.[key] || '未识别' }}</td><td v-if="result.student_values" :class="{ difference: result.student_values[index]?.[key] !== (page.processed_fields?.[key] || page.raw_fields?.[key] || '') }">{{ result.student_values[index]?.[key] || '未填写' }}</td>
+              <th>{{ label }}</th><td>{{ page.raw_fields?.[key] || '未识别' }}</td><td>{{ page.processed_fields?.[key] || '未识别' }}</td><td v-if="result.student_values" :class="{ difference: result.student_values[index]?.[key] !== recognized(page, key) }">{{ result.student_values[index]?.[key] || '未填写' }}</td>
             </tr></tbody>
           </table>
           <ul v-if="page.warnings?.length"><li v-for="(warning, i) in page.warnings" :key="i" class="warning">{{ warning.message }}</li></ul>
@@ -41,12 +41,12 @@
 <script setup>
 import { ref, watch, onBeforeUnmount } from 'vue'
 import certificateApi from '@/services/certificateApi.js'
+import { CERTIFICATE_FIELDS as fields, recognizedCertificateValue as recognized } from '@/services/certificateFields.js'
 const props = defineProps({ applicationId: { type: [Number, String], required: true }, applicationStatus: String })
 const result = ref(null), error = ref(''), loading = ref(false), retrying = ref(false)
 let timer, generation = 0, disposed = false
 const labels = { queued: '等待识别', processing: '识别中', manual: '人工核验通道', manual_review: '需要人工核对', recognized: '识别完成，等待教师核验', needs_reupload: '请补充清晰材料', failed: '识别失败，可重试或人工核验' }
 const watermarkLabels = { matched: '蓝桥杯文字匹配', missing: '未发现预期水印', mismatched: '水印文字不匹配', uncertain: '无法可靠确定' }
-const fields = { school: '学校', student: '姓名', teacher: '指导教师', edition: '届次', track: '赛道', group: '组别', region: '赛区', award: '奖项', certificate_no: '证书编号', date: '日期' }
 const differs = (page, key) => page.differences?.some(d => d.field === key) || page.warnings?.some(w => w.field === key)
 const url = path => certificateApi.getArtifactUrl(props.applicationId, result.value.version, path)
 async function load() {

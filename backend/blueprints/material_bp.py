@@ -1,4 +1,4 @@
-"""五类材料接口。申报、附件、结构化导入和核验可用，OCR/自动加分明确未启用。"""
+"""材料申报、附件、字段识别关联与人工核验；不自动加分。"""
 import csv
 import hashlib
 import io
@@ -119,6 +119,7 @@ def review(category,record_id):
     version_change(row,payload['version'],['submitted'],{'status':payload['decision']})
     event(row,'reviewed',{'version':row.version,'decision':row.status,'comment':comment,
                          'data_snapshot':row.data,'check_report_snapshot':row.check_report,
+                         'ocr_links_snapshot':view(row)['ocr_links'],
                          'attachments_snapshot':[{'id':f.id,'filename':f.filename,'size':f.size,'sha256':f.sha256}
                                                  for f in row.attachments]})
     db.session.commit()
@@ -259,7 +260,13 @@ def parse_csv():
 @material_bp.post('/<category>/records/<int:record_id>/recognize')
 def recognize(category,record_id):
     record_at(category,record_id)
-    return jsonify({'error':'该类别的新OCR识别适配器尚未实现','code':'recognition_not_implemented',
+    payload=request.get_json(silent=True)
+    from services.materials.schemas import OCR_CATEGORIES
+    if payload is not None and category in OCR_CATEGORIES:
+        from services.materials.recognition import recognize_attachment
+        from services.competition_ocr.jobs import job_view
+        return jsonify(job_view(recognize_attachment(category,record_id,payload))),202
+    return jsonify({'error':'该类别尚未适配或未提供附件识别参数' ,'code':'recognition_not_implemented',
                     'ocr_executed':False,'category':category,'record_id':record_id,
                     'next_step':'人工核验或上传结构化数据；已有蓝桥杯功能使用/api/certificates'}),501
 

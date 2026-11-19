@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "pr_assistant 材料核验接口",
-    "version": "1.0.0",
-    "description": "五类结构化材料与人工核验接口；OCR新适配器和自动加分未实现，材料核验不会写入学生或申请分数。"
+    "version": "1.1.0",
+    "description": "结构化材料、OCR字段关联与人工核验；识别建议须学生确认，不自动加分或判定真实性。"
   },
   "servers": [
     {
@@ -18,7 +18,7 @@
   "paths": {
     "/api/materials/types": {
       "get": {
-        "summary": "查询五类材料字段与支持能力",
+        "summary": "查询材料字段与识别支持能力",
         "responses": {
           "200": {
             "description": "成功",
@@ -97,7 +97,10 @@
               "competition",
               "language",
               "student_work",
-              "honor"
+              "honor",
+              "certification",
+              "social_practice",
+              "research"
             ]
           }
         }
@@ -377,6 +380,49 @@
                       "certificate_no": "HONOR-001"
                     }
                   }
+                },
+                "certification": {
+                  "summary": "CSP认证成绩",
+                  "value": {
+                    "year": 2026,
+                    "data": {
+                      "certification_name": "CCF CSP",
+                      "subject_name": "学生姓名",
+                      "score": 260,
+                      "full_score": 500,
+                      "test_date": "2025-09-21",
+                      "certificate_no": "CCF-IDEN-CSP-2025-12345",
+                      "task_scores": [
+                        100,
+                        100,
+                        40,
+                        0,
+                        20
+                      ]
+                    }
+                  }
+                },
+                "social_practice": {
+                  "summary": "社会实践证明",
+                  "value": {
+                    "year": 2026,
+                    "data": {
+                      "document_type": "practice_proof",
+                      "team": "测试实践队",
+                      "period_as_printed": "2025年暑假"
+                    }
+                  }
+                },
+                "research": {
+                  "summary": "成果检索报告",
+                  "value": {
+                    "year": 2026,
+                    "data": {
+                      "document_type": "research_report",
+                      "report_no": "REPORT-001",
+                      "database": "Web of Science"
+                    }
+                  }
                 }
               }
             }
@@ -398,7 +444,10 @@
               "competition",
               "language",
               "student_work",
-              "honor"
+              "honor",
+              "certification",
+              "social_practice",
+              "research"
             ]
           }
         },
@@ -568,7 +617,10 @@
               "competition",
               "language",
               "student_work",
-              "honor"
+              "honor",
+              "certification",
+              "social_practice",
+              "research"
             ]
           }
         },
@@ -672,7 +724,10 @@
               "competition",
               "language",
               "student_work",
-              "honor"
+              "honor",
+              "certification",
+              "social_practice",
+              "research"
             ]
           }
         },
@@ -776,7 +831,10 @@
               "competition",
               "language",
               "student_work",
-              "honor"
+              "honor",
+              "certification",
+              "social_practice",
+              "research"
             ]
           }
         },
@@ -880,7 +938,10 @@
               "competition",
               "language",
               "student_work",
-              "honor"
+              "honor",
+              "certification",
+              "social_practice",
+              "research"
             ]
           }
         },
@@ -984,7 +1045,10 @@
               "competition",
               "language",
               "student_work",
-              "honor"
+              "honor",
+              "certification",
+              "social_practice",
+              "research"
             ]
           }
         },
@@ -1078,7 +1142,10 @@
               "competition",
               "language",
               "student_work",
-              "honor"
+              "honor",
+              "certification",
+              "social_practice",
+              "research"
             ]
           }
         },
@@ -1094,43 +1161,10 @@
       ],
       "post": {
         "operationId": "recognizeMaterial",
-        "summary": "预留OCR入口，尚未实现，不运行模型或排队",
+        "summary": "对已上传附件按项目启动OCR，返回异步任务；识别后须调用确认接口",
         "responses": {
           "501": {
-            "description": "明确未实现",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string",
-                      "enum": [
-                        "recognition_not_implemented"
-                      ]
-                    },
-                    "ocr_executed": {
-                      "type": "boolean",
-                      "enum": [
-                        false
-                      ]
-                    },
-                    "category": {
-                      "type": "string"
-                    },
-                    "record_id": {
-                      "type": "integer"
-                    },
-                    "next_step": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
+            "description": "未适配该类别或未提供识别参数"
           },
           "401": {
             "description": "未登录"
@@ -1140,6 +1174,61 @@
           },
           "404": {
             "description": "材料不存在"
+          },
+          "202": {
+            "description": "已入队；按result_url轮询mapping，再向/api/ocr/jobs/{id}/confirm-material提交学生确认字段",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数、文件或字段无效"
+          },
+          "409": {
+            "description": "原件变化或材料已提交、版本变化"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "version",
+                  "attachment_id",
+                  "project_key"
+                ],
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "attachment_id": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "project_key": {
+                    "type": "string",
+                    "enum": [
+                      "lanqiao",
+                      "computer-design",
+                      "software-design",
+                      "challenge-cup",
+                      "csp",
+                      "social-practice",
+                      "other"
+                    ]
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -1157,7 +1246,10 @@
               "competition",
               "language",
               "student_work",
-              "honor"
+              "honor",
+              "certification",
+              "social_practice",
+              "research"
             ]
           }
         },
@@ -1281,7 +1373,10 @@
               "competition",
               "language",
               "student_work",
-              "honor"
+              "honor",
+              "certification",
+              "social_practice",
+              "research"
             ]
           }
         },
@@ -1841,13 +1936,60 @@
             "type": "string",
             "enum": [
               "manual",
-              "lanqiao"
+              "lanqiao",
+              "computer-design",
+              "software-design",
+              "challenge-cup"
             ]
           },
           "reference_id": {
             "type": "string",
             "maxLength": 128,
             "description": "匹配本院本学生本年度来源数据的external_id"
+          },
+          "project_name": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "participants": {
+            "type": "array",
+            "maxItems": 300,
+            "items": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          "advisers": {
+            "type": "array",
+            "maxItems": 300,
+            "items": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          "school": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "edition": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "track": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "group": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "region": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "stage_as_printed": {
+            "type": "string",
+            "maxLength": 200
           }
         }
       },
@@ -1942,6 +2084,18 @@
             "type": "string",
             "maxLength": 128,
             "description": "匹配本院本学生本年度来源数据的external_id"
+          },
+          "subject_name": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "start_month_as_printed": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "end_month_as_printed": {
+            "type": "string",
+            "maxLength": 200
           }
         }
       },
@@ -2016,6 +2170,15 @@
               },
               {
                 "$ref": "#/components/schemas/HonorData"
+              },
+              {
+                "$ref": "#/components/schemas/CertificationData"
+              },
+              {
+                "$ref": "#/components/schemas/SocialPracticeData"
+              },
+              {
+                "$ref": "#/components/schemas/ResearchData"
               }
             ]
           }
@@ -2050,6 +2213,15 @@
               },
               {
                 "$ref": "#/components/schemas/HonorData"
+              },
+              {
+                "$ref": "#/components/schemas/CertificationData"
+              },
+              {
+                "$ref": "#/components/schemas/SocialPracticeData"
+              },
+              {
+                "$ref": "#/components/schemas/ResearchData"
               }
             ]
           }
@@ -2169,7 +2341,10 @@
               "competition",
               "language",
               "student_work",
-              "honor"
+              "honor",
+              "certification",
+              "social_practice",
+              "research"
             ]
           },
           "student_id": {
@@ -2216,12 +2391,21 @@
               },
               {
                 "$ref": "#/components/schemas/HonorData"
+              },
+              {
+                "$ref": "#/components/schemas/CertificationData"
+              },
+              {
+                "$ref": "#/components/schemas/SocialPracticeData"
+              },
+              {
+                "$ref": "#/components/schemas/ResearchData"
               }
             ]
           },
           "analysis": {
             "type": "object",
-            "description": "非OCR数据统计，未进行加分计算",
+            "description": "校验及辅助统计；ocr_executed表示是否已有确认的OCR来源，不进行加分计算",
             "additionalProperties": true
           },
           "check_report": {
@@ -2242,7 +2426,9 @@
           "recognition_status": {
             "type": "string",
             "enum": [
-              "not_implemented"
+              "not_implemented",
+              "not_requested",
+              "confirmed"
             ]
           },
           "attachments": {
@@ -2276,6 +2462,14 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "ocr_links": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "OCR任务、字段建议、确认快照及受保护原件地址",
+              "additionalProperties": true
+            }
           }
         }
       },
@@ -2301,7 +2495,10 @@
               "competition",
               "language",
               "student_work",
-              "honor"
+              "honor",
+              "certification",
+              "social_practice",
+              "research"
             ]
           },
           "year": {
@@ -2335,6 +2532,15 @@
               },
               {
                 "$ref": "#/components/schemas/HonorData"
+              },
+              {
+                "$ref": "#/components/schemas/CertificationData"
+              },
+              {
+                "$ref": "#/components/schemas/SocialPracticeData"
+              },
+              {
+                "$ref": "#/components/schemas/ResearchData"
               }
             ]
           }
@@ -2363,6 +2569,254 @@
             "items": {
               "$ref": "#/components/schemas/SourceItem"
             }
+          }
+        }
+      },
+      "CertificationData": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "certification_name",
+          "score",
+          "full_score",
+          "test_date",
+          "certificate_no"
+        ],
+        "properties": {
+          "document_type": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "certification_name": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "subject_name": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "score": {
+            "oneOf": [
+              {
+                "type": "number",
+                "minimum": 0
+              },
+              {
+                "type": "string",
+                "maxLength": 40
+              }
+            ]
+          },
+          "full_score": {
+            "oneOf": [
+              {
+                "type": "number",
+                "minimum": 0
+              },
+              {
+                "type": "string",
+                "maxLength": 40
+              }
+            ]
+          },
+          "test_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "certificate_no": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "batch": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "language": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "test_site": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "task_scores": {
+            "type": "array",
+            "minItems": 5,
+            "maxItems": 5,
+            "items": {
+              "oneOf": [
+                {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100
+                },
+                {
+                  "type": "string",
+                  "maxLength": 40
+                }
+              ]
+            }
+          },
+          "reference_id": {
+            "type": "string",
+            "maxLength": 128
+          }
+        }
+      },
+      "SocialPracticeData": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "document_type"
+        ],
+        "properties": {
+          "document_type": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "team": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "teams": {
+            "type": "array",
+            "maxItems": 300,
+            "items": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          "period_as_printed": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "issuer": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "members": {
+            "type": "array",
+            "maxItems": 300,
+            "items": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          "issue_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "submitter": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "honor_name": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "practice": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "honor_description": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "honor_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "review_status_as_printed": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "reference_id": {
+            "type": "string",
+            "maxLength": 128
+          }
+        },
+        "oneOf": [
+          {
+            "required": [
+              "document_type",
+              "team",
+              "period_as_printed"
+            ],
+            "properties": {
+              "document_type": {
+                "type": "string",
+                "enum": [
+                  "practice_proof"
+                ]
+              }
+            }
+          },
+          {
+            "required": [
+              "document_type",
+              "submitter",
+              "honor_name",
+              "honor_date"
+            ],
+            "properties": {
+              "document_type": {
+                "type": "string",
+                "enum": [
+                  "platform_screenshot"
+                ]
+              }
+            }
+          },
+          {
+            "required": [
+              "document_type",
+              "teams"
+            ],
+            "properties": {
+              "document_type": {
+                "type": "string",
+                "enum": [
+                  "team_list"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "ResearchData": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "document_type",
+          "report_no",
+          "database"
+        ],
+        "properties": {
+          "document_type": {
+            "type": "string",
+            "enum": [
+              "research_report"
+            ]
+          },
+          "report_no": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "requester_school": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "database": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "publication_year": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "reference_id": {
+            "type": "string",
+            "maxLength": 128
           }
         }
       }

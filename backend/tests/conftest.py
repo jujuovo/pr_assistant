@@ -22,6 +22,9 @@ def env(tmp_path):
     app.register_blueprint(automation_bp)
     app.register_blueprint(application_bp)
     app.register_blueprint(certificate_bp)
+    from blueprints.ocr_bp import ocr_bp
+    app.register_blueprint(ocr_bp)
+    app.config['OCR_STORAGE_FOLDER'] = str(tmp_path / 'ocr-jobs')
     from blueprints.material_bp import material_bp
     app.register_blueprint(material_bp)
     app.config['MATERIAL_STORAGE_FOLDER'] = str(tmp_path / 'evidence')

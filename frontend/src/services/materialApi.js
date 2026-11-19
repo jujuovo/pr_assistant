@@ -1,6 +1,6 @@
 import { requestJson, positiveInteger } from './requestJson.js'
 
-export const MATERIAL_CATEGORIES = Object.freeze(['academic', 'competition', 'language', 'student_work', 'honor'])
+export const MATERIAL_CATEGORIES = Object.freeze(['academic', 'competition', 'language', 'student_work', 'honor', 'certification', 'social_practice', 'research'])
 const base = '/api/materials'
 function recordsPath(category) {
   if (!MATERIAL_CATEGORIES.includes(category)) throw new TypeError('不支持的材料类别')
@@ -48,8 +48,8 @@ export const materialApi = {
     method: 'POST', data: { version: positiveInteger(version), decision, comment }
   }),
   getEvents: (category, id, signal) => requestJson(`${recordPath(category, id)}/events`, { signal }),
-  // 预留接口目前返回 HTTP 501；调用方处理 error.code，不能显示“已识别”。
-  recognize: (category, id) => requestJson(`${recordPath(category, id)}/recognize`, { method: 'POST' }),
+  // 传入 version、attachment_id、project_key 启动已适配的识别；不自动确认或提交。
+  recognize: (category, id, data) => requestJson(`${recordPath(category, id)}/recognize`, { method: 'POST', data }),
   parseAcademicCsv: (term, file, signal) => {
     if (!(file instanceof Blob)) throw new TypeError('请选择 CSV 文件')
     const form = new FormData()

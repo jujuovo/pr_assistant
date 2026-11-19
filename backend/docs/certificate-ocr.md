@@ -14,6 +14,8 @@
 - `GET /api/certificates/applications/{id}`：轮询现有接口，新增 `preview_flow`、`application_status`、`student_values`。识别未结束时不能提交。
 - `POST /api/certificates/applications/{id}/confirm-preview`：JSON包含 `version`、`project_name`、`award_date`（YYYY-MM-DD）、`rule_id`、`student_values`、`submit`（true正式提交/false保存草稿）。
 - `student_values` 为与report.pages逐页对应的数组，每项必须包含字符串字段 school/student/teacher/edition/track/group/region/award/certificate_no/date，每字段最多200字。正式提交仍校验申请期及本学院可用竞赛规则。
+- 确认预览时，无论保存草稿还是正式提交，若识别状态、报告汇总或任意页标记需要重传，或任意页质量不合格，返回409并提示重新上传。前端同步提示且禁止确认；原有未确认草稿保留。水印不确定等转人工核验结果不受此限制。
+- 每次确认前，后端逐份读取私有原件并重新计算SHA-256，与上传时保存的摘要比较。文件缺失、内容变化、路径越界或摘要无效均返回409；失败不更新版本、申报值或申请状态。保存草稿后正式提交也重新校验。此校验仅证明文件与上传时一致，不证明证书真实。
 - 返回最新版本；过期版本、重复提交返回409。原件下载继续使用受保护证据接口。教师通过原申请审核接口审核，识别草稿不可提前审核。
 
 其他项目不加载模型、不进入识别队列、不计算自动判断置信度。蓝桥杯仅提供辅助，不自动批准申请、不修改自评或最终分数，不宣称证书真实，不推断省级/国家级认定。官方核验通道和证书库管理仍需后续调研接入。

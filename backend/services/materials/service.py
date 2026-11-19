@@ -75,10 +75,14 @@ def event(row, action, details):
 
 
 def view(row):
+    from services.competition_ocr.binding import record_links
+    from .schemas import OCR_CATEGORIES
+    links = record_links(row)
     return {'id':row.id, 'category':row.category, 'student_id':row.student_id, 'faculty_id':row.faculty_id,
             'application_id':row.application_id, 'year':row.year, 'status':row.status, 'version':row.version,
-            'data':row.data, 'analysis':row.analysis, 'check_report':row.check_report,
-            'recognition_status':'not_implemented', 'bonus_result':None,
+            'data':row.data, 'analysis':{**row.analysis, 'ocr_executed':bool(links)}, 'check_report':row.check_report,
+            'recognition_status':'confirmed' if links else ('not_requested' if row.category in OCR_CATEGORIES else 'not_implemented'),
+            'ocr_links':links, 'bonus_result':None,
             'created_at':row.created_at.isoformat()+'Z', 'updated_at':row.updated_at.isoformat()+'Z',
             'attachments':[{'id':f.id,'filename':f.filename,'size':f.size,'sha256':f.sha256,
                             'url':f'/api/materials/{row.category}/records/{row.id}/attachments/{f.id}'} for f in row.attachments]}

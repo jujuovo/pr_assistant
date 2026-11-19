@@ -221,7 +221,7 @@ def test_auth_schema_student_import_and_input_score_forbidden(env):
     assert env[1].get('/api/materials/types').status_code==401
     login(env[1],env[2]['student'])
     types=env[1].get('/api/materials/types')
-    assert types.status_code==200 and len(types.json['types'])==5
+    assert types.status_code==200 and {t['key'] for t in types.json['types']}==set(SAMPLES)|{'certification','social_practice','research'}
     assert all(not t['auto_bonus_enabled'] for t in types.json['types'])
     assert env[1].post('/api/materials/sources/import',json=source_payload()).status_code==403
     assert env[1].post('/api/materials/honor/records',json={'year':2026,'data':SAMPLES['honor'],'final_score':6}).status_code==400
@@ -274,7 +274,7 @@ def test_openapi_matches_registered_routes_and_all_references(env):
             for child in value: visit(child)
     visit(spec)
     examples=spec['paths']['/api/materials/{category}/records']['post']['requestBody']['content']['application/json']['examples']
-    assert set(examples)==set(SAMPLES)
+    assert set(examples)==set(SAMPLES)|{'certification','social_practice','research'}
 
 
 def test_withdraw_unverified_preserves_audit(env):
