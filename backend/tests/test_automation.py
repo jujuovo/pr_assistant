@@ -1,12 +1,14 @@
 import io
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from PIL import Image
 import pytest
+
+pytestmark = pytest.mark.usefixtures("active_cycle_2025")
 from conftest import login
 from extensions import db
-from models import Application, Student
+from models import Application, Student, User
 from automation_models import AutomationBatch, AutomationItem, AutomationReview
 from services.recognition.worker import run_one
 
@@ -386,6 +388,27 @@ def test_approval_partial_failure_rolls_back(env):
     db.session.expire_all()
     assert all(x.confirmed_hours is None and x.status == "ready" for x in db.session.get(AutomationBatch,batch).items)
     assert db.session.get(Application,report["application_id"]).status == "pending"
+
+
+def test_formal_submission_uses_active_cycle_not_client_year(env):
+    app, client, users = env
+    policy(client, users)
+    batch_id = upload(client)
+    run_one(app, Provider(credit()))
+    from use_cases.cycles import create_cycle_policy, current_cycle_policy, switch_cycle_policy
+    admin = db.session.get(User, users["admin"])
+    old = current_cycle_policy()
+    new, _ = create_cycle_policy(
+        admin, 2026, date(2024, 1, 1), date(2026, 12, 31), "2026 推免周期"
+    )
+    switch_cycle_policy(admin, new, expected_active_id=old.id)
+    db.session.commit()
+    report = submit(client, batch_id)
+    batch = db.session.get(AutomationBatch, batch_id)
+    application = db.session.get(Application, report["application_id"])
+    assert batch.year == 2026
+    assert application.cycle_code == 2026
+    assert application.cycle_policy_version_id == new.id
 
 
 def test_native_flask_entry(monkeypatch):

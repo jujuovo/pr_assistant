@@ -12,6 +12,16 @@ const versionAction = (action, category, id, version) => requestJson(`${recordPa
 })
 
 export const materialApi = {
+  getCompetitionContext: signal => requestJson(`${base}/competition/context`, { signal }),
+  getCompetitionWorkbenchSummary: signal => requestJson(`${base}/competition/workbench-summary`, { signal }),
+  getCompetitionPackage: signal => requestJson(`${base}/competition/rules/current`, { signal }),
+  searchCompetitionCatalog: (q = '', signal) => requestJson(`${base}/competition/catalog?q=${encodeURIComponent(q)}`, { signal }),
+  getCompetitionCatalogItem: (competitionId, signal) => requestJson(`${base}/competition/catalog/${encodeURIComponent(competitionId)}`, { signal }),
+  getCompetitionFeedback: (year, signal) => requestJson(`${base}/competition/feedback?year=${positiveInteger(year)}`, { signal }),
+  getCompetitionReviewContext: (id, signal) => requestJson(`${recordPath('competition', id)}/review-context`, { signal }),
+  getTeacherCompetitionSummary: (studentId, year, signal) => requestJson(
+    `${base}/competition/students/${encodeURIComponent(studentId)}/summary?year=${positiveInteger(year)}`, { signal }
+  ),
   getTypes: signal => requestJson(`${base}/types`, { signal }),
   getOpenApi: signal => requestJson(`${base}/openapi.json`, { signal }),
   listRecords: (category, filters = {}, signal) => {
@@ -42,11 +52,41 @@ export const materialApi = {
   },
   getAttachmentUrl: (category, id, attachmentId) => `${recordPath(category, id)}/attachments/${positiveInteger(attachmentId)}`,
   submit: (category, id, version) => versionAction('submit', category, id, version),
+  reconfirmSubmit: (category, id, version, ruleVersionId) => requestJson(
+    `${recordPath(category, id)}/reconfirm-submit`, {
+      method: 'POST', data: { version: positiveInteger(version),
+        rule_version_id: positiveInteger(ruleVersionId), confirmed: true }
+    }
+  ),
+  reconfirmCompetition: (id, version, confirmedTerms) => requestJson(
+    `${recordPath('competition', id)}/reconfirm-submit`, {
+      method: 'POST', data: { version: positiveInteger(version), confirmed_terms: confirmedTerms, confirmed: true }
+    }
+  ),
+  abandon: (category, id, version) => versionAction('abandon', category, id, version),
+  createCorrection: (category, id, version, confirmedTerms) => requestJson(
+    `${recordPath(category, id)}/corrections`, { method: 'POST', data: { version: positiveInteger(version), confirmed_terms: confirmedTerms } }
+  ),
+  startCompetitionOcr: (id, version) => requestJson(`${recordPath('competition', id)}/ocr`, {
+    method: 'POST', data: { version: positiveInteger(version) }
+  }),
+  getCompetitionOcr: (id, jobId, signal) => requestJson(`${recordPath('competition', id)}/ocr/${encodeURIComponent(jobId)}`, { signal }),
+  cancelCompetitionOcr: (id, version, jobId) => requestJson(`${recordPath('competition', id)}/ocr/${encodeURIComponent(jobId)}/cancel`, {
+    method: 'POST', data: { version: positiveInteger(version) }
+  }),
   withdraw: (category, id, version) => versionAction('withdraw', category, id, version),
   check: (category, id, version) => versionAction('check', category, id, version),
   review: (category, id, version, decision, comment) => requestJson(`${recordPath(category, id)}/review`, {
     method: 'POST', data: { version: positiveInteger(version), decision, comment }
   }),
+  reviewCompetition: (id, version, decision, comment, idempotencyKey) => {
+    if (!['approve', 'return'].includes(decision)) throw new TypeError('竞赛审核只能通过或退回')
+    if (!idempotencyKey) throw new TypeError('竞赛审核必须提供幂等键')
+    return requestJson(`${recordPath('competition', id)}/review`, { method: 'POST', data: {
+      version: positiveInteger(version), decision, comment: String(comment || '').trim(),
+      idempotency_key: String(idempotencyKey)
+    } })
+  },
   getEvents: (category, id, signal) => requestJson(`${recordPath(category, id)}/events`, { signal }),
   // 预留接口目前返回 HTTP 501；调用方处理 error.code，不能显示“已识别”。
   recognize: (category, id) => requestJson(`${recordPath(category, id)}/recognize`, { method: 'POST' }),

@@ -91,7 +91,8 @@ const groups = [
     icon: 'file-lines',
     items: [
       { key: 'regulations', title: '保研条例', icon: 'book-open' },
-      { key: 'statistics', title: '我的项目', icon: 'folder-open' }
+      { key: 'statistics', title: '加分统计', icon: 'chart-column' }
+      ,{ key: 'rankings', title: '我的排名', icon: 'ranking-star' }
     ]
   },
   {
@@ -99,8 +100,8 @@ const groups = [
     title: '加分申请',
     icon: 'file-arrow-up',
     items: [
-      { key: 'application-form', title: '提交申请', icon: 'file-circle-plus' },
-      { key: 'application-record', title: '申请记录', icon: 'clock-rotate-left' },
+      { key: 'application-form', title: '提交材料', icon: 'file-circle-plus' },
+      { key: 'application-record', title: '我的材料', icon: 'clock-rotate-left' },
       { key: 'feedback', title: '反馈入口', icon: 'comment-dots' }
     ]
   }

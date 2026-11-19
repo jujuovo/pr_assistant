@@ -52,12 +52,24 @@ def authorize(row, user=None, staff=False):
     abort(403, description='没有该学生或学院的材料权限')
 
 
-def record_at(category, record_id):
+def record_at(category, record_id, *, allow_teacher_processed=False):
     category_exists(category)
     row = db.get_or_404(MaterialRecord,record_id)
     if row.category != category:
         abort(404, description='材料不属于此类别')
-    authorize(row)
+    user = authorize(row)
+    has_fixed_rule = (
+        row.competition_rule_package_id is not None
+        if row.category == 'competition' else row.rule_version_id is not None
+    )
+    teacher_status_allowed = (
+        row.status in {'submitted', 'under_review'}
+        or (allow_teacher_processed and row.status in {
+            'needs_correction', 'scored', 'verified', 'verified_not_eligible'
+        })
+    )
+    if user.role == 'teacher' and (not teacher_status_allowed or not has_fixed_rule):
+        abort(403, description='教师只能访问已固定规则版本的正式提交材料')
     return row
 
 
@@ -75,9 +87,33 @@ def event(row, action, details):
 
 
 def view(row):
+    from domain.materials import ActorScope, MaterialScope, allowed_actions
+    user = actor()
+    actions = allowed_actions(
+        ActorScope(user.role, user.student_id, user.faculty_id),
+        MaterialScope(row.student_id, row.faculty_id, row.status),
+    )
+    successor = MaterialRecord.query.filter_by(supersedes_record_id=row.id).order_by(
+        MaterialRecord.correction_sequence.desc(), MaterialRecord.id.desc()
+    ).first()
+    if successor is not None:
+        actions = ()
+    elif (
+        row.category == 'competition' and row.status == 'needs_correction'
+        and user.role == 'student' and user.student_id == row.student_id
+    ):
+        actions = tuple(action for action in actions if action not in {'edit', 'add_attachment'})
+        actions = (*actions, 'create_correction')
     return {'id':row.id, 'category':row.category, 'student_id':row.student_id, 'faculty_id':row.faculty_id,
-            'application_id':row.application_id, 'year':row.year, 'status':row.status, 'version':row.version,
+            'application_id':row.application_id, 'year':row.year,
+            'cycle_code':row.year, 'cycle_policy_version_id':row.cycle_policy_version_id,
+            'status':row.status, 'version':row.version,
+            'allowed_actions':list(actions),
             'data':row.data, 'analysis':row.analysis, 'check_report':row.check_report,
+            'ocr_raw_terms':row.ocr_raw_terms,
+            'competition_rule_package_id':row.competition_rule_package_id,
+            'supersedes_record_id':row.supersedes_record_id,
+            'superseded_by_record_id':successor.id if successor else None,
             'recognition_status':'not_implemented', 'bonus_result':None,
             'created_at':row.created_at.isoformat()+'Z', 'updated_at':row.updated_at.isoformat()+'Z',
             'attachments':[{'id':f.id,'filename':f.filename,'size':f.size,'sha256':f.sha256,

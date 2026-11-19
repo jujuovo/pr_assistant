@@ -9,7 +9,9 @@ export const roleNavigation = {
       items: [
         { key: 'pending-review', icon: 'file-arrow-up', title: '待审核申请' },
         { key: 'review-history', icon: 'clock-rotate-left', title: '审核记录' },
+        { key: 'student-summary', icon: 'users', title: '学生汇总' },
         { key: 'statistics-report', icon: 'chart-pie', title: '统计报表' }
+        ,{ key: 'rankings', icon: 'ranking-star', title: '专业排名（只读）' }
       ]
     }
   ],
@@ -20,6 +22,7 @@ export const roleNavigation = {
       icon: 'folder-open',
       title: '推免管理',
       items: [
+        { key: 'competition-rule-packages', icon: 'boxes-stacked', title: '竞赛规则包' },
         { key: 'rule-management', icon: 'scale-balanced', title: '推免规则' },
         { key: 'graduate-file-management', icon: 'file-lines', title: '推免文件' }
       ]
@@ -31,6 +34,7 @@ export const roleNavigation = {
       items: [
         { key: 'statistics-report', icon: 'chart-pie', title: '统计报表' },
         { key: 'score-management', icon: 'user-graduate', title: '成绩管理' },
+        { key: 'rankings', icon: 'ranking-star', title: '排名批次' },
         { key: 'data-management', icon: 'database', title: '申请管理' }
       ]
     },

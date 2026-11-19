@@ -9,6 +9,31 @@
       </div>
     </div>
 
+    <StructuredRuleForm
+      ref="structuredRuleForm"
+      :faculties="faculties"
+      :default-faculty-id="filters.facultyId === 'all' ? '' : filters.facultyId"
+      @published="handleStructuredRulePublished"
+    />
+
+    <section class="card uncovered-card">
+      <div class="uncovered-heading">
+        <div><h2>未覆盖材料词条</h2><p>仅展示本学院聚合结果，不包含学生身份或附件。</p></div>
+        <button class="btn btn-outline" :disabled="uncoveredLoading" @click="fetchUncoveredTerms">刷新</button>
+      </div>
+      <table class="application-table">
+        <thead><tr><th>周期</th><th>竞赛</th><th>等级</th><th>影响数量</th><th>操作</th></tr></thead>
+        <tbody>
+          <tr v-for="item in uncoveredTerms" :key="JSON.stringify(item)">
+            <td>{{ item.cycle_code }}</td><td>{{ item.normalized_terms.competition_name }}</td>
+            <td>{{ item.normalized_terms.award_level }}</td><td>{{ item.affected_count }}</td>
+            <td><button class="btn btn-outline" @click="draftFromUncovered(item)">起草规则</button></td>
+          </tr>
+          <tr v-if="!uncoveredTerms.length"><td colspan="5" class="no-data">暂无未覆盖词条</td></tr>
+        </tbody>
+      </table>
+    </section>
+
     <!-- 筛选区域 -->
     <div class="filters">
       <div class="filter-group">
@@ -197,6 +222,8 @@ import api from '@/services/api.js'
 import { useToastStore } from '@/stores/toast.js'
 import { useAuthStore } from '@/stores/auth.js'
 import RuleModal from '@/components/admin/rules/RuleModal.vue'
+import StructuredRuleForm from '@/components/admin/rules/StructuredRuleForm.vue'
+import structuredRuleApi from '@/services/structuredRuleApi.js'
 
 const toastStore = useToastStore()
 const authStore = useAuthStore()
@@ -206,6 +233,9 @@ const editingRule = ref(null)
 const currentPage = ref(1)
 const pageSize = 10
 const loading = ref(false)
+const structuredRuleForm = ref(null)
+const uncoveredTerms = ref([])
+const uncoveredLoading = ref(false)
 
 // 批量选择相关变量
 const selectAll = ref(false)
@@ -260,6 +290,7 @@ const paginatedRules = computed(() => {
 // 初始化数据
 onMounted(async () => {
   await fetchFaculties()
+  await fetchUncoveredTerms()
   fetchRules()
 })
 
@@ -268,8 +299,11 @@ async function fetchRules() {
   loading.value = true
   try {
     const response = await api.getRules({})
-    rules.value = Array.isArray(response.rules) ? response.rules : []
-    allRules.value = Array.isArray(response.rules) ? response.rules : []
+    // 旧逐条 Rule 页面只保留非竞赛兼容类别；竞赛使用独立规则包工作台。
+    const compatibilityRules = Array.isArray(response.rules)
+      ? response.rules.filter(rule => rule.sub_type !== 'competition') : []
+    rules.value = compatibilityRules
+    allRules.value = compatibilityRules
   } catch (error) {
     console.error('获取规则列表失败:', error)
     toastStore.addToast({ message: '获取规则列表失败', type: 'error' })
@@ -550,6 +584,34 @@ function resetFilters() {
     facultyId: currentFaculty
   })
 }
+
+async function handleStructuredRulePublished() {
+  toastStore.addToast({ message: '结构化计分规则发布成功', type: 'success' })
+  await fetchRules()
+  await fetchUncoveredTerms()
+}
+
+async function fetchUncoveredTerms() {
+  uncoveredLoading.value = true
+  try {
+    const response = await structuredRuleApi.getUncoveredTerms()
+    uncoveredTerms.value = Array.isArray(response.items) ? response.items : []
+  } catch (error) {
+    toastStore.addToast({ message: error.message || '读取未覆盖词条失败', type: 'error' })
+  } finally { uncoveredLoading.value = false }
+}
+
+function draftFromUncovered(item) {
+  structuredRuleForm.value?.useUncoveredTerms(item)
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
 </script>
+
+<style scoped>
+.uncovered-card { margin-bottom:1.25rem; padding:1.25rem; overflow:auto; }
+.uncovered-heading { display:flex; justify-content:space-between; gap:1rem; align-items:start; }
+.uncovered-heading h2 { margin:0 0 .35rem; font-size:1.15rem; }
+.uncovered-heading p { margin:0 0 1rem; color:#667085; }
+</style>
 
 <style scoped src="@/assets/styles/pages/admin/rules/RuleManagement.css"></style>

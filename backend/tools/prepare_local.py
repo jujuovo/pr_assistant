@@ -2,14 +2,87 @@
 import os
 from pathlib import Path
 import argparse
+import json
 import sys
+from datetime import date
 
 BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
 LOCAL = BACKEND / 'instance' / 'certificate-local.db'
+COMPETITION_PACKAGE = BACKEND / 'rules' / 'competition_2028.json'
 
 
-def main(database_file=None):
+class LocalCompetitionPreparationError(RuntimeError):
+    pass
+
+
+def ensure_local_competition_context(*, fresh, package_file=COMPETITION_PACKAGE):
+    """Prepare the exact formal package required by the enabled local UI."""
+    from extensions import db
+    from models import User
+    from use_cases.competition_rules import load_current_competition_package
+    from use_cases.cycles import (
+        create_cycle_policy,
+        current_cycle_policy,
+        switch_cycle_policy,
+    )
+    from use_cases.materials import competition_workflow_context
+
+    from domain.competition_rules import CompetitionPackageError, validate_competition_package
+
+    package_file = Path(package_file).resolve()
+    try:
+        snapshot = json.loads(package_file.read_text(encoding='utf-8'))
+    except FileNotFoundError as error:
+        raise LocalCompetitionPreparationError(
+            f'competition_package_source_missing: 正式竞赛规则包源文件不存在：'
+            f'{package_file}；请恢复该文件后重新运行本地准备。'
+        ) from error
+    except (OSError, json.JSONDecodeError) as error:
+        raise LocalCompetitionPreparationError(
+            f'competition_package_source_invalid: 正式竞赛规则包源文件无法读取或不是有效 JSON：{package_file}；'
+            '请修复文件后重新运行本地准备。'
+        ) from error
+    try:
+        validated = validate_competition_package(snapshot)
+    except CompetitionPackageError as error:
+        raise LocalCompetitionPreparationError(
+            f'正式竞赛规则包校验失败（{error.code}）：{error}；'
+            '请修复规则源后重新运行本地准备。'
+        ) from error
+    admin = User.query.filter_by(username='admin001', role='admin', status='active').one()
+    period = snapshot['evidence_period']
+    policy, _created = create_cycle_policy(
+        admin,
+        validated.cycle_code,
+        date.fromisoformat(period['start']),
+        date.fromisoformat(period['end']),
+        f"{validated.cycle_code} 推免周期",
+    )
+    active = current_cycle_policy(required=False)
+    if active is None:
+        from use_cases.cycles import activate_cycle_policy
+        activate_cycle_policy(admin, policy)
+    elif active.id != policy.id:
+        if not fresh:
+            raise RuntimeError(
+                f'已有活动周期 {active.cycle_code}，与正式竞赛包周期 '
+                f'{validated.cycle_code} 不一致；请使用显式周期切换后重试。'
+            )
+        switch_cycle_policy(admin, policy, expected_active_id=active.id)
+    try:
+        package, created = load_current_competition_package(admin, snapshot)
+    except CompetitionPackageError as error:
+        raise LocalCompetitionPreparationError(
+            f'正式竞赛规则包校验或 current 冲突（{error.code}）：{error}；'
+            '请修复规则源或显式处理已有 current 包后重试。'
+        ) from error
+    _package, context = competition_workflow_context(admin)
+    db.session.commit()
+    return package, created, context
+
+
+def main(database_file=None, competition_package_file=None):
     local = Path(database_file).resolve() if database_file else LOCAL
     local.parent.mkdir(parents=True, exist_ok=True)
     fresh = not local.exists()
@@ -21,34 +94,60 @@ def main(database_file=None):
     additions = {'system_settings': {'avatar_file_size_limit':'INTEGER DEFAULT 2'},
                  'rule': {'faculty_id':'INTEGER REFERENCES faculty(id)', 'calculation_formula':'JSON'},
                  'application': {'dynamic_coefficients':'JSON'}}
-    with app.app_context():
-        with db.engine.begin() as connection:
-            inspector = inspect(connection)
-            for table, columns in additions.items():
-                if not inspector.has_table(table):
-                    continue
-                existing = {c['name'] for c in inspector.get_columns(table)}
-                for name, declaration in columns.items():
-                    if name not in existing:
-                        connection.execute(text(f'ALTER TABLE "{table}" ADD COLUMN "{name}" {declaration}'))
-        db.create_all()
-        inspector = inspect(db.engine)
-        missing = {t.name:[c.name for c in t.columns if c.name not in {v['name'] for v in inspector.get_columns(t.name)}]
-                   for t in db.metadata.sorted_tables}
-        if any(missing.values()):
-            raise RuntimeError(f'本地数据库存在未适配字段，请检查：{missing}')
-        from models import SystemSettings
-        if not SystemSettings.query.first():
-            db.session.add(SystemSettings())
-            db.session.commit()
-        from tools.seed_demo import seed_demo
-        seed_demo(with_test_rule=True, with_test_settings=fresh)
-        print(f'本地数据库已准备：{local}')
-        print('共享三角色测试账号及信息学院规则已准备；已有数据保持不变。')
-        print('证书表已创建；识别结果不会修改申请分数。')
+    try:
+        with app.app_context():
+            with db.engine.begin() as connection:
+                inspector = inspect(connection)
+                for table, columns in additions.items():
+                    if not inspector.has_table(table):
+                        continue
+                    existing = {c['name'] for c in inspector.get_columns(table)}
+                    for name, declaration in columns.items():
+                        if name not in existing:
+                            connection.execute(text(f'ALTER TABLE "{table}" ADD COLUMN "{name}" {declaration}'))
+            db.create_all()
+            inspector = inspect(db.engine)
+            missing = {t.name:[c.name for c in t.columns if c.name not in {v['name'] for v in inspector.get_columns(t.name)}]
+                       for t in db.metadata.sorted_tables}
+            if any(missing.values()):
+                raise RuntimeError(f'本地数据库存在未适配字段，请检查：{missing}')
+            from models import SystemSettings
+            if not SystemSettings.query.first():
+                db.session.add(SystemSettings())
+            from tools.seed_demo import seed_demo
+            seed_demo(
+                with_test_rule=True,
+                with_test_settings=fresh,
+                enforce_configured_active_cycle=fresh,
+                commit=False,
+            )
+            package, package_created, competition_context = ensure_local_competition_context(
+                fresh=fresh,
+                package_file=competition_package_file or COMPETITION_PACKAGE,
+            )
+            print(f'本地数据库已准备：{local}')
+            print('共享三角色测试账号及信息学院测试规则已准备；已有业务数据保持不变。')
+            print(
+                f'正式竞赛上下文已就绪：周期 {competition_context["cycle"]["cycle_code"]}，'
+                f'规则包 {package.package_id} v{package.version}，目录 '
+                f'{competition_context["catalog"]["count"]} 项，'
+                f'{"新建" if package_created else "复用"} current 包。'
+            )
+            print('证书表已创建；识别结果不会修改申请分数。')
+    except Exception:
+        with app.app_context():
+            db.session.rollback()
+            db.session.remove()
+            db.engine.dispose()
+        if fresh:
+            local.unlink(missing_ok=True)
+        raise
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='准备本地开发SQLite库及共享测试账号')
     parser.add_argument('--database-file', type=Path, help='可选独立测试数据库路径')
-    main(parser.parse_args().database_file)
+    parser.add_argument('--competition-package-file', type=Path,
+                        help='可选显式正式竞赛包来源；默认使用仓库内置 2028 包')
+    args = parser.parse_args()
+    main(args.database_file, args.competition_package_file)

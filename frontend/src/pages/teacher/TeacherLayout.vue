@@ -30,8 +30,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { useApplicationsStore } from '@/stores/applications.js'
 import { useToastStore } from '@/stores/toast.js'
@@ -45,21 +45,26 @@ import PendingReview from '@/pages/teacher/reviews/PendingReview.vue'
 import ReviewHistory from '@/pages/teacher/reviews/ReviewHistory.vue'
 import StatisticsReport from '@/pages/common/statistics/StatisticsReport.vue'
 import Profile from '@/pages/common/profile/Profile.vue'
+import TeacherRanking from '@/pages/teacher/rankings/TeacherRanking.vue'
+import TeacherStudentSummary from '@/pages/teacher/students/TeacherStudentSummary.vue'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 const applicationsStore = useApplicationsStore()
 const toastStore = useToastStore()
 
 // 当前活动页面
-const currentPage = ref('home')
+const currentPage = ref(route.query.page || 'home')
 
 // 页面组件映射
 const pageComponents = {
   'pending-review': PendingReview,
   'review-history': ReviewHistory,
   'statistics-report': StatisticsReport,
-  profile: Profile
+  'student-summary': TeacherStudentSummary,
+  profile: Profile,
+  rankings: TeacherRanking
 }
 
 const currentPageComponent = computed(() => pageComponents[currentPage.value])
@@ -82,7 +87,9 @@ const handleSidebarToggle = (isOpen) => {
 // 切换页面
 const switchPage = (page) => {
   currentPage.value = page
+  router.replace({ query: { ...route.query, page } })
 }
+watch(() => route.query.page, page => { if (page) currentPage.value = page })
 
 // 切换到待审核页面（用于从其他页面跳转）
 const switchToPendingReview = () => {

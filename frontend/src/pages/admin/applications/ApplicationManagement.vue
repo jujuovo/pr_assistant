@@ -656,7 +656,12 @@ const handleApproveApplication = async (reviewData) => {
       reviewData.applicationId,
       'approved',
       reviewData.approveComment,
-      reviewData.finalScore,
+      {
+        overrideEnabled: reviewData.overrideEnabled,
+        overrideScore: reviewData.overrideScore,
+        overrideReason: reviewData.overrideReason,
+        idempotencyKey: reviewData.idempotencyKey
+      },
       authStore.userName
     )
     if (success) {
@@ -681,7 +686,7 @@ const handleRejectApplication = async (reviewData) => {
       reviewData.applicationId,
       'rejected',
       reviewData.rejectComment,
-      0,
+      null,
       authStore.userName
     )
     if (success) {

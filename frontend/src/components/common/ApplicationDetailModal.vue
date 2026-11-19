@@ -272,21 +272,18 @@
           <!-- 审核操作区域 -->
           <div v-if="isReviewMode" class="card compact-card">
             <div class="card-title">审核操作</div>
+            <div v-if="application.scoringResult" class="score-mismatch-warning" role="status">
+              <strong>{{ scoringStatusText(application.scoringResult.scoring_status) }}</strong>
+              <p v-if="application.scoringResult.eligibility?.reason">
+                原因：{{ application.scoringResult.eligibility.reason }}
+              </p>
+              <p>可执行操作：{{ application.scoringResult.allowed_actions?.join('、') || '仅查看' }}</p>
+            </div>
             <div class="form-group">
-              <label>最终分数</label>
+              <label>规则自动分</label>
               <div class="score-input-container">
-                <input
-                  type="number"
-                  v-model.number="reviewData.finalScore"
-                  min="0"
-                  max="100"
-                  step="0.5"
-                  class="form-control small-input"
-                />
-                <span class="score-hint">预计分数:{{ estimatedScore }}</span>
-                <span v-if="isScoreMismatch" class="score-mismatch-warning">
-                  最终分数与规则预估分数不一致，请仔细确认
-                </span>
+                <strong>{{ estimatedScore }}</strong>
+                <span class="score-hint">审核通过时默认采用后端已发布规则计算结果</span>
               </div>
             </div>
             <div class="form-row">
@@ -388,6 +385,9 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'approve', 'reject'])
+const scoringStatusText = status => ({ scored: '审核与计分已完成', needs_rule: '旧流程阻塞，请联系管理员迁移',
+  verified_not_eligible: '材料已核验，但不符合本周期计分资格',
+  needs_correction: '材料需要补正' })[status] || status
 
 // 计算学生姓名
 const studentName = computed(() => {
@@ -402,7 +402,9 @@ const isReviewMode = computed(() => props.isReviewMode)
 
 // 审核数据
 const reviewData = reactive({
-  finalScore: props.application.finalScore || props.application.selfScore || 0,
+  overrideEnabled: false,
+  overrideScore: null,
+  overrideReason: '',
   approveComment:
     props.application.status === 'approved' ? props.application.reviewComment || '' : '',
   rejectComment:
@@ -414,7 +416,9 @@ watch(
   () => props.application,
   (newApplication) => {
     if (newApplication) {
-      reviewData.finalScore = newApplication.finalScore || newApplication.selfScore || 0
+      reviewData.overrideEnabled = false
+      reviewData.overrideScore = null
+      reviewData.overrideReason = ''
       reviewData.approveComment =
         newApplication.status === 'approved' ? newApplication.reviewComment || '' : ''
       reviewData.rejectComment =
@@ -422,17 +426,6 @@ watch(
     }
   },
   { deep: true }
-)
-
-// 监听finalScore变化，确保值在0-100之间
-watch(
-  () => reviewData.finalScore,
-  (newScore) => {
-    if (newScore !== null && newScore !== undefined) {
-      // 确保分数在0-100之间
-      reviewData.finalScore = Math.max(0, Math.min(100, parseFloat(newScore) || 0))
-    }
-  }
 )
 
 // 图片相关状态
@@ -895,26 +888,6 @@ const currentPreviewFile = computed(() => {
   return null
 })
 
-// 分数不匹配警告
-const isScoreMismatch = computed(() => {
-  const ruleScore = props.application.rule?.score
-  const selfScore = reviewData.finalScore
-
-  // 确保两个分数都有值且可转换为数字
-  if (
-    ruleScore !== undefined &&
-    ruleScore !== null &&
-    ruleScore !== '' &&
-    selfScore !== undefined &&
-    selfScore !== null &&
-    selfScore !== ''
-  ) {
-    // 转换为浮点数进行比较
-    return parseFloat(ruleScore) !== parseFloat(selfScore)
-  }
-  return false
-})
-
 // 方法
 const getStatusText = (status) => {
   const statusMap = {
@@ -1148,11 +1121,9 @@ const onPreviewImageLoad = () => {
 
 // 审核操作
 const approveApplication = () => {
-  // 确保最终分数在有效范围内
-  const validScore = Math.max(0, Math.min(100, parseFloat(reviewData.finalScore) || 0))
   emit('approve', {
-    ...reviewData,
-    finalScore: validScore,
+    approveComment: reviewData.approveComment,
+    idempotencyKey: crypto.randomUUID(),
     applicationId: props.application.id
   })
 }
@@ -1163,8 +1134,6 @@ const rejectApplication = () => {
     toastStore.error('请填写驳回理由')
     return
   }
-  // 拒绝的申请将最终分数设置为0
-  reviewData.finalScore = 0
   emit('reject', {
     ...reviewData,
     applicationId: props.application.id

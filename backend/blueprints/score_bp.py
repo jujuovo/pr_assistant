@@ -21,6 +21,16 @@ from models import (
     FacultyScoreSettings,
 )
 from extensions import db
+from services.automation import actor
+
+
+DERIVED_STUDENT_FIELDS = frozenset({
+    "academic_specialty_total", "specialty_score",
+    "comprehensive_performance_total", "performance_score",
+    "total_score", "comprehensive_score", "total_comprehensive_score",
+    "final_comprehensive_score", "final_score", "major_ranking",
+    "ranking", "ranking_count", "total_students",
+})
 
 # 创建蓝图实例
 score_bp = Blueprint("score", __name__, url_prefix="/api")
@@ -478,7 +488,18 @@ def update_student(student_id):
     if not student:
         return jsonify({"message": "学生不存在"}), 404
 
-    data = request.get_json()
+    user = actor()
+    if user.role != "admin" or not user.faculty_id or user.faculty_id != student.faculty_id:
+        return jsonify({"error": "仅本学院管理员可更新学生基础资料", "code": "forbidden"}), 403
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "请求体必须为JSON对象", "code": "invalid_request"}), 400
+    forbidden = sorted(DERIVED_STUDENT_FIELDS.intersection(data))
+    if forbidden:
+        return jsonify({
+            "error": "派生计分与排名字段只能由权威计分或排名用例生成",
+            "code": "derived_fields_read_only", "fields": forbidden,
+        }), 400
 
     # 更新学生信息
     if "student_name" in data:
@@ -500,76 +521,6 @@ def update_student(student_id):
     if "academic_score" in data:
         student.academic_score = data["academic_score"]
     # academic_weighted字段已移除，由academic_score自动计算
-
-    # 获取学生所在学院的成绩设置
-    faculty_score_settings = FacultyScoreSettings.query.filter_by(
-        faculty_id=student.faculty_id
-    ).first()
-
-    # 应用满分限制并更新学术专长总分
-    if "academic_specialty_total" in data:
-        academic_specialty_total = data["academic_specialty_total"]
-        if faculty_score_settings:
-            academic_specialty_total = min(
-                academic_specialty_total, faculty_score_settings.specialty_max_score
-            )
-        else:
-            # 如果没有学院成绩设置，使用默认值
-            academic_specialty_total = min(
-                academic_specialty_total, 15.0
-            )  # 默认学术专长满分15分
-        student.academic_specialty_total = academic_specialty_total
-
-    # 应用满分限制并更新综合表现总分
-    if "comprehensive_performance_total" in data:
-        comprehensive_performance_total = data["comprehensive_performance_total"]
-        if faculty_score_settings:
-            comprehensive_performance_total = min(
-                comprehensive_performance_total,
-                faculty_score_settings.performance_max_score,
-            )
-        else:
-            # 如果没有学院成绩设置，使用默认值
-            comprehensive_performance_total = min(
-                comprehensive_performance_total, 5.0
-            )  # 默认综合表现满分5分
-        student.comprehensive_performance_total = comprehensive_performance_total
-
-    # 如果更新了学术成绩、学术专长总分或综合表现总分，重新计算综合成绩
-    if (
-        "academic_score" in data
-        or "academic_specialty_total" in data
-        or "comprehensive_performance_total" in data
-    ):
-        # 计算综合成绩：学业成绩 * 学业成绩权重 / 100 + 学术专长总分 + 综合表现总分
-        academic_score = student.academic_score or 0.0
-        specialty_total = student.academic_specialty_total or 0.0
-        performance_total = student.comprehensive_performance_total or 0.0
-
-        if faculty_score_settings:
-            calculated_score = (
-                (academic_score * faculty_score_settings.academic_score_weight / 100)
-                + specialty_total
-                + performance_total
-            )
-        else:
-            # 如果没有学院成绩设置，使用默认权重80%
-            calculated_score = (
-                (academic_score * 80.0 / 100) + specialty_total + performance_total
-            )
-
-        # 更新综合成绩，保留四位小数
-        student.comprehensive_score = round(calculated_score, 4)
-    # total_score字段已废弃，建议使用comprehensive_score
-    if "total_score" in data:
-        # 如果提供了total_score，将其值赋给comprehensive_score
-        student.comprehensive_score = data["total_score"]
-    if "comprehensive_score" in data:
-        student.comprehensive_score = data["comprehensive_score"]
-    if "major_ranking" in data:
-        student.major_ranking = data["major_ranking"]
-    if "total_students" in data:
-        student.total_students = data["total_students"]
 
     db.session.commit()
 

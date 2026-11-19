@@ -5,6 +5,13 @@
     "version": "1.0.0",
     "description": "五类结构化材料与人工核验接口；OCR新适配器和自动加分未实现，材料核验不会写入学生或申请分数。"
   },
+  "x-authority-contract": {
+    "source_of_truth": "backend",
+    "presentation_fields": ["version", "status", "scope", "reason_code", "updated_at", "allowed_actions"],
+    "client_rule": "客户端只按 allowed_actions 展示操作并携带 version；不得推导状态转换、计分或排名。",
+    "derived_read_only_fields": ["academic_specialty_total", "comprehensive_performance_total", "comprehensive_score", "major_ranking", "total_students"],
+    "version_conflict": "HTTP 409 要求刷新权威 DTO 并由用户重新确认影响，客户端不得重放旧值。"
+  },
   "servers": [
     {
       "url": "/"
@@ -657,6 +664,63 @@
           }
         },
         "operationId": "submitMaterial"
+      }
+    },
+    "/api/materials/{category}/records/{record_id}/reconfirm-submit": {
+      "parameters": [
+        {"name": "category", "in": "path", "required": true,
+         "schema": {"type": "string", "enum": ["academic", "competition", "language", "student_work", "honor"]}},
+        {"name": "record_id", "in": "path", "required": true,
+         "schema": {"type": "integer", "minimum": 1}}
+      ],
+      "post": {
+        "summary": "学生确认当前规则和申报信息后重新提交",
+        "operationId": "reconfirmAndSubmitMaterial",
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {
+          "type": "object", "additionalProperties": false,
+          "required": ["version", "rule_version_id", "confirmed"],
+          "properties": {
+            "version": {"type": "integer", "minimum": 1},
+            "rule_version_id": {"type": "integer", "minimum": 1},
+            "confirmed": {"type": "boolean", "const": true}
+          }
+        }}}},
+        "responses": {
+          "200": {"description": "已固定规则版本并正式提交", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Material"}}}},
+          "400": {"description": "参数无效", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "401": {"description": "未登录", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "403": {"description": "没有权限", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "404": {"description": "不存在", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "409": {"description": "未确认、材料版本或规则版本冲突", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
+        }
+      }
+    },
+    "/api/materials/{category}/records/{record_id}/corrections": {
+      "parameters": [
+        {"name": "category", "in": "path", "required": true,
+         "schema": {"type": "string", "enum": ["academic", "competition", "language", "student_work", "honor"]}},
+        {"name": "record_id", "in": "path", "required": true,
+         "schema": {"type": "integer", "minimum": 1}}
+      ],
+      "post": {
+        "summary": "从旧审核记录创建追加式补正版本",
+        "operationId": "createMaterialCorrectionVersion",
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {
+          "type": "object", "additionalProperties": false,
+          "required": ["version", "confirmed_terms"],
+          "properties": {
+            "version": {"type": "integer", "minimum": 1},
+            "confirmed_terms": {"type": "object"}
+          }
+        }}}},
+        "responses": {
+          "201": {"description": "补正版本已创建，旧记录保持不变", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Material"}}}},
+          "400": {"description": "确认字段无效", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "401": {"description": "未登录", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "403": {"description": "非材料本人", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "404": {"description": "材料不存在", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "409": {"description": "状态、版本或规则歧义冲突", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
+        }
       }
     },
     "/api/materials/{category}/records/{record_id}/withdraw": {
@@ -1658,7 +1722,19 @@
         },
         "operationId": "materialOpenApi"
       }
-    }
+    },
+    "/api/materials/competition/rules/current": {"get":{"responses":{"200":{"description":"当前竞赛规则包"}}}},
+    "/api/materials/competition/context": {"get":{"responses":{"200":{"description":"后端权威竞赛上下文"}}}},
+    "/api/materials/competition/workbench-summary": {"get":{"responses":{"200":{"description":"角色化竞赛工作台摘要"}}}},
+    "/api/materials/competition/catalog": {"get":{"responses":{"200":{"description":"原子竞赛目录"}}}},
+    "/api/materials/competition/catalog/{competition_id}": {"get":{"responses":{"200":{"description":"竞赛字段模式"}}}},
+    "/api/materials/competition/records/{record_id}/review-context": {"get":{"responses":{"200":{"description":"只读审核上下文"}}}},
+    "/api/materials/competition/students/{student_id}/summary": {"get":{"responses":{"200":{"description":"授权学生竞赛汇总"}}}},
+    "/api/materials/competition/feedback": {"get":{"responses":{"200":{"description":"学生本人竞赛反馈"}}}},
+    "/api/materials/competition/records/{record_id}/ocr": {"post":{"responses":{"201":{"description":"启动 OCR"}}}},
+    "/api/materials/competition/records/{record_id}/ocr/{job_id}": {"get":{"responses":{"200":{"description":"OCR 状态"}}}},
+    "/api/materials/competition/records/{record_id}/ocr/{job_id}/cancel": {"post":{"responses":{"200":{"description":"逻辑取消 OCR"}}}},
+    "/api/materials/{category}/records/{record_id}/abandon": {"post":{"responses":{"200":{"description":"放弃退回材料"}}}}
   },
   "components": {
     "securitySchemes": {
@@ -2095,6 +2171,12 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 2000
+          },
+          "idempotency_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "客户端重试同一审核命令时复用；省略时旧客户端按材料版本和结论生成兼容键"
           }
         }
       },
@@ -2103,6 +2185,10 @@
         "properties": {
           "error": {
             "type": "string"
+          },
+          "code": {
+            "type": "string",
+            "description": "可选的稳定错误代码，例如 version_conflict、invalid_transition、idempotency_conflict"
           }
         }
       },
@@ -2154,6 +2240,7 @@
           "year",
           "status",
           "version",
+          "allowed_actions",
           "data",
           "analysis",
           "bonus_result"
@@ -2199,6 +2286,14 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 2000000000
+          },
+          "allowed_actions": {
+            "type": "array",
+            "description": "后端按当前用户、组织范围和状态计算的可执行操作；前端仍不能用它替代后端授权",
+            "items": {
+              "type": "string",
+              "enum": ["view", "download_attachment", "edit", "add_attachment", "submit", "withdraw", "check", "review"]
+            }
           },
           "data": {
             "oneOf": [

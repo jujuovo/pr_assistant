@@ -4,4 +4,3 @@ dist-homepage
 package-lock.json
 public
 *.artifact.json
-docs/file-mapping.json

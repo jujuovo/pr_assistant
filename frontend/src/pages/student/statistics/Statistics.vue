@@ -1,269 +1,76 @@
 <template>
-  <div class="page-content project-statistics-page">
-    <header class="statistics-heading">
-      <h1>加分统计</h1>
-    </header>
-    <!-- 统计卡片 -->
-    <section class="score-overview" aria-label="成绩总览">
-      <div class="project-score-grid">
-        <!-- 加载遮罩 -->
-        <div v-if="loading" class="loading-overlay">
-          <div class="loading-spinner"></div>
-          <div class="loading-text">正在加载中...</div>
-        </div>
-        <article class="project-stat-card">
-          <div class="project-stat-label">学业综合成绩</div>
-          <div class="project-stat-value">{{ statistics.academicScore }}</div>
-          <div class="project-stat-note">(推免绩点: {{ statistics.gpa }})</div>
-        </article>
-        <article class="project-stat-card">
-          <div class="project-stat-label">学术专长成绩</div>
-          <div class="project-stat-value">{{ statistics.specialtyScore }}</div>
-          <div class="project-stat-note">(满分: {{ systemSettings.specialtyMaxScore }}分)</div>
-        </article>
-        <article class="project-stat-card">
-          <div class="project-stat-label">综合表现成绩</div>
-          <div class="project-stat-value">{{ statistics.comprehensiveScore }}</div>
-          <div class="project-stat-note">(满分: {{ systemSettings.performanceMaxScore }}分)</div>
-        </article>
-        <article class="project-stat-card project-stat-card-primary">
-          <div class="project-stat-label">推免综合成绩</div>
-          <div class="project-stat-value">{{ statistics.totalScore }}</div>
-          <div class="project-stat-note"
-            >专业排名: {{ statistics.ranking }}/{{ statistics.majorTotalStudents }}</div
-          >
-        </article>
-      </div>
-    </section>
-    <!-- 学术专长成绩明细 -->
-    <section class="detail-panel">
-      <!-- 加载遮罩 -->
-      <div v-if="loading" class="loading-overlay">
-        <div class="loading-spinner"></div>
-        <div class="loading-text">正在加载中...</div>
-      </div>
-      <div class="detail-panel-title"><span>学术专长成绩明细</span></div>
-      <div class="table-container">
+  <section class="page-content authoritative-score-page">
+    <header class="statistics-heading"><h1>加分统计</h1><p>以下结果全部来自后端权威计分快照。</p></header>
+    <p v-if="loading" role="status">正在加载权威快照…</p>
+    <p v-if="error" role="alert">{{ error }}</p>
+    <template v-if="score">
+      <section v-if="score.status === 'no_authoritative_snapshot'" class="detail-panel" role="status">
+        尚无权威计分快照；待审核或待重新确认材料不会被前端估分。
+      </section>
+      <template v-else>
+        <section class="score-overview" aria-label="权威快照总览">
+          <article><strong>学业基础分</strong><span>{{ score.base.academic_score }}</span></article>
+          <article><strong>学术专长计入分</strong><span>{{ score.categories.academic.effective_score }}</span></article>
+          <article><strong>综合表现计入分</strong><span>{{ score.categories.comprehensive.effective_score }}</span></article>
+          <article><strong>推免综合成绩</strong><span>{{ score.comprehensive_score }}</span></article>
+        </section>
+        <p>快照版本：{{ score.snapshot_version }}；状态：{{ score.status }}；更新时间：{{ score.updated_at }}</p>
+        <p>规则版本：{{ score.rule_version_ids.join(', ') || '无' }}；公式：{{ score.formula }}</p>
+      </template>
+
+      <section class="detail-panel">
+        <div class="detail-panel-title"><span>权威计分明细</span></div>
         <table class="application-table">
-          <thead>
-            <tr>
-              <th>项目名称</th>
-              <th>获奖时间</th>
-              <th>自评分数</th>
-              <th>核定分数</th>
-              <th>状态</th>
-            </tr>
-          </thead>
+          <thead><tr><th>材料</th><th>材料状态</th><th>规则版本</th><th>候选分</th><th>计入分</th><th>计入状态/排除原因</th><th>更新时间</th><th>操作</th></tr></thead>
           <tbody>
-            <tr v-for="item in academicApplications" :key="item.id">
-              <td>{{ item.projectName }}</td>
-              <td>{{ formatDate(item.awardDate) }}</td>
-              <td>{{ item.selfScore }}</td>
-              <td>{{ item.status === 'rejected' ? 0 : (item.finalScore ?? item.selfScore) }}</td>
-              <td>
-                <span :class="`status-badge status-${item.status}`">
-                  {{ getStatusText(item.status) }}
-                </span>
-              </td>
+            <tr v-for="row in rows" :key="row.id">
+              <td>{{ row.title }}</td><td>{{ statusText(row) }}</td><td>{{ row.ruleVersionId ?? '-' }}</td>
+              <td>{{ row.candidateScore ?? '-' }}</td><td>{{ row.includedScore ?? '0' }}</td>
+              <td>{{ row.included ? '已计入' : (row.reason || '未计入') }}</td><td>{{ row.updatedAt || '-' }}</td>
+              <td><button v-if="row.allowedActions.includes('confirm_submit') || row.scoringStatus === 'rule_available'"
+                class="btn btn-primary" :disabled="reconfirmingId === row.sourceId" @click="reconfirm(row)">
+                {{ reconfirmingId === row.sourceId ? '正在提交…' : '确认规则并重新提交' }}
+              </button><span v-else>仅查看</span></td>
             </tr>
-            <tr v-if="academicApplications.length === 0">
-              <td colspan="5" class="empty-cell">暂无学术专长申请记录</td>
-            </tr>
+            <tr v-if="rows.length === 0"><td colspan="8">暂无权威计分明细</td></tr>
           </tbody>
         </table>
-      </div>
-    </section>
-    <!-- 综合表现成绩明细 -->
-    <section class="detail-panel">
-      <!-- 加载遮罩 -->
-      <div v-if="loading" class="loading-overlay">
-        <div class="loading-spinner"></div>
-        <div class="loading-text">正在加载中...</div>
-      </div>
-      <div class="detail-panel-title"><span>综合表现成绩明细</span></div>
-      <div class="table-container">
-        <table class="application-table">
-          <thead>
-            <tr>
-              <th>项目名称</th>
-              <th>获奖时间</th>
-              <th>自评分数</th>
-              <th>核定分数</th>
-              <th>状态</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="item in comprehensiveApplications" :key="item.id">
-              <td>{{ item.projectName }}</td>
-              <td>{{ formatDate(item.awardDate) }}</td>
-              <td>{{ item.selfScore }}</td>
-              <td>{{ item.status === 'rejected' ? 0 : (item.finalScore ?? item.selfScore) }}</td>
-              <td>
-                <span :class="`status-badge status-${item.status}`">
-                  {{ getStatusText(item.status) }}
-                </span>
-              </td>
-            </tr>
-            <tr v-if="comprehensiveApplications.length === 0">
-              <td colspan="5" class="empty-cell">暂无综合表现申请记录</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-  </div>
+      </section>
+    </template>
+  </section>
 </template>
 
-<style scoped src="@/assets/styles/pages/student/statistics/Statistics.css"></style>
-
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth.js'
-import { useApplicationsStore } from '@/stores/applications.js'
-import api from '@/services/api.js'
+import { useWorkflowStore } from '@/stores/workflow.js'
+import { scoreRows } from '@/services/scorePresentation.js'
+import materialApi from '@/services/materialApi.js'
 
-const authStore = useAuthStore()
-const applicationsStore = useApplicationsStore()
-
-const applications = ref([])
+const auth = useAuthStore()
+const workflow = useWorkflowStore()
 const loading = ref(false)
-const error = ref(null)
+const error = ref('')
+const reconfirmingId = ref(null)
+const score = computed(() => workflow.score)
+const rows = computed(() => scoreRows(score.value))
+const statusText = row => row.scoringStatus || row.verificationStatus || '待处理'
 
-const statistics = reactive({
-  academicScore: 0,
-  gpa: 0,
-  specialtyScore: 0,
-  comprehensiveScore: 0,
-  totalScore: 0,
-  ranking: '-',
-  majorTotalStudents: 0
-})
-
-const systemSettings = reactive({
-  specialtyMaxScore: 15,
-  performanceMaxScore: 5,
-  academicScoreWeight: 80
-})
-
-// 当前学生信息
-const currentStudent = ref(null)
-
-// 计算属性
-const academicApplications = computed(() => {
-  // 学术专长包括：academic(旧类型)、research、competition、innovation
-  return applications.value.filter(
-    (app) =>
-      (app.applicationType === 'academic' ||
-        app.applicationType === 'research' ||
-        app.applicationType === 'competition' ||
-        app.applicationType === 'innovation') &&
-      app.status === 'approved'
-  )
-})
-
-const comprehensiveApplications = computed(() => {
-  // 综合表现包括：comprehensive(旧类型)、international_internship、military_service、volunteer、social_work、sports、honor_title
-  return applications.value.filter(
-    (app) =>
-      (app.applicationType === 'comprehensive' ||
-        app.applicationType === 'international_internship' ||
-        app.applicationType === 'military_service' ||
-        app.applicationType === 'volunteer' ||
-        app.applicationType === 'social_work' ||
-        app.applicationType === 'sports' ||
-        app.applicationType === 'honor_title') &&
-      app.status === 'approved'
-  )
-})
-
-const getStatusText = (status) => {
-  const statusText = {
-    draft: '草稿',
-    pending: '待审核',
-    approved: '已通过',
-    rejected: '未通过'
-  }
-  return statusText[status] || status
+async function load() {
+  loading.value = true; error.value = ''
+  try { await workflow.loadCurrentScore(auth.user?.studentId || auth.user?.student_id) }
+  catch (cause) { error.value = cause.message || '加载权威计分快照失败' }
+  finally { loading.value = false }
 }
-
-const formatDate = (dateString) => {
-  if (!dateString) return '-'
-  const date = new Date(dateString)
-  return date.toLocaleDateString('zh-CN')
-}
-
-const loadSystemSettings = async () => {
+async function reconfirm(row) {
+  reconfirmingId.value = row.sourceId; error.value = ''
   try {
-    if (currentStudent.value?.facultyId) {
-      // 从学院成绩设置中获取对应学院的设置
-      const facultySettingsData = await api.getFacultyScoreSetting(currentStudent.value.facultyId)
-      systemSettings.specialtyMaxScore = facultySettingsData.settings.specialty_max_score
-      systemSettings.performanceMaxScore = facultySettingsData.settings.performance_max_score
-      systemSettings.academicScoreWeight = facultySettingsData.settings.academic_score_weight
-    } else {
-      // 如果没有学院信息，使用默认值
-      systemSettings.specialtyMaxScore = 15
-      systemSettings.performanceMaxScore = 5
-      systemSettings.academicScoreWeight = 80
-    }
-  } catch (err) {
-    console.error('加载学院成绩设置失败:', err)
-    // 使用默认值
-    systemSettings.specialtyMaxScore = 15
-    systemSettings.performanceMaxScore = 5
-    systemSettings.academicScoreWeight = 80
-  }
+    await materialApi.reconfirmSubmit(row.category, Number(row.sourceId), row.sourceVersion, row.ruleVersionId)
+    await load()
+  } catch (cause) { error.value = cause.message || '重新提交失败' }
+  finally { reconfirmingId.value = null }
 }
-
-const loadStatistics = async () => {
-  loading.value = true
-  error.value = null
-
-  try {
-    if (!authStore.isAuthenticated) {
-      error.value = '用户未登录'
-      return
-    }
-
-    // 使用正确的学生学号字段（studentId）
-    const studentId = authStore.user.studentId || 'student'
-
-    // 获取学生的所有申请
-    const appData = await applicationsStore.fetchApplications({ studentId })
-    applications.value = appData
-
-    // 获取加分统计数据
-    const statsData = await applicationsStore.fetchStatistics(studentId)
-
-    // 更新学生信息
-    currentStudent.value = {
-      facultyId: statsData.faculty_id
-    }
-
-    // 获取学院成绩设置
-    await loadSystemSettings()
-
-    // 更新统计信息
-    // 注意：后端返回的是下划线命名，前端使用的是驼峰式命名
-    statistics.academicScore = statsData.academic_score || 0
-    statistics.gpa = statsData.gpa || 0
-    statistics.specialtyScore = statsData.specialty_score || 0
-    statistics.comprehensiveScore = statsData.comprehensive_performance_total || 0
-    statistics.totalScore = statsData.total_score || statsData.comprehensive_score || 0
-    statistics.ranking = statsData.ranking || '-'
-    statistics.majorTotalStudents = statsData.major_total_students || 0
-  } catch (err) {
-    console.error('加载统计数据失败:', err)
-    error.value = '加载统计数据失败，请刷新页面重试'
-  } finally {
-    loading.value = false
-  }
-}
-
-// 生命周期
-onMounted(() => {
-  loadStatistics()
-})
+onMounted(load)
 </script>
 
 <style scoped src="@/assets/styles/pages/student/statistics/Statistics.2.css"></style>

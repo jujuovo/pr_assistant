@@ -1,4 +1,6 @@
 import pytest
+from datetime import date
+from types import SimpleNamespace
 from models import User, Student, Faculty, Department, Major
 from extensions import db
 from tools.seed_demo import seed_demo
@@ -40,18 +42,30 @@ def test_seed_collision_rolls_back(env):
 
 def test_optional_rule_is_faculty_scoped_and_idempotent(env):
     from models import Rule, RuleCalculation
+    from workflow_models import RecommendationCyclePolicy, RuleVersion
     seed_demo(with_test_rule=True)
     faculty = Faculty.query.filter_by(name='信息学院').one()
     rule = Rule.query.filter_by(faculty_id=faculty.id).one()
     assert rule.score == 5 and rule.max_score == 10 and rule.max_count == 5
     calculation = RuleCalculation.query.filter_by(rule_id=rule.id).one()
     assert [n['score'] for n in calculation.parameters['tree']['root']['children']] == [5, 3]
+    policy = RecommendationCyclePolicy.query.filter_by(active_marker=1).one()
+    version = RuleVersion.query.filter_by(rule_id=rule.id).one()
+    assert policy.cycle_code == 2026
+    assert policy.eligible_award_start_date.isoformat() == '2023-09-01'
+    assert policy.eligible_award_end_date.isoformat() == '2026-08-31'
+    assert version.snapshot['cycle_code'] == 2026
+    assert version.snapshot['score'] == 5
     rule.score = 4
     db.session.commit()
     seed_demo(with_test_rule=True)
     assert Rule.query.filter_by(faculty_id=faculty.id).count() == 1
     assert RuleCalculation.query.filter_by(rule_id=rule.id).count() == 1
     assert rule.score == 4
+    assert RuleVersion.query.filter_by(rule_id=rule.id).count() == 2
+    seed_demo(with_test_rule=True)
+    assert RuleVersion.query.filter_by(rule_id=rule.id).count() == 2
+    assert RecommendationCyclePolicy.query.count() == 1
 
 
 def test_shared_settings_use_absolute_dates_and_keep_other_fields(env):
@@ -61,7 +75,32 @@ def test_shared_settings_use_absolute_dates_and_keep_other_fields(env):
     db.session.add(settings); db.session.commit()
     seed_demo(with_test_rule=True, with_test_settings=True)
     seed_demo(with_test_rule=True, with_test_settings=True)
-    assert settings.academic_year == '2025'
+    assert settings.academic_year == '2026'
     assert settings.application_start == datetime(2026, 10, 1, 10, 28, 46, 965115)
     assert settings.application_end.year == 2027
     assert settings.single_file_size_limit == 17 and settings.system_status == 'maintenance'
+
+
+def test_student001_lanqiao_prerequisites_resolve_to_five_points(env):
+    from domain.cycles import evaluate_award_date
+    from domain.scoring import calculate_score
+    from workflow_models import RecommendationCyclePolicy
+    from use_cases.scoring import match_published_rule
+
+    seed_demo(with_test_rule=True, with_test_settings=True)
+    student = Student.query.filter_by(student_id='student001').one()
+    policy = RecommendationCyclePolicy.query.filter_by(active_marker=1).one()
+    eligibility = evaluate_award_date(
+        date(2024, 5, 1),
+        policy.eligible_award_start_date,
+        policy.eligible_award_end_date,
+    )
+    match = match_published_rule(SimpleNamespace(
+        year=policy.cycle_code,
+        category='competition',
+        faculty_id=student.faculty_id,
+    ))
+
+    assert eligibility.eligible is True
+    assert match['status'] == 'matched'
+    assert calculate_score(match['version'].snapshot).effective_score == 5

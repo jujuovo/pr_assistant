@@ -4,6 +4,8 @@ from contextlib import contextmanager
 from decimal import Decimal
 from sqlalchemy import event, inspect
 import pytest
+
+pytestmark = pytest.mark.usefixtures("active_cycle_2025")
 from extensions import db
 from models import Application, Student
 from automation_models import AutomationBatch, AutomationItem
@@ -167,10 +169,14 @@ def test_year_recalculation_bulk_loads_and_preserves_cap(env):
     config = {"credit_rate": "0.1", "honor_rate": "0.1", "max_score": "1", "honor_enabled": True,
               "start_date": "2025-01-01", "end_date": "2025-12-31", "rounding": "HALF_UP_4"}
     application_ids = []
+    from use_cases.cycles import current_cycle_policy
+    cycle = current_cycle_policy()
     for index in range(30):
         application = Application(student_id="S1", student_name="张三", faculty_id=1,
                                   department_id=1, major_id=1, application_type="comprehensive",
-                                  status="approved", final_score=0, project_name=f"活动{index}")
+                                  status="approved", final_score=0, project_name=f"活动{index}",
+                                  cycle_code=cycle.cycle_code,
+                                  cycle_policy_version_id=cycle.id)
         db.session.add(application)
         db.session.flush()
         application_ids.append(application.id)

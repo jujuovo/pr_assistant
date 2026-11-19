@@ -29,9 +29,39 @@ from services.certificates.service import (authorize_application, validate_selec
 from services.automation import actor
 from services.materials.service import has_linked_material, scope_application_query
 from blueprints.score_bp import update_student_statistics
+from material_models import MaterialRecord
+from workflow_models import MaterialReviewCommand
 
 # 创建蓝图实例
 application_bp = Blueprint("application", __name__, url_prefix="/api")
+
+
+def _compatibility_meta(application, rule=None):
+    rule = rule or (db.session.get(Rule, application.rule_id) if application.rule_id else None)
+    competition = bool(rule and rule.sub_type == "competition")
+    current_app.logger.info(
+        "compatibility_application_access",
+        extra={"application_id": application.id, "student_id": application.student_id,
+               "category": rule.sub_type if rule else None,
+               "blocked_competition": competition},
+    )
+    return {
+        "compatibility": {
+            "mode": "legacy_application",
+            "source": "Application",
+            "competition_writes_allowed": False,
+            "status": "forbidden_competition_history" if competition else "noncompetition_only",
+        }
+    }
+
+
+def _latest_scoring_result(application_id):
+    record = MaterialRecord.query.filter_by(application_id=application_id).first()
+    if record is None:
+        return None
+    command = (MaterialReviewCommand.query.filter_by(record_id=record.id)
+               .order_by(MaterialReviewCommand.id.desc()).first())
+    return command.result.get("scoring") if command else None
 
 @application_bp.errorhandler(HTTPException)
 def application_http_error(error):
@@ -235,7 +265,9 @@ def get_applications():
             "rule": rule_dict.get(app.rule_id) if app.rule_id else None,
             # 动态系数字段
             "dynamicCoefficients": app.dynamic_coefficients,
+            "scoringResult": _latest_scoring_result(app.id),
         }
+        app_data.update(_compatibility_meta(app, next((rule for rule in rules if rule.id == app.rule_id), None)))
         app_list.append(app_data)
 
     return jsonify(app_list), 200
@@ -344,9 +376,11 @@ def get_application(id):
         # 规则相关字段
         "ruleId": app.rule_id,
         "rule": rule_info,
+        "scoringResult": _latest_scoring_result(app.id),
     }
 
     app_data.update(selection_json(app))
+    app_data.update(_compatibility_meta(app))
     return jsonify(app_data), 200
 
 
@@ -397,6 +431,17 @@ def create_application():
 
         # 使用转换后的数据
         data = transformed_data
+        authoritative = {"final_score", "review_comment", "reviewed_at", "reviewed_by"}
+        if authoritative.intersection(data) or data.get("status") in ("approved", "rejected"):
+            abort(409, description="审核状态和最终分数只能通过统一审核入口修改")
+        if data.get("rule_id") is not None:
+            submitted_rule = db.session.get(Rule, data["rule_id"])
+            if submitted_rule is not None and submitted_rule.sub_type == "competition":
+                return jsonify({
+                    "error": "学业竞赛必须使用新材料申报入口",
+                    "code": "competition_material_route_required",
+                    "route": "/api/materials/competition/records",
+                }), 409
 
         # 验证项目名称长度
         if "project_name" in data and (len(data["project_name"]) < 2 or len(data["project_name"]) > 50):
@@ -544,6 +589,10 @@ def create_application():
             rule_id=data.get("rule_id"),
         )
 
+        if new_application.status == "pending":
+            from use_cases.cycles import pin_application_cycle
+            pin_application_cycle(new_application)
+
         db.session.add(new_application)
         db.session.flush()
         if certificate_selection:
@@ -579,6 +628,7 @@ def create_application():
             "ruleId": new_application.rule_id,
             "message": "申请创建成功",
         }
+        app_data.update(_compatibility_meta(new_application))
 
         return jsonify(app_data), 201
     except HTTPException as e:
@@ -799,7 +849,11 @@ def update_application(id):
 
         # 更新基本信息
         application.self_score = data.get("self_score", application.self_score)
-        application.status = data.get("status", application.status)
+        next_status = data.get("status", application.status)
+        if application.status == "draft" and next_status == "pending":
+            from use_cases.cycles import pin_application_cycle
+            pin_application_cycle(application)
+        application.status = next_status
         application.final_score = data.get("final_score", application.final_score)
         application.review_comment = data.get(
             "review_comment", application.review_comment
@@ -905,12 +959,39 @@ def review_application(id):
             db.session.rollback()
             return jsonify({"error": error.description}), error.code
     application = Application.query.get_or_404(id)
-    if CertificateAssessment.query.filter_by(application_id=id).first() or has_linked_material(id):
-        authorize_application(application, reviewer=True)
+    reviewer = actor()
+    if reviewer.role not in ("teacher", "admin") or reviewer.faculty_id != application.faculty_id:
+        abort(403, description="没有该申请的审核权限")
     certificate = CertificateAssessment.query.filter_by(application_id=id).first()
+    if ((certificate and not certificate.claims.get("preview_flow")) or
+            (has_linked_material(id) and not (certificate and certificate.claims.get("preview_flow")))):
+        authorize_application(application, reviewer=True)
     if certificate and certificate.claims.get("preview_flow") and application.status == "draft":
         abort(409, description="学生尚未确认提交，不可审核识别草稿")
     data = request.get_json()
+
+    if isinstance(data, dict) and "finalScore" in data:
+        current_app.logger.warning(
+            "legacy_final_score_request application_id=%s actor_id=%s has_reason=%s",
+            application.id, reviewer.id, bool(data.get("overrideReason")),
+        )
+
+    if certificate and certificate.claims.get("preview_flow"):
+        from use_cases.certificates import review_certificate_application
+        from use_cases.materials import MaterialUseCaseError
+        try:
+            result = review_certificate_application(reviewer, application, data)
+            db.session.commit()
+            return jsonify(result), 200 if result["overall_status"] == "complete" else 409
+        except MaterialUseCaseError as error:
+            db.session.rollback()
+            return jsonify({"error": str(error), "code": error.code}), error.status_code
+
+    if isinstance(data, dict) and "finalScore" in data:
+        return jsonify({
+            "error": "旧 finalScore 写入已停用；请使用统一材料审核的显式 override",
+            "code": "legacy_final_score_not_supported",
+        }), 400
 
     application.status = data["status"]
 
@@ -989,14 +1070,22 @@ def review_application(id):
 
     application.review_comment = data.get("reviewComment")
     application.reviewed_at = datetime.now(pytz.timezone("Asia/Shanghai"))
-    application.reviewed_by = data.get("reviewedBy")
+    application.reviewed_by = reviewer.name
 
+    from use_cases.scoring import adapt_legacy_application, invalidate_score_entries
+    if application.status == "approved":
+        scoring_result = adapt_legacy_application(application, source_type="certificate" if certificate else "legacy_application")
+    else:
+        invalidated, snapshots = invalidate_score_entries("certificate" if certificate else "legacy_application", application.id,
+                                 f"application review changed to {application.status}")
+        scoring_result = {"status": "invalidated", "score_entry_ids": [row.id for row in invalidated],
+                          "snapshot_ids": [row.id for row in snapshots]}
+    # 旧字段仅作为兼容投影，与新计分事实同一事务提交。
+    update_student_statistics(application.student_id, commit=False)
     db.session.commit()
 
-    # 更新学生的统计数据
-    update_student_statistics(application.student_id)
-
-    return jsonify({"message": "申请审核成功"}), 200
+    return jsonify({"message": "申请审核成功", "status": application.status,
+                    "version": 1, "scoring": scoring_result}), 200
 
 
 # 删除申请
@@ -1058,7 +1147,18 @@ def get_pending_applications():
     student_name = request.args.get("studentName")
 
     # 构建查询
-    query = scope_application_query(Application.query.filter_by(status="pending"))
+    from sqlalchemy import or_
+    linked_ids = db.session.query(MaterialRecord.application_id).filter(
+        MaterialRecord.application_id.isnot(None)
+    )
+    reviewable_ids = db.session.query(MaterialRecord.application_id).filter(
+        MaterialRecord.application_id.isnot(None),
+        MaterialRecord.status.in_(("submitted", "under_review")),
+        MaterialRecord.rule_version_id.isnot(None),
+    )
+    query = scope_application_query(Application.query.filter_by(status="pending")).filter(
+        or_(~Application.id.in_(linked_ids), Application.id.in_(reviewable_ids))
+    )
 
     # 按学院筛选
     if faculty_id:

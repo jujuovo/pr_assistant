@@ -18,6 +18,18 @@ from extensions import db
 import traceback
 import json
 from utils.rule_engine import RuleEngine
+from use_cases.rule_versions import publish_rule_version
+from services.automation import actor
+from use_cases.structured_rules import (
+    StructuredRuleError, create_rule_draft, disable_rule,
+    list_uncovered_terms, preview_rule, publish_draft, serialize_rule,
+)
+from domain.competition_rules import CompetitionPackageError
+from use_cases.competition_rules import (
+    copy_competition_package_draft, edit_competition_package_draft,
+    preview_competition_package_diff, publish_competition_package_draft,
+)
+from workflow_models import CompetitionRulePackage
 import sys
 
 # 设置默认编码为UTF-8
@@ -26,6 +38,172 @@ sys.stderr.reconfigure(encoding="utf-8")
 
 # 创建蓝图实例
 rule_bp = Blueprint("rule", __name__, url_prefix="/api")
+
+
+def _structured_error(error):
+    return jsonify({"error": str(error), "code": error.code, **error.details}), error.status_code
+
+
+def _package_error(error):
+    db.session.rollback()
+    status = 403 if error.code == "forbidden" else 409
+    return jsonify({"error": str(error), "code": error.code,
+                    "details": getattr(error, "details", [])}), status
+
+
+def _package_dto(row):
+    return {
+        "id": row.id, "package_id": row.package_id, "cycle_code": row.cycle_code,
+        "scope_key": row.scope_key, "version": row.version,
+        "draft_revision": row.draft_revision, "status": row.status,
+        "source_package_id": row.source_package_id,
+        "source_summary": row.source_summary, "digest": row.digest,
+        "created_at": row.created_at.isoformat() + "Z",
+        "updated_at": row.updated_at.isoformat() + "Z",
+        "published_at": row.published_at.isoformat() + "Z" if row.published_at else None,
+        "allowed_actions": (["view", "edit", "diff", "validate", "publish"]
+                            if row.status == "draft" else ["view", "copy"]),
+        "snapshot": row.snapshot,
+    }
+
+
+@rule_bp.get("/competition-rule-packages")
+def list_competition_rule_packages():
+    user = actor()
+    if user.role != "admin" or not user.faculty_id:
+        return jsonify({"error": "forbidden", "code": "forbidden"}), 403
+    rows = CompetitionRulePackage.query.order_by(
+        CompetitionRulePackage.cycle_code.desc(), CompetitionRulePackage.version.desc()
+    ).all()
+    return jsonify({"items": [_package_dto(row) for row in rows]})
+
+
+@rule_bp.post("/competition-rule-packages/copy")
+def copy_competition_rule_package():
+    try:
+        payload = request.get_json(silent=True) or {}
+        row, created = copy_competition_package_draft(
+            actor(), source_package_id=payload.get("source_package_id"),
+            target_cycle=payload.get("target_cycle"),
+            idempotency_key=payload.get("idempotency_key"),
+        )
+        db.session.commit()
+        return jsonify({**_package_dto(row), "created": created}), 201 if created else 200
+    except CompetitionPackageError as error:
+        return _package_error(error)
+
+
+@rule_bp.put("/competition-rule-packages/<int:package_id>/draft")
+def edit_competition_rule_package(package_id):
+    try:
+        payload = request.get_json(silent=True) or {}
+        row, changed = edit_competition_package_draft(
+            actor(), db.get_or_404(CompetitionRulePackage, package_id),
+            expected_revision=payload.get("draft_revision"), snapshot=payload.get("snapshot"),
+        )
+        db.session.commit()
+        return jsonify({**_package_dto(row), "changed": changed})
+    except CompetitionPackageError as error:
+        return _package_error(error)
+
+
+@rule_bp.get("/competition-rule-packages/<int:package_id>/diff")
+def diff_competition_rule_package(package_id):
+    try:
+        return jsonify(preview_competition_package_diff(
+            actor(), db.get_or_404(CompetitionRulePackage, package_id)
+        ))
+    except CompetitionPackageError as error:
+        return _package_error(error)
+
+
+@rule_bp.post("/competition-rule-packages/<int:package_id>/validate")
+def validate_competition_rule_package(package_id):
+    try:
+        user = actor()
+        if user.role != "admin" or not user.faculty_id:
+            raise CompetitionPackageError("administrator authorization required", code="forbidden")
+        row = db.get_or_404(CompetitionRulePackage, package_id)
+        from domain.competition_rules import validate_competition_package
+        validate_competition_package(row.snapshot)
+        return jsonify({"valid": True, "package_id": row.id,
+                        "draft_revision": row.draft_revision, "blockers": []})
+    except CompetitionPackageError as error:
+        return _package_error(error)
+
+
+@rule_bp.post("/competition-rule-packages/<int:package_id>/publish")
+def publish_competition_rule_package(package_id):
+    try:
+        payload = request.get_json(silent=True) or {}
+        row, created = publish_competition_package_draft(
+            actor(), db.get_or_404(CompetitionRulePackage, package_id),
+            expected_revision=payload.get("draft_revision"),
+            idempotency_key=payload.get("idempotency_key"),
+        )
+        db.session.commit()
+        return jsonify({**_package_dto(row), "published": created})
+    except CompetitionPackageError as error:
+        return _package_error(error)
+
+
+def _formal_competition_rule_protected(rule=None, payload=None):
+    is_competition = ((rule is not None and rule.sub_type == "competition") or
+                      (isinstance(payload, dict) and payload.get("sub_type") == "competition"))
+    return is_competition and CompetitionRulePackage.query.filter_by(status="current").first() is not None
+
+
+def _legacy_competition_rejected():
+    return jsonify({
+        "error": "正式竞赛规则包只能通过规则包命令维护",
+        "code": "competition_package_command_required",
+    }), 409
+
+
+@rule_bp.post("/structured-rules/drafts")
+def create_structured_rule_draft():
+    try:
+        rule = create_rule_draft(actor(), request.get_json(silent=True))
+        return jsonify(serialize_rule(rule)), 201
+    except StructuredRuleError as error:
+        return _structured_error(error)
+
+
+@rule_bp.post("/structured-rules/<int:rule_id>/preview")
+def preview_structured_rule(rule_id):
+    try:
+        return jsonify(preview_rule(actor(), db.get_or_404(Rule, rule_id)))
+    except StructuredRuleError as error:
+        return _structured_error(error)
+
+
+@rule_bp.post("/structured-rules/<int:rule_id>/publish")
+def publish_structured_rule(rule_id):
+    try:
+        body = request.get_json(silent=True) or {}
+        rule, version, created, scan = publish_draft(
+            actor(), db.get_or_404(Rule, rule_id), body.get("version")
+        )
+        return jsonify({"rule": serialize_rule(rule), "rule_version_id": version.id,
+                        "created": created, "coverage_scan": scan})
+    except StructuredRuleError as error:
+        return _structured_error(error)
+
+
+@rule_bp.post("/structured-rules/<int:rule_id>/disable")
+def disable_structured_rule(rule_id):
+    try:
+        return jsonify(serialize_rule(disable_rule(actor(), db.get_or_404(Rule, rule_id))))
+    except StructuredRuleError as error:
+        return _structured_error(error)
+
+
+@rule_bp.get("/structured-rules/uncovered-terms")
+def get_uncovered_structured_terms():
+    try:
+        return jsonify({"items": list_uncovered_terms(actor())})
+    except StructuredRuleError as error:
+        return _structured_error(error)
 
 
 # 获取所有规则
@@ -135,6 +313,8 @@ def get_rule(rule_id):
 def create_rule():
     try:
         data = request.get_json()
+        if _formal_competition_rule_protected(payload=data):
+            return _legacy_competition_rejected()
         print(f"Received data for creating rule: {data}")
 
         # 验证必填字段
@@ -169,9 +349,7 @@ def create_rule():
         )
 
         db.session.add(new_rule)
-        print("Added new rule to session")
-        db.session.commit()
-        print("Committed new rule to database")
+        db.session.flush()
 
         # 处理规则计算
         calculation_data = data.get("calculation")
@@ -202,6 +380,9 @@ def create_rule():
             )
             db.session.add(new_calculation)
 
+        if new_rule.status == "active":
+            db.session.flush()
+            publish_rule_version(new_rule)
         db.session.commit()
 
         return (
@@ -243,6 +424,8 @@ def update_rule(rule_id):
     try:
         rule = Rule.query.get_or_404(rule_id)
         data = request.get_json()
+        if _formal_competition_rule_protected(rule=rule, payload=data):
+            return _legacy_competition_rejected()
 
         # 更新规则字段
         if "name" in data:
@@ -275,8 +458,6 @@ def update_rule(rule_id):
                 except json.JSONDecodeError:
                     calculation_formula = None
             rule.calculation_formula = calculation_formula
-
-        db.session.commit()
 
         # 更新规则计算
         calculation_data = data.get("calculation")
@@ -315,6 +496,9 @@ def update_rule(rule_id):
                 )
                 db.session.add(new_calculation)
 
+        if rule.status == "active":
+            db.session.flush()
+            publish_rule_version(rule)
         db.session.commit()
 
         return (
@@ -354,6 +538,8 @@ def update_rule(rule_id):
 def delete_rule(rule_id):
     try:
         rule = Rule.query.get_or_404(rule_id)
+        if _formal_competition_rule_protected(rule=rule):
+            return _legacy_competition_rejected()
 
         # 删除所有引用该规则的申请记录
         Application.query.filter_by(rule_id=rule_id).update({"rule_id": None})
@@ -622,7 +808,11 @@ def calculate_rule_score(rule_id):
 def toggle_rule_status(rule_id):
     try:
         rule = Rule.query.get_or_404(rule_id)
+        if _formal_competition_rule_protected(rule=rule):
+            return _legacy_competition_rejected()
         rule.status = "active" if rule.status == "disabled" else "disabled"
+        if rule.status == "active":
+            publish_rule_version(rule)
         db.session.commit()
 
         return (

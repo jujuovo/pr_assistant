@@ -5,14 +5,35 @@ import io
 from pathlib import Path
 import uuid
 from flask import Blueprint, abort, current_app, jsonify, request, send_file
+from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from werkzeug.exceptions import HTTPException
 from extensions import db
-from material_models import MaterialRecord, MaterialAttachment, MaterialSource
+from material_models import CompetitionOcrJob, MaterialRecord, MaterialAttachment, MaterialSource
 from services.automation import actor
 from services.materials.schemas import (TYPES, type_view, normalize, analyze, integer, text, object_keys)
-from services.materials.service import (body, record_at, category_exists, authorize, make_record, view,
+from services.materials.service import (body, record_at, category_exists, authorize, view,
                                        version_change, event, stored_path, check, import_sources)
+from use_cases.materials import (
+    MaterialUseCaseError,
+    add_attachments,
+    abandon_returned_competition,
+    create_material,
+    competition_review_context,
+    competition_workflow_context,
+    competition_workbench_summary,
+    confirm_available_rule,
+    create_correction_version,
+    edit_material,
+    review_material,
+    reconfirm_competition_rule,
+    submit_material,
+    validate_competition_review_command,
+    withdraw_material,
+)
+from workflow_models import CompetitionRulePackage, MaterialReviewCommand
+from use_cases.competition_review import review_competition_material, student_competition_feedback, teacher_competition_summary
+from use_cases.competition_ocr import start_competition_ocr, cancel_competition_ocr
 
 material_bp=Blueprint('materials',__name__,url_prefix='/api/materials')
 
@@ -29,9 +50,19 @@ def invalid(error):
     return jsonify({'error':str(error)}),400
 
 
+@material_bp.errorhandler(MaterialUseCaseError)
+def use_case_error(error):
+    db.session.rollback()
+    return jsonify({'error':str(error),'code':error.code}),error.status_code
+
+
 @material_bp.errorhandler(IntegrityError)
 def conflict(error):
     db.session.rollback()
+    message = str(getattr(error, 'orig', error))
+    if ('ix_material_competition_duplicate' in message or
+            'material_record.student_id, material_record.year, material_record.competition_duplicate_digest' in message):
+        return jsonify({'error':'相同竞赛材料已经提交','code':'duplicate_submission'}),409
     return jsonify({'error':'记录发生并发冲突，整批未保存，请刷新重试'}),409
 
 
@@ -41,24 +72,117 @@ def types():
     return jsonify(type_view())
 
 
+def _competition_package_for_reader():
+    package, _context = competition_workflow_context(actor())
+    return package
+
+
+@material_bp.get('/competition/context')
+def competition_context():
+    package, context = competition_workflow_context(
+        actor(), expected_digest=request.headers.get('If-Match')
+    )
+    response = jsonify(context)
+    response.headers['ETag'] = f'"{package.digest}"'
+    response.headers['Cache-Control'] = 'private, no-store'
+    return response
+
+
+@material_bp.get('/competition/rules/current')
+def competition_current_package():
+    package, context = competition_workflow_context(actor())
+    return jsonify({
+        'package_id': package.package_id,
+        'version': package.version,
+        'digest': package.digest,
+        'cycle_code': context['cycle']['cycle_code'],
+        'evidence_period': context['evidence_period'],
+        'catalog_count': context['catalog']['count'],
+        'field_schema': context['field_schema'],
+        'allowed_actions': context['allowed_actions'],
+    })
+
+
+@material_bp.get('/competition/workbench-summary')
+def competition_workbench():
+    return jsonify(competition_workbench_summary(actor()))
+
+
+@material_bp.get('/competition/catalog')
+def competition_catalog():
+    package = _competition_package_for_reader()
+    query = (request.args.get('q') or '').strip().casefold()
+    catalog = package.snapshot['catalog']
+    if query:
+        catalog = [item for item in catalog if query in item['name'].casefold()]
+    return jsonify({'package_id': package.package_id, 'digest': package.digest, 'items': [
+        {
+            'competition_id': item['competition_id'], 'name': item['name'],
+            'category': item['category'], 'levels': item['levels'],
+            'event_family': item['event_family'],
+        }
+        for item in catalog
+    ]})
+
+
+@material_bp.get('/competition/catalog/<competition_id>')
+def competition_catalog_item(competition_id):
+    package = _competition_package_for_reader()
+    item = next((value for value in package.snapshot['catalog']
+                 if value['competition_id'] == competition_id), None)
+    if item is None:
+        return jsonify({'error': '竞赛不在当前正式目录', 'code': 'unknown_competition'}), 404
+    schema = package.snapshot['field_schema']
+    levels = item['levels']
+    return jsonify({
+        'package_id': package.package_id,
+        'competition': {
+            'competition_id': item['competition_id'], 'name': item['name'],
+            'category': item['category'], 'organizer': item['organizer'],
+            'event_family': item['event_family'],
+        },
+        'field_schema': {
+            'required': schema['required'],
+            'participation_modes': schema['participation_modes'],
+            'team_required': schema['team_required'],
+            'levels': levels,
+            'awards_by_level': {level: schema['awards'][level] for level in levels},
+            'formats': item.get('formats', []),
+        },
+    })
+
+
 @material_bp.route('/<category>/records',methods=['GET','POST'])
 def records(category):
     category_exists(category)
     user=actor()
     if request.method=='POST':
-        row=make_record(category,body())
+        row=create_material(user,category,body())
         db.session.commit()
         return jsonify(view(row)),201
     query=MaterialRecord.query.filter_by(category=category)
     if user.role=='student':
         query=query.filter_by(student_id=user.student_id)
-    elif user.role in ('teacher','admin') and user.faculty_id:
+    elif user.role=='teacher' and user.faculty_id:
+        query=query.filter_by(faculty_id=user.faculty_id).filter(
+            MaterialRecord.status.in_(('submitted', 'under_review')),
+        )
+        if category != 'competition':
+            query = query.filter(MaterialRecord.rule_version_id.isnot(None))
+        else:
+            query = query.filter(or_(
+                MaterialRecord.competition_rule_package_id.isnot(None),
+                MaterialRecord.rule_version_id.isnot(None),
+            ))
+    elif user.role=='admin' and user.faculty_id:
         query=query.filter_by(faculty_id=user.faculty_id)
     else:
         abort(403)
     for name in ('student_id','status'):
         if request.args.get(name):
             query=query.filter(getattr(MaterialRecord,name)==request.args[name])
+    if user.role == 'student' and not request.args.get('status'):
+        query = query.filter(MaterialRecord.status != 'abandoned')
     if request.args.get('year'):
         query=query.filter_by(year=integer(int(request.args['year']),'year',2000,2100))
     limit=integer(int(request.args.get('limit','50')),'limit',1,100)
@@ -73,14 +197,9 @@ def record(category,record_id):
     if request.method=='GET':
         return jsonify(view(row))
     user=actor()
-    if user.role!='student' or user.student_id!=row.student_id:
-        abort(403,description='仅学生本人可修改申报字段')
     payload=body()
     object_keys(payload,{'version','data'},{'version','data'})
-    normalized=normalize(category,payload['data'])
-    version_change(row,payload['version'],['draft','needs_correction'],
-                   {'data':normalized,'analysis':analyze(category,normalized),'check_report':None,'status':'draft'})
-    event(row,'edited',{'version':row.version,'data':normalized})
+    edit_material(user,row,payload['version'],payload['data'])
     db.session.commit()
     return jsonify(view(row))
 
@@ -88,11 +207,58 @@ def record(category,record_id):
 @material_bp.post('/<category>/records/<int:record_id>/submit')
 def submit(category,record_id):
     row=record_at(category,record_id)
-    if actor().role!='student':
-        abort(403,description='仅学生本人可提交材料')
+    user=actor()
     payload=body(); object_keys(payload,{'version'},{'version'})
-    version_change(row,payload['version'],['draft'],{'status':'submitted'})
-    event(row,'submitted',{'version':row.version})
+    submit_material(user,row,payload['version'])
+    db.session.commit()
+    return jsonify(view(row))
+
+
+@material_bp.post('/<category>/records/<int:record_id>/reconfirm-submit')
+def reconfirm_submit(category, record_id):
+    row = record_at(category, record_id)
+    user = actor()
+    payload = body()
+    if category == 'competition':
+        object_keys(payload, {'version', 'confirmed_terms', 'confirmed'},
+                    {'version', 'confirmed_terms', 'confirmed'})
+        replacement = reconfirm_competition_rule(
+            user, row, payload['version'], payload['confirmed_terms'], payload['confirmed']
+        )
+        db.session.commit()
+        return jsonify(view(replacement)), 201
+    object_keys(payload, {'version', 'rule_version_id', 'confirmed'},
+                {'version', 'rule_version_id', 'confirmed'})
+    row, rule = confirm_available_rule(
+        user, row, payload['version'], payload['rule_version_id'], payload['confirmed']
+    )
+    db.session.commit()
+    result = view(row); result['rule_match'] = rule
+    return jsonify(result)
+
+
+@material_bp.post('/<category>/records/<int:record_id>/corrections')
+def create_correction(category, record_id):
+    row = record_at(category, record_id)
+    user = actor(); payload = body()
+    object_keys(payload, {'version', 'confirmed_terms'}, {'version', 'confirmed_terms'})
+    corrected = create_correction_version(
+        user, row, payload['version'], payload['confirmed_terms']
+    )
+    db.session.commit()
+    result = view(corrected)
+    result.update({"supersedes_record_id": row.id,
+                   "correction_sequence": corrected.correction_sequence,
+                   "evidence_source_record_id": row.id})
+    return jsonify(result), 201
+
+
+@material_bp.post('/<category>/records/<int:record_id>/abandon')
+def abandon_correction(category, record_id):
+    row = record_at(category, record_id)
+    user = actor(); payload = body()
+    object_keys(payload, {'version'}, {'version'})
+    abandon_returned_competition(user, row, payload['version'])
     db.session.commit()
     return jsonify(view(row))
 
@@ -111,18 +277,75 @@ def check_record(category,record_id):
 @material_bp.post('/<category>/records/<int:record_id>/review')
 def review(category,record_id):
     row=record_at(category,record_id)
-    authorize(row,staff=True)
-    payload=body(); object_keys(payload,{'version','decision','comment'},{'version','decision','comment'})
-    if payload['decision'] not in ('verified','rejected','needs_correction'):
-        raise ValueError('decision必须为verified/rejected/needs_correction')
-    comment=text(payload['comment'],'核验说明',maximum=2000)
-    version_change(row,payload['version'],['submitted'],{'status':payload['decision']})
-    event(row,'reviewed',{'version':row.version,'decision':row.status,'comment':comment,
-                         'data_snapshot':row.data,'check_report_snapshot':row.check_report,
-                         'attachments_snapshot':[{'id':f.id,'filename':f.filename,'size':f.size,'sha256':f.sha256}
-                                                 for f in row.attachments]})
+    user=actor()
+    payload=body()
+    if category == 'competition':
+        # Validate the dedicated command before the atomic executor (task 4.3)
+        # sees any request.  Legacy decision names and override fields are
+        # deliberately unavailable on this route.
+        result, replayed = review_competition_material(user, row, payload)
+        db.session.commit()
+        result['replayed'] = replayed
+        return jsonify(result)
+    object_keys(payload,{'version','decision','comment','idempotency_key','override_score','override_reason'},
+                {'version','decision','comment'})
+    key=payload.get('idempotency_key') or f"legacy:{user.id}:{row.id}:{payload['version']}:{payload['decision']}"
+    _,replayed=review_material(user,row,payload['version'],payload['decision'],payload['comment'],key,
+                               payload.get('override_score'),payload.get('override_reason'))
     db.session.commit()
-    return jsonify(view(row))
+    command=MaterialReviewCommand.query.filter_by(record_id=row.id,idempotency_key=key).one()
+    result=view(row); result.update(command.result['scoring']); result['replayed']=replayed
+    if result['scoring_status']=='needs_rule':
+        result['code']='needs_rule'
+    return jsonify(result),200 if result['overall_status']=='complete' else 409
+
+
+@material_bp.get('/competition/records/<int:record_id>/review-context')
+def competition_review_context_route(record_id):
+    row = record_at('competition', record_id, allow_teacher_processed=True)
+    return jsonify(competition_review_context(actor(), row))
+
+
+@material_bp.get('/competition/students/<student_id>/summary')
+def competition_student_summary_route(student_id):
+    year = integer(int(request.args.get('year', '2028')), 'year', 2000, 2100)
+    return jsonify(teacher_competition_summary(actor(), student_id, year))
+
+
+@material_bp.get('/competition/feedback')
+def competition_feedback_route():
+    year = integer(int(request.args.get('year', '2028')), 'year', 2000, 2100)
+    return jsonify(student_competition_feedback(actor(), year))
+
+
+@material_bp.post('/competition/records/<int:record_id>/ocr')
+def competition_ocr_start_route(record_id):
+    row = record_at('competition', record_id); payload = body()
+    object_keys(payload, {'version'}, {'version'})
+    job, created = start_competition_ocr(actor(), row, payload['version'])
+    db.session.commit()
+    return jsonify({'job_id': job.job_id, 'status': job.status,
+                    'material_version': job.material_version}), 201 if created else 200
+
+
+@material_bp.get('/competition/records/<int:record_id>/ocr/<job_id>')
+def competition_ocr_status_route(record_id, job_id):
+    row = record_at('competition', record_id); user = actor()
+    if user.role != 'student' or user.student_id != row.student_id: abort(403)
+    job = CompetitionOcrJob.query.filter_by(record_id=row.id, job_id=job_id).one_or_none()
+    if job is None: abort(404)
+    return jsonify({'job_id': job.job_id, 'status': job.status,
+        'material_version': job.material_version, 'raw_result': job.raw_result,
+        'error': job.error, 'late_result_ignored': job.ignored_late_result is not None})
+
+
+@material_bp.post('/competition/records/<int:record_id>/ocr/<job_id>/cancel')
+def competition_ocr_cancel_route(record_id, job_id):
+    row = record_at('competition', record_id); payload = body()
+    object_keys(payload, {'version'}, {'version'})
+    job = cancel_competition_ocr(actor(), row, payload['version'], job_id)
+    db.session.commit()
+    return jsonify({'job_id': job.job_id, 'status': job.status, 'version': row.version})
 
 
 @material_bp.get('/<category>/records/<int:record_id>/events')
@@ -134,11 +357,9 @@ def events(category,record_id):
 @material_bp.post('/<category>/records/<int:record_id>/withdraw')
 def withdraw(category,record_id):
     row=record_at(category,record_id)
-    if actor().role!='student':
-        abort(403,description='仅学生本人可撤回未核验材料')
+    user=actor()
     payload=body(); object_keys(payload,{'version'},{'version'})
-    version_change(row,payload['version'],['submitted'],{'status':'draft','check_report':None})
-    event(row,'withdrawn',{'version':row.version})
+    withdraw_material(user,row,payload['version'])
     db.session.commit()
     return jsonify(view(row))
 
@@ -146,8 +367,7 @@ def withdraw(category,record_id):
 @material_bp.post('/<category>/records/<int:record_id>/attachments')
 def upload(category,record_id):
     row=record_at(category,record_id)
-    if actor().role!='student':
-        abort(403,description='仅学生本人可上传附件')
+    user=actor()
     version=integer(int(request.form.get('version','0')),'version',1,2_000_000_000)
     files=request.files.getlist('files')
     if not 1<=len(files)<=10 or len(row.attachments)+len(files)>10:
@@ -163,18 +383,12 @@ def upload(category,record_id):
             raise ValueError('每个附件必须为非空且不超过10MB')
         prepared.append((name,payload))
     # 先CAS取得本版本的修改权，再写私有文件；失败仅删除本请求新建的文件。
-    version_change(row,version,['draft','needs_correction'],{'status':'draft','check_report':None})
+    prepared_files=[]
+    for name,payload in prepared:
+        prepared_files.append((name,payload))
     created=[]
     try:
-        for name,payload in prepared:
-            stored=uuid.uuid4().hex+Path(name).suffix.lower()
-            path=stored_path(stored); path.parent.mkdir(parents=True,exist_ok=True)
-            with path.open('xb') as output:
-                created.append(path)
-                output.write(payload)
-            db.session.add(MaterialAttachment(record_id=row.id,filename=name,stored_name=stored,
-                                               sha256=hashlib.sha256(payload).hexdigest(),size=len(payload)))
-        event(row,'attachments_added',{'version':row.version,'filenames':[n for n,_ in prepared]})
+        row,created=add_attachments(user,row,version,prepared_files,stored_path('placeholder').parent)
         db.session.commit()
     except Exception:
         db.session.rollback()
@@ -187,7 +401,7 @@ def upload(category,record_id):
 
 @material_bp.get('/<category>/records/<int:record_id>/attachments/<int:attachment_id>')
 def download(category,record_id,attachment_id):
-    row=record_at(category,record_id)
+    row=record_at(category,record_id, allow_teacher_processed=(category == 'competition'))
     attachment=db.get_or_404(MaterialAttachment,attachment_id)
     if attachment.record_id!=row.id:
         abort(404)
@@ -202,7 +416,10 @@ def download(category,record_id,attachment_id):
             digest.update(block)
     if digest.hexdigest() != attachment.sha256:
         abort(409, description='原件校验失败，文件可能被修改，已停止下载')
-    response=send_file(path,as_attachment=True,download_name=attachment.filename)
+    response=send_file(
+        path, as_attachment=request.args.get('inline') != '1',
+        download_name=attachment.filename,
+    )
     response.headers['Cache-Control']='private, no-store'
     response.headers['X-Content-Type-Options']='nosniff'
     return response

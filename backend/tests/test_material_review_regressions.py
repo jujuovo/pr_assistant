@@ -5,6 +5,8 @@ import io
 from pathlib import Path
 
 import pytest
+
+pytestmark = pytest.mark.usefixtures("active_honor_rule")
 from extensions import db
 from models import Application, Student
 from material_models import MaterialAttachment, MaterialRecord, MaterialSource
@@ -44,14 +46,19 @@ def test_linked_application_student_cannot_approve_or_change_score(env):
     assert application.status=='pending' and application.final_score is None
 
 
-def test_linked_application_rejects_other_faculty_and_preserves_manual_teacher_review(env):
+def test_linked_application_rejects_other_faculty_and_legacy_score_write(env):
     application=linked(env)
     login(env[1],env[2]['other'])
     assert env[1].get(f'/api/applications/{application.id}').status_code==403
     assert env[1].post(f'/api/applications/{application.id}/review',json={'status':'approved','finalScore':2}).status_code==403
     login(env[1],env[2]['admin'])
-    assert env[1].post(f'/api/applications/{application.id}/review',json={
-        'status':'approved','finalScore':1.25,'reviewedBy':'管理员'}).status_code==200
+    legacy_write=env[1].post(f'/api/applications/{application.id}/review',json={
+        'status':'approved','finalScore':0.75,'overrideReason':'人工复核后调整',
+        'reviewedBy':'管理员'})
+    assert legacy_write.status_code==400
+    assert legacy_write.json['code']=='legacy_final_score_not_supported'
+    db.session.refresh(application)
+    assert application.status=='pending' and application.final_score is None
 
 
 def test_large_csv_header_is_a_validation_error(env):
@@ -76,11 +83,11 @@ def test_text_unusable_by_database_is_rejected(env,bad_text):
 
 
 def test_processing_route_is_not_an_official_certificate_field(env):
-    data=copy.deepcopy(SAMPLES['competition']); data['reference_id']='REF-001'
-    row=create(env,'competition',data)
-    source=copy.deepcopy(SAMPLES['competition']); source.pop('project_key')
+    data=copy.deepcopy(SAMPLES['honor']); data['reference_id']='REF-001'
+    row=create(env,'honor',data)
+    source=copy.deepcopy(SAMPLES['honor']); source.pop('project_key', None)
     login(env[1],env[2]['admin'])
-    assert env[1].post('/api/materials/sources/import',json=source_payload('competition',data=source)).status_code==201
+    assert env[1].post('/api/materials/sources/import',json=source_payload('honor',data=source)).status_code==201
     login(env[1],env[2]['student'])
     checked=env[1].post(endpoint(row,'check'),json={'version':1})
     assert checked.status_code==200
@@ -137,7 +144,8 @@ def test_linked_application_lists_cannot_leak_to_other_faculty_or_anonymous(env,
     with env[1].session_transaction() as state: state.clear()
     assert application.id not in [row['id'] for row in env[1].get(url).json]
     login(env[1],env[2]['student'])
-    assert application.id in [row['id'] for row in env[1].get(url).json]
+    ids=[row['id'] for row in env[1].get(url).json]
+    assert (application.id in ids) is (url == '/api/applications')
 
 
 def test_legacy_optional_fields_are_compared_without_rewriting_snapshots(env):
