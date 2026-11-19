@@ -4,6 +4,7 @@
       <span>待审核申请</span>
     </div>
     <TeacherCompetitionReview />
+    <ManualMaterialReview />
     <div class="page-title"><span>非竞赛兼容申请</span></div>
     <!-- 筛选区域 -->
     <div class="filters primary-section-frame">
@@ -168,6 +169,7 @@
 </template>
 
 <script setup>
+import ManualMaterialReview from '@/components/common/ManualMaterialReview.vue'
 import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { useApplicationsStore } from '@/stores/applications.js'

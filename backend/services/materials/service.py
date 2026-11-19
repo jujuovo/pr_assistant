@@ -68,6 +68,11 @@ def record_at(category, record_id, *, allow_teacher_processed=False):
             'needs_correction', 'scored', 'verified', 'verified_not_eligible'
         })
     )
+    from .ocr_schemas import MANUAL_TYPES
+    from use_cases.manual_materials import is_manual
+    if is_manual(row):
+        has_fixed_rule = True
+        teacher_status_allowed = row.status in {'submitted', 'verified', 'rejected', 'needs_correction'}
     if user.role == 'teacher' and (not teacher_status_allowed or not has_fixed_rule):
         abort(403, description='教师只能访问已固定规则版本的正式提交材料')
     return row
@@ -87,6 +92,10 @@ def event(row, action, details):
 
 
 def view(row):
+    from services.competition_ocr.binding import record_links
+    from .schemas import OCR_CATEGORIES
+    from use_cases.manual_materials import is_manual
+    links = record_links(row)
     from domain.materials import ActorScope, MaterialScope, allowed_actions
     user = actor()
     actions = allowed_actions(
@@ -104,17 +113,22 @@ def view(row):
     ):
         actions = tuple(action for action in actions if action not in {'edit', 'add_attachment'})
         actions = (*actions, 'create_correction')
-    return {'id':row.id, 'category':row.category, 'student_id':row.student_id, 'faculty_id':row.faculty_id,
+    from services.competition_ocr.assessment import workflow_projection
+    projection=workflow_projection(row)
+    queued_job=((projection.get('ocr_assessment') or {}).get('job') or {})
+    return {**projection, 'id':row.id, 'category':row.category, 'student_id':row.student_id, 'faculty_id':row.faculty_id,
             'application_id':row.application_id, 'year':row.year,
             'cycle_code':row.year, 'cycle_policy_version_id':row.cycle_policy_version_id,
             'status':row.status, 'version':row.version,
             'allowed_actions':list(actions),
-            'data':row.data, 'analysis':row.analysis, 'check_report':row.check_report,
+            'data':row.data, 'analysis':{**(row.analysis or {}), 'ocr_executed':bool(links) or bool(row.ocr_raw_terms)}, 'check_report':row.check_report,
             'ocr_raw_terms':row.ocr_raw_terms,
             'competition_rule_package_id':row.competition_rule_package_id,
             'supersedes_record_id':row.supersedes_record_id,
             'superseded_by_record_id':successor.id if successor else None,
-            'recognition_status':'not_implemented', 'bonus_result':None,
+            'recognition_status':queued_job.get('status') or ('confirmed' if links else ('not_requested' if row.category in OCR_CATEGORIES else 'not_implemented')),
+            'ocr_links':links, 'bonus_result':None,
+            'manual_only':is_manual(row),
             'created_at':row.created_at.isoformat()+'Z', 'updated_at':row.updated_at.isoformat()+'Z',
             'attachments':[{'id':f.id,'filename':f.filename,'size':f.size,'sha256':f.sha256,
                             'url':f'/api/materials/{row.category}/records/{row.id}/attachments/{f.id}'} for f in row.attachments]}
@@ -122,6 +136,9 @@ def view(row):
 
 def make_record(category, data):
     category_exists(category)
+    if category == "competition":
+        from use_cases.materials import create_material
+        return create_material(actor(), category, data)
     object_keys(data,{'year','data','application_id'},{'year','data'})
     user = actor()
     if user.role != 'student' or not user.student_id:

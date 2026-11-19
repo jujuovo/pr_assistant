@@ -41,6 +41,11 @@
         <component
           v-else
           :is="currentPageComponent"
+          :key="
+            currentPage === 'materials'
+              ? String(route.query.category) + '-' + String(route.query.editId)
+              : currentPage
+          "
           @switch-page="switchPage"
           @edit-application="handleEditApplication"
           :edit-application-id="editApplicationId"
@@ -90,7 +95,9 @@ const pageComponents = {
 
 const currentPageComponent = computed(() => pageComponents[currentPage.value])
 const navigationActivePage = computed(() =>
-  ['application-categories', 'academic-performance', 'application-form'].includes(currentPage.value)
+  ['application-categories', 'academic-performance', 'application-form', 'materials'].includes(
+    currentPage.value
+  )
     ? 'application-form'
     : currentPage.value
 )
@@ -116,13 +123,19 @@ const switchPage = (page) => {
     editApplicationId.value = null
     selectedCategory.value = null
     currentPage.value = 'application-categories'
+    router.replace({ query: { page: 'application-categories' } })
     return
   }
   currentPage.value = page
-  router.replace({ query: { ...route.query, page } })
+  router.replace({ query: { page } })
 }
 
-watch(() => route.query.page, page => { if (page) currentPage.value = page })
+watch(
+  () => route.query.page,
+  (page) => {
+    if (page) currentPage.value = page
+  }
+)
 
 const openApplicationForm = (category) => {
   selectedCategory.value = category
@@ -133,7 +146,7 @@ const openApplicationForm = (category) => {
   }
   if (category.key === 'competition') {
     currentPage.value = 'materials'
-    router.replace({ query: { ...route.query, page: 'materials', category: 'competition' } })
+    router.replace({ query: { page: 'materials', category: 'competition' } })
     return
   }
   currentPage.value = 'application-form'

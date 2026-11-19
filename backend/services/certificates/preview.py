@@ -1,5 +1,6 @@
 """Recognize private materials before submission; retain OCR facts beside student declarations."""
 import hashlib
+import re
 import shutil
 import uuid
 from datetime import date, datetime
@@ -14,8 +15,7 @@ from services.automation import actor
 from domain.material_terms import (NORMALIZATION_VERSION, TermNormalizationError,
                                    normalize_confirmed_terms)
 from .service import artifact_root, contained
-
-FIELDS = ('school', 'student', 'teacher', 'edition', 'track', 'group', 'region', 'award', 'certificate_no', 'date')
+from .fields import FIELDS
 
 
 def _confirmed_terms(project_name, values):
@@ -99,22 +99,48 @@ def create_preview(files):
         raise
 
 
-def save_preview(row, application, payload):
-    user = actor()
-    if user.role != 'student' or user.student_id != application.student_id:
-        abort(403, description='仅学生本人可确认识别材料')
-    if not row or not row.claims.get('preview_flow'):
-        abort(409, description='不是上传预览申请')
-    if application.status != 'draft' or row.status in ('queued', 'processing'):
-        abort(409, description='申请已提交或识别尚未完成，请刷新状态')
-    if not row.report or not row.report.get('pages'):
-        abort(409, description='没有可确认的识别结果，请重新上传材料')
+def requires_reupload(row):
+    report = row.report or {}
+    return row.status == 'needs_reupload' or report.get('status') == 'needs_reupload' or any(
+        page.get('status') == 'needs_reupload' or page.get('quality', {}).get('acceptable') is False
+        for page in report.get('pages', []))
+
+
+def verify_originals(row):
+    """Check uploaded bytes again before confirming the OCR/student snapshot."""
+    try:
+        if not isinstance(row.sources, list) or not row.sources:
+            raise ValueError('Missing sources')
+        root = contained(artifact_root(), row.artifact_key)
+        limit = current_app.config.get('CERTIFICATE_MAX_FILE_BYTES', 10 * 1024 * 1024)
+        for source in row.sources:
+            if not isinstance(source, dict):
+                raise ValueError('Invalid source')
+            relative, expected = source.get('relative'), source.get('sha256')
+            if not isinstance(relative, str) or not isinstance(expected, str) or not re.fullmatch(r'[0-9a-fA-F]{64}', expected):
+                raise ValueError('Missing original digest')
+            path = contained(root, relative)
+            if not path.is_file():
+                raise ValueError('Missing original')
+            digest, size = hashlib.sha256(), 0
+            with path.open('rb') as stream:
+                while chunk := stream.read(1024 * 1024):
+                    size += len(chunk)
+                    if size > limit:
+                        raise ValueError('Original too large')
+                    digest.update(chunk)
+            if size == 0 or digest.hexdigest() != expected.lower():
+                raise ValueError('Original digest mismatch')
+    except (OSError, ValueError, TypeError):
+        abort(409, description='证书原件完整性校验失败，文件缺失、已变化或校验信息无效，请重新上传材料并识别')
+
+
+def _validate_confirmation(payload, pages, faculty_id):
     if not isinstance(payload, dict) or set(payload) - {'version', 'project_name', 'award_date', 'rule_id', 'student_values', 'submit'}:
         abort(400, description='确认字段无效')
     if type(payload.get('version')) is not int or payload['version'] <= 0 or type(payload.get('submit')) is not bool:
         abort(400, description='必须提供版本和提交状态')
     values = payload.get('student_values')
-    pages = row.report['pages']
     if not isinstance(values, list) or len(values) != len(pages):
         abort(400, description='申报值必须覆盖每一页识别结果')
     for fields in values:
@@ -145,22 +171,43 @@ def save_preview(row, application, payload):
     if type(rule_id) is not int:
         abort(400, description='请选择有效竞赛规则')
     rule = db.session.get(Rule, rule_id)
-    if not rule or rule.status != 'active' or rule.faculty_id not in (None, application.faculty_id) or rule.type != 'academic' or rule.sub_type != 'competition':
+    if not rule or rule.status != 'active' or rule.faculty_id not in (None, faculty_id) or rule.type != 'academic' or rule.sub_type != 'competition':
         abort(400, description='规则不是本学院可用的竞赛规则')
+    return values, name.strip(), award_date, rule, confirmed_terms, normalized_terms
+
+
+def _check_application_period():
+    settings = SystemSettings.query.first()
+    now = datetime.now(pytz.timezone('Asia/Shanghai')).replace(tzinfo=None)
+    if settings and (settings.system_status != 'online' or
+        (settings.application_start and now < settings.application_start.replace(tzinfo=None)) or
+        (settings.application_end and now > settings.application_end.replace(tzinfo=None))):
+        abort(409, description='当前不在申请开放时间')
+
+
+def save_preview(row, application, payload):
+    user = actor()
+    if user.role != 'student' or user.student_id != application.student_id:
+        abort(403, description='仅学生本人可确认识别材料')
+    if not row or not row.claims.get('preview_flow'):
+        abort(409, description='不是上传预览申请')
+    if application.status != 'draft' or row.status in ('queued', 'processing'):
+        abort(409, description='申请已提交或识别尚未完成，请刷新状态')
+    if requires_reupload(row):
+        abort(409, description='材料质量不合格，请重新上传清晰材料并完成识别后再确认或提交')
+    if not row.report or not row.report.get('pages'):
+        abort(409, description='没有可确认的识别结果，请重新上传材料')
+    values, name, award_date, rule, confirmed_terms, normalized_terms = _validate_confirmation(payload, row.report['pages'], application.faculty_id)
+    verify_originals(row)
     if payload['submit']:
-        settings = SystemSettings.query.first()
-        now = datetime.now(pytz.timezone('Asia/Shanghai')).replace(tzinfo=None)
-        if settings and (settings.system_status != 'online' or
-            (settings.application_start and now < settings.application_start.replace(tzinfo=None)) or
-            (settings.application_end and now > settings.application_end.replace(tzinfo=None))):
-            abort(409, description='当前不在申请开放时间')
+        _check_application_period()
         from use_cases.cycles import pin_application_cycle
         policy = pin_application_cycle(application)
     else:
         policy = None
     # CAS both records in one transaction; retry/stale tabs cannot overwrite a submitted snapshot.
     changed = CertificateAssessment.query.filter_by(id=row.id, version=payload['version']).filter(
-        CertificateAssessment.status.notin_(['queued', 'processing'])).update(
+        CertificateAssessment.status.notin_(['queued', 'processing', 'needs_reupload'])).update(
             {'version': CertificateAssessment.version + 1,
              'claims': {**row.claims, 'student_values': values,
                         'ocr_raw_terms': _ocr_raw_terms(row.report),

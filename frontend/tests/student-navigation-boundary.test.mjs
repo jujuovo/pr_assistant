@@ -1,11 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-const read = path => readFileSync(new URL(path, import.meta.url), 'utf8')
+const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8')
 
 test('student navigation exposes the four core workflow destinations', () => {
   const source = read('../src/components/student/StudentNavigation.vue')
-  for (const title of ['提交材料', '我的材料', '加分统计', '我的排名']) assert(source.includes(title))
+  for (const title of ['提交材料', '我的材料', '加分统计', '我的排名'])
+    assert(source.includes(title))
 })
 
 test('competition selection routes only to MaterialRecord workflow', () => {
@@ -17,10 +18,10 @@ test('competition selection routes only to MaterialRecord workflow', () => {
   assert.match(categories, /非竞赛兼容入口/)
 })
 
-test('my materials keeps competition and legacy application views explicitly separated', () => {
+test('my materials renders history without a submission form or autofill wizard', () => {
   const source = read('../src/pages/student/applications/StudentMaterialsHub.vue')
-  assert.match(source, /mode === 'competition'/)
-  assert.match(source, /<CompetitionWorkflow/)
   assert.match(source, /<ApplicationHistory/)
-  assert.match(source, /不会创建竞赛 MaterialRecord/)
+  assert.match(source, /workflow_state/)
+  assert.match(source, /OCR队列中/)
+  assert.doesNotMatch(source, /<CompetitionWorkflow|<OcrUploadPreview|type="file"/)
 })

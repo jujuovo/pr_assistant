@@ -4,6 +4,7 @@
       <span>审核记录</span>
     </div>
     <TeacherCompetitionReview mode="history" />
+    <ManualMaterialReview history />
     <div class="page-title"><span>非竞赛兼容审核记录</span></div>
     <!-- 筛选区域 -->
     <div class="filters primary-section-frame">
@@ -239,6 +240,7 @@
 </template>
 
 <script setup>
+import ManualMaterialReview from '@/components/common/ManualMaterialReview.vue'
 import { ref, computed, onMounted } from 'vue'
 import ApplicationDetailModal from '@/components/common/ApplicationDetailModal.vue'
 import TeacherCompetitionReview from './TeacherCompetitionReview.vue'

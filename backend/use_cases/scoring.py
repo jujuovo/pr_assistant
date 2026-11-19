@@ -758,7 +758,7 @@ def explain_student_score(student_id, year):
     represented_entry_ids = set()
     for record_id, command in latest_command.items():
         record = db.session.get(MaterialRecord, record_id)
-        result = command.result.get("scoring", {})
+        result = (command.result or {}).get("scoring") or {}
         entry = entry_by_material.get(record_id)
         audit = audits.get(entry.id) if entry else None
         if entry:
@@ -773,8 +773,8 @@ def explain_student_score(student_id, year):
             "id": entry.id if entry else None,
             "project_source": {"type": "material", "id": str(record_id),
                                "category": record.category},
-            "verification_status": result.get("verification_status"),
-            "scoring_status": result.get("scoring_status"),
+            "verification_status": result.get("verification_status") or record.status,
+            "scoring_status": result.get("scoring_status") or ("scored" if entry else record.status),
             "cycle_code": year,
             "cycle_policy_version_id": record.cycle_policy_version_id,
             "rule_version_id": entry.rule_version_id if entry else score.get("rule_version_id"),
@@ -852,6 +852,8 @@ def explain_student_score(student_id, year):
                                 else ["confirm_submit", "edit", "view"]),
             "updated_at": record.updated_at.isoformat() + "Z",
         })
+    from use_cases.score_labels import decorate_score_entries
+    rule_versions=decorate_score_entries(explained_entries,entries,student_id,snapshot.rule_version_ids if snapshot else [])
     if snapshot is None:
         latest_update = max(
             (item["updated_at"] for item in explained_entries), default=None
@@ -867,7 +869,7 @@ def explain_student_score(student_id, year):
             },
             "comprehensive_score": None,
             "formula": None,
-            "rule_version_ids": [], "cycle_policy_version_ids": [],
+            "rule_version_ids": [], "rule_versions":rule_versions, "cycle_policy_version_ids": [],
             "input_digest": None, "updated_at": latest_update,
             "entries": explained_entries,
         }
@@ -894,6 +896,7 @@ def explain_student_score(student_id, year):
         "comprehensive_score": str(snapshot.comprehensive_score),
         "formula": "academic_score * academic_weight / 100 + academic + comprehensive",
         "rule_version_ids": snapshot.rule_version_ids,
+        "rule_versions": rule_versions,
         "cycle_policy_version_ids": snapshot.cycle_policy_version_ids,
         "input_digest": snapshot.input_digest,
         "updated_at": snapshot.updated_at.isoformat() + "Z",

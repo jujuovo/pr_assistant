@@ -26,7 +26,7 @@ export function buildCompetitionFacts(form, schema) {
     }
   }
   const keys = ['competition_id', 'project_name', 'award_date', 'level', 'award', 'event_year',
-    'participation_mode', 'team_size', 'personal_rank', 'event_format', 'csp_percentile', 'group', 'track']
+    'participation_mode', 'team_size', 'personal_rank', 'event_format', 'csp_percentile', 'group', 'track', 'evidence']
   return Object.fromEntries(keys.filter(key => form[key] !== '' && form[key] != null).map(key => [key,
     ['event_year', 'team_size', 'personal_rank'].includes(key) ? Number(form[key]) : form[key]]))
 }

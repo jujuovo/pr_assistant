@@ -1,5 +1,5 @@
 <template>
-  <div class="page-content">
+  <div class="page-content"><ManualMaterialReview /><ManualMaterialReview history />
     <div class="page-title">
       <span>申请管理</span>
     </div>
@@ -339,6 +339,7 @@
 </template>
 
 <script setup>
+import ManualMaterialReview from '@/components/common/ManualMaterialReview.vue'
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import ApplicationDetailModal from '@/components/common/ApplicationDetailModal.vue'
 import { useApplicationsStore } from '@/stores/applications.js'

@@ -8,7 +8,7 @@ from datetime import date
 
 BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
-LOCAL = BACKEND / 'instance' / 'certificate-local.db'
+LOCAL = BACKEND / 'instance' / 'gradpush-dev.db'
 COMPETITION_PACKAGE = BACKEND / 'rules' / 'competition_2028.json'
 
 

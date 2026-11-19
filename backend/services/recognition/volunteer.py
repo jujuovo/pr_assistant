@@ -110,21 +110,11 @@ def parse_recorded_at(value_field):
     return field(None, value_field["evidence"])
 
 
-def extract(data, image_width, claimed_hours=None, tolerance_minutes=1.0, confidence_threshold=0.90):
-    lines = make_lines(data)
-    warnings = []
-    def warn(code, message):
-        warnings.append({"code": code, "message": message})
+def _warn(warnings, code, message):
+    warnings.append({"code": code, "message": message})
 
-    start_label, end_label = label(lines, "签到时间"), label(lines, "签退时间")
-    honor_title = label(lines, "荣誉时数详情")
-    title = honor_title or label(lines, "信用时数详情") or label(lines, "时长详情")
-    page_type = "honor" if honor_title else "credit" if title else "unknown"
-    time_labels = [x for x in (start_label, end_label) if x]
-    upper_bound = min((x["box"][1] for x in time_labels), default=None)
-    if honor_title:
-        basic = label(lines, "基础信息")
-        upper_bound = basic["box"][1] if basic else None
+
+def _displayed_hours(lines, title, upper_bound, image_width, warnings):
     # 时数在页面标题下、签到签退标签上；多候选时不擅自选一个。
     hour_candidates = []
     if title and upper_bound is not None:
@@ -144,10 +134,12 @@ def extract(data, image_width, claimed_hours=None, tolerance_minutes=1.0, confid
         except ValueError:
             hours = field(value, [evidence])
     elif len(hour_candidates) > 1:
-        warn("ambiguous_hours", "时数区域有多个数字候选，需要人工选择")
+        _warn(warnings, "ambiguous_hours", "时数区域有多个数字候选，需要人工选择")
 
-    check_in = extract_datetime(lines, start_label, end_label, image_width)
-    check_out = extract_datetime(lines, end_label, start_label, image_width)
+    return hours
+
+
+def _activity(lines, image_width, warnings):
     activity_anchor = label(lines, "参与活动")
     activity = field()
     if activity_anchor:
@@ -162,48 +154,84 @@ def extract(data, image_width, claimed_hours=None, tolerance_minutes=1.0, confid
             if inline:
                 activity = field(inline, [activity_anchor])
     if activity["value"] and re.search(r"…|\.{2,}", activity["value"]):
-        warn("activity_truncated", "活动名称被省略，不能据此确定完整活动身份")
+        _warn(warnings, "activity_truncated", "活动名称被省略，不能据此确定完整活动身份")
     elif activity["value"] and any(x["box"][2] > image_width * 0.85 for x in activity["evidence"]):
-        warn("activity_completeness_unverified", "活动文字接近页面右边界，可能省略或未完整识别；须与完整活动详情核对")
+        _warn(warnings, "activity_completeness_unverified", "活动文字接近页面右边界，可能省略或未完整识别；须与完整活动详情核对")
 
-    fields = {"displayed_hours": hours, "check_in": check_in, "check_out": check_out,
-              "activity_name": activity}
-    required = list(fields)
-    if honor_title:
-        row_words = ["志愿者姓名", "录入人姓名", "录入组织名", "录入时间", "录入类型", "录入原因"]
-        for key, word in zip(["volunteer_name", "recorder_name", "recording_organization", "recorded_at", "record_type", "record_reason"], row_words):
-            fields[key] = extract_row(lines, word, row_words)
-        fields["recorded_at"] = parse_recorded_at(fields["recorded_at"])
-        # 荣誉补录页面没有签到签退或活动名称，这些字段为空属于不适用。
-        required = ["displayed_hours", "volunteer_name", "recorder_name", "recording_organization",
-                    "recorded_at", "record_type", "record_reason"]
-        warn("honor_requires_policy_review", "荣誉时数需按学院政策人工确认是否计入志愿工时；录入时间不是活动发生时间")
-        warn("duration_check_not_applicable", "该页面未提供签到签退，不进行活动持续时间核对")
+    return activity
+
+
+def _honor_fields(lines, fields, warnings):
+    row_words = ["志愿者姓名", "录入人姓名", "录入组织名", "录入时间", "录入类型", "录入原因"]
+    for key, word in zip(["volunteer_name", "recorder_name", "recording_organization", "recorded_at", "record_type", "record_reason"], row_words):
+        fields[key] = extract_row(lines, word, row_words)
+    fields["recorded_at"] = parse_recorded_at(fields["recorded_at"])
+    # 荣誉补录页面没有签到签退或活动名称，这些字段为空属于不适用。
+    required = ["displayed_hours", "volunteer_name", "recorder_name", "recording_organization",
+                "recorded_at", "record_type", "record_reason"]
+    _warn(warnings, "honor_requires_policy_review", "荣誉时数需按学院政策人工确认是否计入志愿工时；录入时间不是活动发生时间")
+    _warn(warnings, "duration_check_not_applicable", "该页面未提供签到签退，不进行活动持续时间核对")
+    return required
+
+
+def _validate_fields(fields, required, confidence_threshold, warnings):
     for key in required:
         item = fields[key]
         if item["value"] is None:
-            warn("missing_" + key, f"未可靠提取字段：{key}")
+            _warn(warnings, "missing_" + key, f"未可靠提取字段：{key}")
         elif item["ocr_confidence"] is not None and item["ocr_confidence"] < confidence_threshold:
-            warn("low_confidence_" + key, f"字段 {key} OCR 分数较低，需看原图确认")
+            _warn(warnings, "low_confidence_" + key, f"字段 {key} OCR 分数较低，需看原图确认")
 
+
+def _duration_checks(check_in, check_out, hours, tolerance_minutes, warnings):
     elapsed_seconds = elapsed_hours = difference_minutes = None
     if check_in["value"] and check_out["value"]:
         elapsed_seconds = int((datetime.fromisoformat(check_out["value"]) -
                                datetime.fromisoformat(check_in["value"])).total_seconds())
         if elapsed_seconds < 0:
-            warn("invalid_time_order", "签退时间早于签到时间")
+            _warn(warnings, "invalid_time_order", "签退时间早于签到时间")
         else:
             elapsed_hours = elapsed_seconds / 3600
             if isinstance(hours["value"], (int, float)):
                 difference_minutes = abs(elapsed_hours - hours["value"]) * 60
                 if difference_minutes > tolerance_minutes:
-                    warn("duration_difference", "截图时数与签到签退间隔差异超过实验容差；须核对平台计时规则")
+                    _warn(warnings, "duration_difference", "截图时数与签到签退间隔差异超过实验容差；须核对平台计时规则")
+    return (elapsed_seconds, elapsed_hours, difference_minutes)
+
+
+def _claim_matches(claimed_hours, hours, warnings):
     claim_match = None
     if claimed_hours is not None and hours["value"] is not None:
         claim_match = Decimal(str(claimed_hours)) == Decimal(str(hours["value"]))
         if not claim_match:
-            warn("claim_mismatch", "申报时长与截图显示时数不一致")
-    warn("identity_unverified", "此实验不验证截图是否属于申报学生")
+            _warn(warnings, "claim_mismatch", "申报时长与截图显示时数不一致")
+    return claim_match
+
+
+def extract(data, image_width, claimed_hours=None, tolerance_minutes=1.0, confidence_threshold=0.90):
+    lines = make_lines(data)
+    warnings = []
+    start_label, end_label = label(lines, "签到时间"), label(lines, "签退时间")
+    honor_title = label(lines, "荣誉时数详情")
+    title = honor_title or label(lines, "信用时数详情") or label(lines, "时长详情")
+    page_type = "honor" if honor_title else "credit" if title else "unknown"
+    time_labels = [x for x in (start_label, end_label) if x]
+    upper_bound = min((x["box"][1] for x in time_labels), default=None)
+    if honor_title:
+        basic = label(lines, "基础信息")
+        upper_bound = basic["box"][1] if basic else None
+    hours = _displayed_hours(lines, title, upper_bound, image_width, warnings)
+    check_in = extract_datetime(lines, start_label, end_label, image_width)
+    check_out = extract_datetime(lines, end_label, start_label, image_width)
+    activity = _activity(lines, image_width, warnings)
+    fields = {"displayed_hours": hours, "check_in": check_in, "check_out": check_out,
+              "activity_name": activity}
+    required = _honor_fields(lines, fields, warnings) if honor_title else list(fields)
+    _validate_fields(fields, required, confidence_threshold, warnings)
+    elapsed_seconds, elapsed_hours, difference_minutes = _duration_checks(
+        check_in, check_out, hours, tolerance_minutes, warnings)
+    claim_match = _claim_matches(claimed_hours, hours, warnings)
+    _warn(warnings, "identity_unverified", "此实验不验证截图是否属于申报学生")
     return {"page_type": page_type, "fields": fields, "checks": {"claimed_hours": claimed_hours, "claim_matches_display": claim_match,
             "elapsed_seconds": elapsed_seconds, "elapsed_hours": elapsed_hours,
             "display_vs_elapsed_difference_minutes": difference_minutes,

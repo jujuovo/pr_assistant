@@ -3,7 +3,9 @@
     <header class="review-hero"
       ><div
         ><p class="eyebrow">MaterialRecord · 正式竞赛链路</p
-        ><h2 id="competition-review-title">{{ historyMode ? '竞赛审核记录' : '竞赛材料待审工作台' }}</h2
+        ><h2 id="competition-review-title">{{
+          historyMode ? '竞赛审核记录' : '竞赛材料待审工作台'
+        }}</h2
         ><p>材料事实、规则依据和候选分均来自后端权威投影；审核动作不会修改规则或分数。</p></div
       ><div v-if="!historyMode" class="pending-total"
         ><strong>{{ workbench.pending_count || 0 }}</strong
@@ -15,18 +17,18 @@
       ><p>{{ error }}</p
       ><button class="btn btn-outline" @click="load">重新加载</button></section
     >
-    <p v-else-if="!displayItems.length" class="review-state" role="status"
-      >{{ historyMode ? '当前周期没有已处理竞赛材料。' : '当前周期没有待审核竞赛材料。' }}</p
-    >
+    <p v-else-if="!displayItems.length" class="review-state" role="status">{{
+      historyMode ? '当前周期没有已处理竞赛材料。' : '当前周期没有待审核竞赛材料。'
+    }}</p>
     <div v-else class="pending-grid"
       ><article v-for="row in displayItems" :key="row.id" class="pending-card"
         ><div
           ><span class="status-badge">{{ row.status }}</span
           ><h3>{{ row.project_name || row.competition_name }}</h3
           ><p>学生 {{ row.student_id }} · 版本 {{ row.version }}</p></div
-        ><button class="btn btn-primary" type="button" @click="open(row.id)"
-          >{{ historyMode ? '查看记录' : '核对材料' }}</button
-        ></article
+        ><button class="btn btn-primary" type="button" @click="open(row.id)">{{
+          historyMode ? '查看记录' : '核对材料'
+        }}</button></article
       ></div
     >
     <section class="summary-card"
@@ -87,19 +89,29 @@
               >规则包 v{{ context.rule_basis.package_version }} · 后端候选分
               {{ context.candidate_score }}</p
             ></section
-          ><section
-            ><h4>学生确认事实</h4
-            ><pre>{{ JSON.stringify(context.confirmed_terms, null, 2) }}</pre></section
+          ><section><h4>学生确认事实</h4><MaterialFacts :data="context.confirmed_terms" /></section
           ><section
             ><h4>OCR 原文（仅辅助）</h4
-            ><pre>{{ JSON.stringify(context.ocr_raw_terms, null, 2) }}</pre>
-          </section></div
+            ><MaterialFacts
+              :data="
+                context.ocr_raw_terms?.report?.fields ||
+                context.ocr_raw_terms?.fields ||
+                context.ocr_raw_terms ||
+                {}
+              "
+            /> </section></div
+        ><OcrAssessment :advice="context.ocr_assessment" /><label
+          v-if="canReview && needsOcrConfirmation"
+          class="ocr-confirmation"
+          ><input
+            v-model="ocrConfirmed"
+            type="checkbox"
+          />我已人工核对原件、OCR差异或缺失依据，确认申报事实及候选分。</label
         ><label class="comment-field" for="review-comment"
-          >审核意见<textarea
+          >审核意见（通过时选填；退回时必填）<textarea
             id="review-comment"
             ref="commentInput"
             v-model="comment"
-            required
             maxlength="2000"
             :disabled="!canReview"
             :aria-invalid="Boolean(commentError)"
@@ -141,6 +153,8 @@
 <script setup>
 import { computed, nextTick, onMounted, ref } from 'vue'
 import materialApi from '@/services/materialApi.js'
+import MaterialFacts from '@/components/common/MaterialFacts.vue'
+import OcrAssessment from '@/components/common/OcrAssessment.vue'
 const props = defineProps({ mode: { type: String, default: 'pending' } })
 const workbench = ref({ pending_count: 0, items: [] }),
   context = ref(null),
@@ -154,6 +168,10 @@ const workbench = ref({ pending_count: 0, items: [] }),
   reviewing = ref(false)
 const canReview = computed(() =>
   Boolean(context.value?.allowed_actions?.some((action) => ['approve', 'return'].includes(action)))
+)
+const ocrConfirmed = ref(false)
+const needsOcrConfirmation = computed(
+  () => context.value?.ocr_assessment?.review_mode === 'manual_confirmation'
 )
 const historyMode = computed(() => props.mode === 'history')
 const displayItems = computed(() =>
@@ -171,6 +189,7 @@ async function load() {
   }
 }
 async function open(id) {
+  ocrConfirmed.value = false
   error.value = ''
   try {
     context.value = await materialApi.getCompetitionReviewContext(id)
@@ -181,10 +200,14 @@ async function open(id) {
   }
 }
 async function review(decision) {
-  if (!comment.value.trim()) {
-    commentError.value = '请填写材料核验意见后再提交审核。'
+  if (decision === 'return' && !comment.value.trim()) {
+    commentError.value = '退回修改时，请填写具体原因。'
     await nextTick()
     commentInput.value?.focus()
+    return
+  }
+  if (decision === 'approve' && needsOcrConfirmation.value && !ocrConfirmed.value) {
+    commentError.value = '请先人工核对并勾选确认原件、OCR结果及候选分。'
     return
   }
   reviewing.value = true
@@ -196,7 +219,8 @@ async function review(decision) {
       context.value.material_version,
       decision,
       comment.value,
-      crypto.randomUUID()
+      crypto.randomUUID(),
+      needsOcrConfirmation.value ? ocrConfirmed.value : undefined
     )
     context.value = null
     await load()
@@ -220,6 +244,19 @@ async function loadSummary() {
 onMounted(load)
 </script>
 <style scoped>
+.ocr-confirmation {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px;
+  background: #fff8e8;
+  border-radius: 8px;
+  line-height: 1.7;
+}
+.ocr-confirmation input {
+  margin-top: 6px;
+}
+
 .competition-review {
   display: grid;
   gap: 18px;

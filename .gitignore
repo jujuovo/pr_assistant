@@ -21,6 +21,7 @@ lerna-debug.log*
 # ========== 本地环境、运行数据与测试产物 ==========
 venv/
 .venv/
+.venv-ci/
 .venv-ocr/
 .venv-mac/
 .local-mac/
@@ -90,3 +91,8 @@ else/
 *.key
 *.p12
 *.pfx
+
+# Local merged OCR artifacts
+backend/private-ocr/
+backend/samples/
+backend/outputs/

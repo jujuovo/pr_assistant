@@ -1,4 +1,4 @@
-"""Mac-only local entrypoint; original Windows scripts and config stay unchanged."""
+"""Mac local entrypoint with its own development database and private storage."""
 import argparse
 import os
 from pathlib import Path
@@ -20,12 +20,12 @@ def main():
         parser.error('此入口仅用于 Mac；Windows 继续使用原启动方式')
     if args.once and args.action != 'worker':
         parser.error('--once 仅用于 worker')
-    if args.action in ('web', 'worker') and not (LOCAL / 'app.db').exists():
+    if args.action in ('web', 'worker') and not (LOCAL / 'gradpush-dev.db').exists():
         parser.error('请先运行 python mac-local.py prepare')
     LOCAL.mkdir(exist_ok=True)
     sys.path.insert(0, str(BACKEND))
     os.chdir(LOCAL)
-    os.environ['DATABASE_URL'] = 'sqlite:///' + (LOCAL / 'app.db').as_posix()
+    os.environ['DATABASE_URL'] = 'sqlite:///' + (LOCAL / 'gradpush-dev.db').as_posix()
     os.environ['OCR_MODEL_ROOT'] = str(LOCAL / 'ocr-models')
     os.environ.setdefault('PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK', 'True')
     sys.dont_write_bytecode = True
@@ -44,6 +44,7 @@ def main():
         'AUTOMATION_UPLOAD_FOLDER': LOCAL / 'private-materials',
         'CERTIFICATE_STORAGE_FOLDER': LOCAL / 'private-certificates',
         'MATERIAL_STORAGE_FOLDER': LOCAL / 'private-evidence',
+        'OCR_STORAGE_FOLDER': LOCAL / 'private-ocr',
     }
     for key, path in folders.items():
         path.mkdir(parents=True, exist_ok=True)
@@ -61,7 +62,7 @@ def main():
     if args.action == 'prepare':
         from tools import prepare_local
         # Reuse known legacy schema preparation on our own copy, never its default DB.
-        prepare_local.LOCAL = LOCAL / 'app.db'
+        prepare_local.LOCAL = LOCAL / 'gradpush-dev.db'
         prepare_local.main()
     elif args.action == 'web':
         from app import app

@@ -19,11 +19,15 @@ def env(tmp_path):
     app.config.update(TESTING=True, SECRET_KEY="test", SQLALCHEMY_DATABASE_URI="sqlite://",
                       AUTOMATION_UPLOAD_FOLDER=str(tmp_path / "images"), AUTOMATION_MAX_FILES=30,
                       AUTOMATION_MAX_IMAGE_BYTES=1024*1024, AUTOMATION_MAX_PIXELS=20_000_000,
-                      AUTOMATION_LEASE_SECONDS=60, AUTOMATION_MAX_ATTEMPTS=3)
+                      AUTOMATION_LEASE_SECONDS=60, AUTOMATION_MAX_ATTEMPTS=3,
+                      ALLOW_LEGACY_CERTIFICATE_PREVIEWS=True)
     db.init_app(app)
     app.register_blueprint(automation_bp)
     app.register_blueprint(application_bp)
     app.register_blueprint(certificate_bp)
+    from blueprints.ocr_bp import ocr_bp
+    app.register_blueprint(ocr_bp)
+    app.config['OCR_STORAGE_FOLDER'] = str(tmp_path / 'ocr-jobs')
     app.register_blueprint(workflow_bp)
     from blueprints.material_bp import material_bp
     app.register_blueprint(material_bp)

@@ -219,12 +219,14 @@ def test_real_preview_declaration_and_review(env):
     original_report = deepcopy(row.report)
     rule = Rule(name='真实OCR测试竞赛', type='academic', sub_type='competition', score=5,
                 faculty_id=row.application.faculty_id, status='active')
-    db.session.add(rule); db.session.commit()
+    db.session.add(rule)
+    publish_rule_version(rule,published_by=db.session.get(User,env[2]['admin']),cycle_code=2026)
+    db.session.commit()
     values = [{key: str(p.get('processed_fields', {}).get(key) or p.get('raw_fields', {}).get(key) or '') for key in FIELDS} for p in row.report['pages']]
     values[0]['student'] = '学生自主修正'
     url = f'/api/certificates/applications/{row.application_id}'
     saved = env[1].post(url + '/confirm-preview', json={'version':row.version,
-        'project_name':'蓝桥杯真实识别测试', 'award_date':'2026-10-01', 'rule_id':rule.id,
+        'project_name':'蓝桥杯真实识别测试', 'award_date':None, 'rule_id':rule.id,
         'student_values':values, 'submit':True})
     assert saved.status_code == 200, saved.json
     teacher = User(username='preview_teacher', name='教师', password='test', role='teacher',
@@ -235,7 +237,7 @@ def test_real_preview_declaration_and_review(env):
     assert read.json['student_values'][0]['student'] == '学生自主修正'
     assert read.json['report'] == original_report
     assert env[1].get(url + f'/artifacts/{read.json["version"]}/' + row.sources[0]['relative']).status_code == 200
-    review = env[1].post(f'/api/applications/{row.application_id}/review', json={'status':'approved', 'finalScore':5, 'reviewComment':'已对照原件及申报值'})
+    review = env[1].post(f'/api/applications/{row.application_id}/review', json={'status':'approved', 'idempotency_key':'real-legacy-preview-review', 'reviewComment':'已对照原件及申报值'})
     assert review.status_code == 200, review.json
     db.session.refresh(row)
     assert row.application.status == 'approved'

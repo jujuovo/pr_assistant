@@ -97,8 +97,28 @@ def test_competition_review_requires_explicit_idempotency_key_and_version(env):
 
 
 @pytest.mark.parametrize("comment", ["", "   "])
-def test_competition_review_requires_auditable_comment(env, comment):
+def test_return_requires_auditable_comment(env, comment):
     row, teacher = _submitted_competition(env)
     with pytest.raises(MaterialUseCaseError) as error:
-        validate_competition_review_command(teacher, row, _command(row, comment=comment))
+        validate_competition_review_command(teacher, row, _command(row, decision="return", comment=comment))
     assert error.value.code == "competition_review_comment_required"
+
+
+@pytest.mark.parametrize("comment", ["", "   "])
+def test_approval_comment_is_optional_and_normalized(env,comment):
+    row,teacher=_submitted_competition(env)
+    command=validate_competition_review_command(teacher,row,_command(row,comment=comment))
+    assert command["comment"]==""
+
+
+def test_approval_can_omit_comment(env):
+    row,teacher=_submitted_competition(env)
+    payload=_command(row);payload.pop("comment")
+    assert validate_competition_review_command(teacher,row,payload)["comment"]==""
+
+
+@pytest.mark.parametrize("comment", [None,12,"a"*2001])
+def test_optional_approval_comment_still_validates_type_and_length(env,comment):
+    row,teacher=_submitted_competition(env)
+    with pytest.raises(MaterialUseCaseError):
+        validate_competition_review_command(teacher,row,_command(row,comment=comment))

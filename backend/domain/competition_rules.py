@@ -28,7 +28,7 @@ class ValidatedCompetitionPackage:
 COMPETITION_FACT_FIELDS = {
     "competition_id", "project_name", "award_date", "level", "award",
     "event_year", "participation_mode", "team_size", "personal_rank",
-    "event_format", "csp_percentile", "group", "track",
+    "event_format", "csp_percentile", "group", "track", "evidence",
 }
 LEGACY_AUTHORITY_FIELDS = {
     "rule_id", "self_score", "final_score", "dynamic_coefficients",
@@ -129,6 +129,12 @@ def normalize_competition_facts(snapshot, facts):
         )
     except CompetitionScoringError as error:
         raise CompetitionPackageError(str(error), code=error.code) from error
+    if "evidence" in facts:
+        from domain.ocr_evidence import normalize_evidence
+        try:
+            normalized["evidence"] = normalize_evidence(facts["evidence"])
+        except ValueError as error:
+            raise CompetitionPackageError(str(error), code="invalid_certificate_evidence") from error
     normalized["candidate_score"] = str(candidate.candidate_score)
     normalized["allocation_policy"] = candidate.allocation_policy
     normalized["project_name_key"] = re.sub(r"\s+", "", normalized["project_name"]).casefold()

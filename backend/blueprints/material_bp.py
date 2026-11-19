@@ -1,7 +1,8 @@
-"""五类材料接口。申报、附件、结构化导入和核验可用，OCR/自动加分明确未启用。"""
+"""结构化材料、独立OCR与统一审核计分入口。"""
 import csv
 import hashlib
 import io
+import json
 from pathlib import Path
 import uuid
 from flask import Blueprint, abort, current_app, jsonify, request, send_file
@@ -34,6 +35,7 @@ from use_cases.materials import (
 from workflow_models import CompetitionRulePackage, MaterialReviewCommand
 from use_cases.competition_review import review_competition_material, student_competition_feedback, teacher_competition_summary
 from use_cases.competition_ocr import start_competition_ocr, cancel_competition_ocr
+from use_cases.manual_materials import is_manual, submit_manual, review_manual
 
 material_bp=Blueprint('materials',__name__,url_prefix='/api/materials')
 
@@ -103,6 +105,22 @@ def competition_current_package():
     })
 
 
+@material_bp.post('/competition/estimate')
+def estimate_competition_route():
+    from domain.competition_rules import normalize_competition_facts, CompetitionPackageError
+    user=actor()
+    if user.role!='student': abort(403)
+    package,_=competition_workflow_context(user)
+    payload=body();object_keys(payload,{'data'},{'data'})
+    try:
+        facts=normalize_competition_facts(package.snapshot,payload['data'])
+    except CompetitionPackageError as error:
+        raise MaterialUseCaseError(str(error),code=error.code) from error
+    return jsonify({'declared_estimate':facts['candidate_score'], 'ocr_suggested_score':None,
+                    'requires_teacher_review':True, 'rule_package_id':package.id,
+                    'notice':'按手填信息计算单项候选分；最终计入分受审核、去重与上限影响。'})
+
+
 @material_bp.get('/competition/workbench-summary')
 def competition_workbench():
     return jsonify(competition_workbench_summary(actor()))
@@ -152,11 +170,73 @@ def competition_catalog_item(competition_id):
     })
 
 
+def create_manual_with_files(category,user):
+    from services.materials.ocr_schemas import MANUAL_TYPES
+    from services.materials.attachments import prepare_uploads
+    if category not in MANUAL_TYPES | {'student_work','competition'}:
+        raise ValueError('该类别请使用正式材料申报接口')
+    object_keys(request.form,{'year','data'},{'year','data'})
+    try:
+        payload=json.loads(request.form['data'])
+    except (ValueError,TypeError):
+        raise ValueError('人工材料字段必须为JSON对象') from None
+    files=prepare_uploads(request.files.getlist('files'),current_app.config.get('MATERIAL_MAX_FILE_BYTES',10*1024*1024))
+    created=[]
+    job=None
+    try:
+        row=create_material(user,category,{'year':integer(int(request.form['year']),'year',2000,2100),
+                                         'data':payload,**({'manual_only':True} if category!='competition' else {})})
+        row,created=add_attachments(user,row,row.version,files,stored_path('placeholder').parent)
+        if category=='competition':
+            from services.competition_ocr.bridge import enqueue_created_material
+            job=enqueue_created_material(user,row)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        for path in created:
+            path.unlink(missing_ok=True)
+        if job is not None:
+            import shutil
+            from services.competition_ocr.jobs import job_root
+            shutil.rmtree(job_root(job.job_id),ignore_errors=True)
+        raise
+    return jsonify(view(row)),201
+
+
+def update_competition_with_files(user,row):
+    from services.materials.attachments import prepare_uploads
+    from services.competition_ocr.bridge import enqueue_created_material
+    object_keys(request.form,{'version','data'},{'version','data'})
+    data=json.loads(request.form['data'])
+    version=integer(int(request.form['version']),'version',1,2_000_000_000)
+    incoming=request.files.getlist('files')
+    files=prepare_uploads(incoming,current_app.config.get('MATERIAL_MAX_FILE_BYTES',10*1024*1024),len(row.attachments)) if incoming else []
+    created=[]
+    job=None
+    try:
+        edit_material(user,row,version,data)
+        if files:
+            row,created=add_attachments(user,row,row.version,files,stored_path('placeholder').parent)
+        job=enqueue_created_material(user,row)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        for path in created: path.unlink(missing_ok=True)
+        if job is not None:
+            import shutil
+            from services.competition_ocr.jobs import job_root
+            shutil.rmtree(job_root(job.job_id),ignore_errors=True)
+        raise
+    return jsonify(view(row))
+
+
 @material_bp.route('/<category>/records',methods=['GET','POST'])
 def records(category):
     category_exists(category)
     user=actor()
     if request.method=='POST':
+        if request.mimetype == 'multipart/form-data':
+            return create_manual_with_files(category,user)
         row=create_material(user,category,body())
         db.session.commit()
         return jsonify(view(row)),201
@@ -164,12 +244,15 @@ def records(category):
     if user.role=='student':
         query=query.filter_by(student_id=user.student_id)
     elif user.role=='teacher' and user.faculty_id:
-        query=query.filter_by(faculty_id=user.faculty_id).filter(
-            MaterialRecord.status.in_(('submitted', 'under_review')),
-        )
-        if category != 'competition':
+        from services.materials.ocr_schemas import MANUAL_TYPES
+        statuses = ('verified','rejected','needs_correction') if request.args.get('reviewed') == '1' and category in MANUAL_TYPES | {'student_work'} else ('submitted','under_review')
+        query=query.filter_by(faculty_id=user.faculty_id).filter(MaterialRecord.status.in_(statuses))
+        from services.materials.ocr_schemas import MANUAL_TYPES
+        if category == 'student_work':
+            query = query.filter(or_(MaterialRecord.rule_version_id.isnot(None), MaterialRecord.ocr_raw_terms.isnot(None), MaterialRecord.analysis["manual_only"].as_boolean().is_(True)))
+        elif category != 'competition' and category not in MANUAL_TYPES:
             query = query.filter(MaterialRecord.rule_version_id.isnot(None))
-        else:
+        elif category == 'competition':
             query = query.filter(or_(
                 MaterialRecord.competition_rule_package_id.isnot(None),
                 MaterialRecord.rule_version_id.isnot(None),
@@ -197,6 +280,9 @@ def record(category,record_id):
     if request.method=='GET':
         return jsonify(view(row))
     user=actor()
+    if request.mimetype=='multipart/form-data':
+        if category!='competition': raise ValueError('该保存方式仅用于竞赛材料')
+        return update_competition_with_files(user,row)
     payload=body()
     object_keys(payload,{'version','data'},{'version','data'})
     edit_material(user,row,payload['version'],payload['data'])
@@ -209,7 +295,10 @@ def submit(category,record_id):
     row=record_at(category,record_id)
     user=actor()
     payload=body(); object_keys(payload,{'version'},{'version'})
-    submit_material(user,row,payload['version'])
+    if is_manual(row):
+        submit_manual(user,row,payload['version'])
+    else:
+        submit_material(user,row,payload['version'])
     db.session.commit()
     return jsonify(view(row))
 
@@ -276,9 +365,14 @@ def check_record(category,record_id):
 
 @material_bp.post('/<category>/records/<int:record_id>/review')
 def review(category,record_id):
-    row=record_at(category,record_id)
+    row=record_at(category,record_id,allow_teacher_processed=True)
     user=actor()
     payload=body()
+    if is_manual(row):
+        object_keys(payload, {'version','decision','comment'}, {'version','decision'})
+        review_manual(user,row,payload)
+        db.session.commit()
+        return jsonify(view(row))
     if category == 'competition':
         # Validate the dedicated command before the atomic executor (task 4.3)
         # sees any request.  Legacy decision names and override fields are
@@ -322,8 +416,8 @@ def competition_feedback_route():
 def competition_ocr_start_route(record_id):
     row = record_at('competition', record_id); payload = body()
     object_keys(payload, {'version'}, {'version'})
-    job, created = start_competition_ocr(actor(), row, payload['version'])
-    db.session.commit()
+    from services.competition_ocr.bridge import queue_material
+    job, created = queue_material(row, payload['version'])
     return jsonify({'job_id': job.job_id, 'status': job.status,
                     'material_version': job.material_version}), 201 if created else 200
 
@@ -369,23 +463,9 @@ def upload(category,record_id):
     row=record_at(category,record_id)
     user=actor()
     version=integer(int(request.form.get('version','0')),'version',1,2_000_000_000)
-    files=request.files.getlist('files')
-    if not 1<=len(files)<=10 or len(row.attachments)+len(files)>10:
-        raise ValueError('每条材料最多10个附件')
-    limit=current_app.config.get('MATERIAL_MAX_FILE_BYTES',10*1024*1024)
-    prepared=[]
-    for f in files:
-        name=Path((f.filename or '').replace('\\','/')).name
-        if not name or len(name)>255 or any(ord(c)<32 or ord(c)==127 or 0xD800<=ord(c)<=0xDFFF for c in name) or Path(name).suffix.lower() not in ('.pdf','.jpg','.jpeg','.png','.webp','.csv','.xlsx'):
-            raise ValueError('附件仅支持PDF、图片、CSV、XLSX')
-        payload=f.stream.read(limit+1)
-        if not payload or len(payload)>limit:
-            raise ValueError('每个附件必须为非空且不超过10MB')
-        prepared.append((name,payload))
-    # 先CAS取得本版本的修改权，再写私有文件；失败仅删除本请求新建的文件。
-    prepared_files=[]
-    for name,payload in prepared:
-        prepared_files.append((name,payload))
+    from services.materials.attachments import prepare_uploads
+    prepared_files=prepare_uploads(request.files.getlist('files'),
+        current_app.config.get('MATERIAL_MAX_FILE_BYTES',10*1024*1024),len(row.attachments))
     created=[]
     try:
         row,created=add_attachments(user,row,version,prepared_files,stored_path('placeholder').parent)
@@ -476,7 +556,13 @@ def parse_csv():
 @material_bp.post('/<category>/records/<int:record_id>/recognize')
 def recognize(category,record_id):
     record_at(category,record_id)
-    return jsonify({'error':'该类别的新OCR识别适配器尚未实现','code':'recognition_not_implemented',
+    payload=request.get_json(silent=True)
+    from services.materials.schemas import OCR_CATEGORIES
+    if payload is not None and category in OCR_CATEGORIES:
+        from services.materials.recognition import recognize_attachment
+        from services.competition_ocr.jobs import job_view
+        return jsonify(job_view(recognize_attachment(category,record_id,payload))),202
+    return jsonify({'error':'该类别尚未适配或未提供附件识别参数' ,'code':'recognition_not_implemented',
                     'ocr_executed':False,'category':category,'record_id':record_id,
                     'next_step':'人工核验或上传结构化数据；已有蓝桥杯功能使用/api/certificates'}),501
 

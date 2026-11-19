@@ -2,17 +2,13 @@
 import hashlib
 import json
 import math
-from pathlib import Path
 import cv2
 import numpy as np
 from PIL import Image, ImageOps
+from services.recognition.serialization import json_safe
 from .ocr_comparison import extract_fields, compare_ocr_fields
 from .zigzag_preprocess import prepare_zigzag_image
 from .service import contained
-
-
-def json_safe(data):
-    return json.loads(json.dumps(data, ensure_ascii=False, allow_nan=False, default=lambda v: v.tolist()))
 
 
 def predict(provider, path):
@@ -69,6 +65,41 @@ def pages_from(path, max_pixels, max_pages):
         raise ValueError("该附件格式不支持自动辅助，请上传图片/PDF或人工核验")
 
 
+def _save_ocr(folder, filename, data):
+    (folder / filename).write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    return filename
+
+
+def _comparison_warnings(report, comparison, claims):
+    for difference in comparison["differences"]:
+        report["warnings"].append({"code": "ocr_disagreement", "message": f"字段 {difference['field']} 在处理前后识别不一致，请核对原图"})
+    for field in comparison["missing_fields"] + comparison["invalid_fields"]:
+        report["warnings"].append({"code": "incomplete_field", "message": f"字段 {field} 缺失或格式异常"})
+    for field in ("student", "award", "region", "group", "track"):
+        claimed, extracted = claims.get(field), comparison["processed_fields"].get(field)
+        if claimed and extracted and claimed != extracted:
+            report["warnings"].append({"code": "claim_mismatch", "field": field,
+                                       "claimed": claimed, "recognized": extracted,
+                                       "message": f"申报的 {field} 与识别结果不一致，请人工核对"})
+
+
+def _recognize_processed(folder, processed, mask, provider, raw, claims, report):
+    output = folder / "processed.png"
+    processed.save(output)
+    mask.save(folder / "pixel_change_mask.png")
+    report["artifacts"].update(processed="processed.png", pixel_change_mask="pixel_change_mask.png")
+    second = predict(provider, output)
+    report["artifacts"]["processed_ocr"] = _save_ocr(folder, "processed_ocr.json", second)
+    comparison = compare_ocr_fields(raw["rec_texts"], second["rec_texts"])
+    report.update(comparison)
+    report["processed_texts"], report["processed_scores"] = second["rec_texts"], second["rec_scores"]
+    _comparison_warnings(report, comparison, claims)
+    report["requires_manual_review"] = bool(report["requires_manual_review"] or report["warnings"])
+    report["status"] = "manual_review" if report["requires_manual_review"] else "recognized"
+    report["message"] = "识别完成，存在待核对项。" if report["requires_manual_review"] else "识别完成，仍需教师核验原件和官方记录。"
+    return report
+
+
 def process_page(image, folder, provider, claims, max_pixels):
     report = {"status": "manual_review", "authenticity": "not_assessed", "requires_manual_review": True,
               "quality": quality(image, max_pixels), "artifacts": {}, "warnings": []}
@@ -81,8 +112,7 @@ def process_page(image, folder, provider, claims, max_pixels):
     raw = predict(provider, original)
     report["raw_fields"] = extract_fields(raw["rec_texts"])
     report["raw_texts"], report["raw_scores"] = raw["rec_texts"], raw["rec_scores"]
-    (folder / "raw_ocr.json").write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
-    report["artifacts"]["raw_ocr"] = "raw_ocr.json"
+    report["artifacts"]["raw_ocr"] = _save_ocr(folder, "raw_ocr.json", raw)
     processed, mask, watermark = prepare_zigzag_image(image, raw, expected="蓝桥杯", size=30, weight=90)
     # 不向浏览器暴露部署机器的绝对文件路径。
     if "source" in watermark:
@@ -92,30 +122,7 @@ def process_page(image, folder, provider, claims, max_pixels):
         report["message"] = "水印缺失、不匹配、无法确定或处理异常，转人工核验。"
         report["warnings"].append({"code": "watermark_gate", "message": report["message"]})
         return report
-    output = folder / "processed.png"
-    processed.save(output)
-    mask.save(folder / "pixel_change_mask.png")
-    report["artifacts"].update(processed="processed.png", pixel_change_mask="pixel_change_mask.png")
-    second = predict(provider, output)
-    (folder / "processed_ocr.json").write_text(json.dumps(second, ensure_ascii=False, indent=2), encoding="utf-8")
-    report["artifacts"]["processed_ocr"] = "processed_ocr.json"
-    comparison = compare_ocr_fields(raw["rec_texts"], second["rec_texts"])
-    report.update(comparison)
-    report["processed_texts"], report["processed_scores"] = second["rec_texts"], second["rec_scores"]
-    for difference in comparison["differences"]:
-        report["warnings"].append({"code": "ocr_disagreement", "message": f"字段 {difference['field']} 在处理前后识别不一致，请核对原图"})
-    for field in comparison["missing_fields"] + comparison["invalid_fields"]:
-        report["warnings"].append({"code": "incomplete_field", "message": f"字段 {field} 缺失或格式异常"})
-    for field in ("student", "award", "region", "group", "track"):
-        claimed, extracted = claims.get(field), comparison["processed_fields"].get(field)
-        if claimed and extracted and claimed != extracted:
-            report["warnings"].append({"code": "claim_mismatch", "field": field,
-                                       "claimed": claimed, "recognized": extracted,
-                                       "message": f"申报的 {field} 与识别结果不一致，请人工核对"})
-    report["requires_manual_review"] = bool(report["requires_manual_review"] or report["warnings"])
-    report["status"] = "manual_review" if report["requires_manual_review"] else "recognized"
-    report["message"] = "识别完成，存在待核对项。" if report["requires_manual_review"] else "识别完成，仍需教师核验原件和官方记录。"
-    return report
+    return _recognize_processed(folder, processed, mask, provider, raw, claims, report)
 
 
 def process_sources(sources, root, token, provider, claims, config, heartbeat=lambda: None):

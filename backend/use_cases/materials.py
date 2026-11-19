@@ -34,6 +34,11 @@ from domain.competition_rules import (
 from workflow_models import RecommendationCyclePolicy
 
 
+def _ocr_links(row):
+    from services.competition_ocr.binding import record_links
+    return record_links(row)
+
+
 class MaterialUseCaseError(ValueError):
     def __init__(self, message, *, code="invalid", status_code=400):
         super().__init__(message)
@@ -223,8 +228,8 @@ def validate_competition_review_command(user, row, payload):
         raise MaterialUseCaseError("该审核命令仅适用于竞赛材料")
     if not isinstance(payload, dict):
         raise MaterialUseCaseError("审核请求必须是对象")
-    unexpected = sorted(set(payload) - COMPETITION_REVIEW_FIELDS)
-    missing = sorted(COMPETITION_REVIEW_FIELDS - set(payload))
+    unexpected = sorted(set(payload) - COMPETITION_REVIEW_FIELDS - {"ocr_confirmed"})
+    missing = sorted((COMPETITION_REVIEW_FIELDS - {"comment"}) - set(payload))
     if unexpected:
         raise MaterialUseCaseError(
             f"竞赛审核不允许字段: {', '.join(unexpected)}",
@@ -251,16 +256,19 @@ def validate_competition_review_command(user, row, payload):
             "竞赛审核动作只能是 approve 或 return",
             code="competition_review_invalid_decision",
         )
-    comment = payload["comment"]
-    if not isinstance(comment, str) or not comment.strip() or len(comment) > 2000:
+    comment = payload.get("comment", "")
+    if not isinstance(comment, str) or len(comment) > 2000 or (decision == "return" and not comment.strip()):
         raise MaterialUseCaseError(
-            "审核意见为必填项，且不得超过2000字符",
+            "审核意见不得超过2000字符，退回修改时必须填写原因",
             code="competition_review_comment_required",
         )
     key = payload["idempotency_key"]
     if not isinstance(key, str) or not 1 <= len(key) <= 128:
         raise MaterialUseCaseError("幂等键必须为1至128字符")
+    if "ocr_confirmed" in payload and type(payload["ocr_confirmed"]) is not bool:
+        raise MaterialUseCaseError("OCR人工确认必须为布尔值", code="invalid_ocr_confirmation")
     return {
+        **({"ocr_confirmed":payload["ocr_confirmed"]} if "ocr_confirmed" in payload else {}),
         "version": version,
         "decision": decision,
         "comment": comment.strip(),
@@ -270,6 +278,7 @@ def validate_competition_review_command(user, row, payload):
 
 def competition_review_context(user, row):
     """Build the immutable evidence/rule projection used by reviewers."""
+    from services.competition_ocr.assessment import assessment
     if row.category != "competition":
         raise MaterialUseCaseError("该审核上下文仅适用于竞赛材料")
     if user is None or user.role != "teacher" or not user.faculty_id:
@@ -327,6 +336,8 @@ def competition_review_context(user, row):
             for attachment in row.attachments
         ],
         "ocr_raw_terms": row.ocr_raw_terms,
+        "ocr_assessment": assessment(row),
+        "ocr_links": _ocr_links(row),
         "confirmed_terms": facts,
         "rule_basis": {
             "package_id": package.package_id,
@@ -457,9 +468,16 @@ def match_material_rule(row, cycle_code):
 
 
 def create_material(user, category, payload):
-    object_keys(payload, {"year", "data", "application_id"}, {"year", "data"})
+    object_keys(payload, {"year", "data", "application_id", "manual_only"}, {"year", "data"})
     if user.role != "student" or not user.student_id:
         raise MaterialUseCaseError("仅学生本人可创建申报材料", code="forbidden", status_code=403)
+    manual_only = payload.get("manual_only", False)
+    if type(manual_only) is not bool:
+        raise MaterialUseCaseError("manual_only必须为布尔值")
+    if manual_only:
+        from services.materials.ocr_schemas import MANUAL_TYPES
+        if category not in MANUAL_TYPES | {"student_work"}:
+            raise MaterialUseCaseError("该类别请使用其正式申报通道")
     _reject_derived_material_fields(payload["data"])
     owner = Student.query.filter_by(student_id=user.student_id).first()
     if not owner or not owner.faculty_id or owner.faculty_id != user.faculty_id:
@@ -514,6 +532,8 @@ def create_material(user, category, payload):
         status="draft",
         competition_rule_package_id=(competition_package.id if competition_package else None),
     )
+    if manual_only:
+        row.analysis = {**row.analysis, "manual_only":True}
     db.session.add(row)
     db.session.flush()
     _event(row, user, "created", {"version": row.version})
@@ -540,10 +560,12 @@ def edit_material(user, row, version, data):
         {
             "data": normalized,
             "analysis": ({"candidate_score": normalized["candidate_score"], "authority": "server"}
-                         if row.category == "competition" else analyze(row.category, normalized)),
+                         if row.category == "competition" else {**analyze(row.category, normalized),
+                             **({"manual_only":True} if (row.analysis or {}).get("manual_only") else {})}),
             "confirmed_terms": (dict(normalized) if row.category == "competition" else row.confirmed_terms),
             "normalized_terms": (dict(normalized) if row.category == "competition" else row.normalized_terms),
             "check_report": None,
+            "ocr_raw_terms": None,
             "status": "draft",
             "rule_version_id": None,
         },
@@ -555,6 +577,8 @@ def edit_material(user, row, version, data):
 def submit_material(user, row, version):
     from use_cases.cycles import current_cycle_policy, pin_material_cycle
     _authorize_transition(user, row, "submit", "submitted")
+    from services.materials.originals import verify_ocr_originals
+    verify_ocr_originals(row)
     policy = current_cycle_policy(required=True)
     if row.category != "competition":
         from use_cases.scoring import match_published_rule
@@ -596,7 +620,7 @@ def submit_material(user, row, version):
             if key in {
                 "competition_id", "project_name", "award_date", "level", "award",
                 "event_year", "participation_mode", "team_size", "personal_rank",
-                "event_format", "csp_percentile", "group", "track",
+                "event_format", "csp_percentile", "group", "track", "evidence",
             }
         }
         normalized = normalize_competition_facts(package.snapshot, source_facts)
@@ -1063,6 +1087,7 @@ def review_material(user, row, version, decision, comment, idempotency_key,
         "idempotency_key": idempotency_key,
         "data_snapshot": row.data,
         "check_report_snapshot": row.check_report,
+        "ocr_links_snapshot": _ocr_links(row),
         "attachments_snapshot": [
             {
                 "id": attachment.id,

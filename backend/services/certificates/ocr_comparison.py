@@ -1,6 +1,21 @@
 """Compare recognized certificate fields; never silently overwrite disagreements."""
 import re
 from datetime import date
+from .fields import FIELDS
+
+
+def _certificate_number(lines):
+    # Do not append a following OCR noise block (e.g. a lone 5) to an identifier.
+    for i,line in enumerate(lines):
+        label = re.search(r"证书编号[:：]?(.*)$",line)
+        if label:
+            tail = label.group(1)
+            if not tail and i+1 < len(lines):
+                tail = lines[i+1]
+            number = re.fullmatch(r"(\d{6,20})[。.]?",tail)
+            if number:
+                return number.group(1)
+    return None
 
 
 def extract_fields(texts):
@@ -27,25 +42,13 @@ def extract_fields(texts):
         "group":r"(?:大学|学)[A-Za-z]组",
         "region":r"[\u4e00-\u9fff]{2}赛区",
         "award":r"特等奖|一等奖|二等奖|三等奖|优秀奖|优胜奖",
-        "certificate_no":r"证书编号[:：]?(\d{6,20})",
         "date":r"\d{4}年\d{1,2}月\d{1,2}日",
     }
     for key,pattern in patterns.items():
         match=re.search(pattern,joined)
-        fields[key]=(match.group(1) if key=="certificate_no" else match.group(0)) if match else None
-    # Do not append a following OCR noise block (e.g. a lone 5) to an identifier.
-    fields["certificate_no"] = None
-    for i,line in enumerate(lines):
-        label = re.search(r"证书编号[:：]?(.*)$",line)
-        if label:
-            tail = label.group(1)
-            if not tail and i+1 < len(lines):
-                tail = lines[i+1]
-            number = re.fullmatch(r"(\d{6,20})[。.]?",tail)
-            if number:
-                fields["certificate_no"] = number.group(1)
-                break
-    return fields
+        fields[key]=match.group(0) if match else None
+    fields["certificate_no"] = _certificate_number(lines)
+    return {key: fields[key] for key in FIELDS}
 
 
 def compare_ocr_fields(raw_texts,processed_texts):

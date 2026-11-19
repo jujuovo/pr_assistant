@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import workflowApi from '../src/services/workflowApi.js'
 
 test('admin score recalculation is a preview-confirm-execute workflow', () => {
   const source = readFileSync(new URL('../src/pages/admin/scores/ScoreManagement.vue', import.meta.url), 'utf8')
@@ -12,9 +13,15 @@ test('admin score recalculation is a preview-confirm-execute workflow', () => {
   assert.doesNotMatch(source, /for\s*\([^)]*\)[\s\S]{0,200}executeScoreRecalculation/)
 })
 
-test('workflow adapter uses exactly one bulk endpoint per phase', () => {
-  const source = readFileSync(new URL('../src/services/workflowApi.js', import.meta.url), 'utf8')
-  assert.match(source, /previewScoreRecalculation:[^\n]+\/scores\/recalculation-previews/)
-  assert.match(source, /executeScoreRecalculation:[^\n]+\/scores\/recalculation-executions/)
-  assert.doesNotMatch(source, /recalculateScores:/)
+test('workflow adapter uses exactly one bulk endpoint per phase', async () => {
+  const original=globalThis.fetch,calls=[]
+  globalThis.fetch=async(url,options)=>{calls.push({url,...options});return new Response('{}',{headers:{'Content-Type':'application/json'}})}
+  try{
+    const preview={year:2028,faculty_id:1},execution={...preview,preview_digest:'checked',idempotency_key:'one-command'}
+    await workflowApi.previewScoreRecalculation(preview)
+    await workflowApi.executeScoreRecalculation(execution)
+    assert.deepEqual(calls.map(c=>[c.url,c.method]),[['/api/workflow/scores/recalculation-previews','POST'],['/api/workflow/scores/recalculation-executions','POST']])
+    assert.deepEqual(JSON.parse(calls[0].body),preview)
+    assert.deepEqual(JSON.parse(calls[1].body),execution)
+  }finally{globalThis.fetch=original}
 })

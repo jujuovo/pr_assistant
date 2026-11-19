@@ -19,7 +19,7 @@ def start_competition_ocr(user, row, version):
     _require_owner(user, row)
     if row.status != "draft" or row.version != version:
         raise MaterialUseCaseError("材料版本已变化", code="version_conflict", status_code=409)
-    active = CompetitionOcrJob.query.filter_by(record_id=row.id).filter(
+    active = CompetitionOcrJob.query.filter_by(record_id=row.id, material_version=row.version).filter(
         CompetitionOcrJob.status.in_(("queued", "running"))
     ).first()
     if active is not None:

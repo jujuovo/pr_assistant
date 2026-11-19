@@ -3,6 +3,7 @@ from datetime import date
 import re
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from urllib.parse import urlsplit
+from .ocr_schemas import NEW_TYPES, ARRAY_FIELDS, COMPETITION_PROJECTS, normalize_extra
 
 TYPES = {
     'academic': {'name': '学业成绩', 'fields': ['term', 'courses', 'reference_id'], 'required': ['term', 'courses'],
@@ -19,6 +20,12 @@ TYPES = {
               'required': ['honor_name', 'honor_level', 'issuer', 'award_date'],
               'non_ocr': ['称号/级别/颁发单位标准化', '学校荣誉名册对照', '人工核验记录']},
 }
+
+TYPES.update(NEW_TYPES)
+TYPES['competition']['fields'].extend([
+    'project_name', 'participants', 'advisers', 'school', 'edition', 'track', 'group', 'region', 'stage_as_printed'])
+TYPES['student_work']['fields'].extend(['subject_name', 'start_month_as_printed', 'end_month_as_printed'])
+OCR_CATEGORIES = {'competition', 'student_work', *NEW_TYPES}
 
 COURSE_FIELDS = {'course_code', 'course_name', 'credits', 'score', 'full_score', 'included'}
 APPOINTMENT_FIELDS = {'organization', 'position', 'position_level', 'start_date', 'end_date', 'assessment_result'}
@@ -88,9 +95,9 @@ def normalize(category, data):
     spec = TYPES[category]
     object_keys(data, spec['fields'], spec['required'])
     result = {}
-    for key in set(spec['fields']) - {'courses', 'appointments', 'score', 'full_score'}:
+    for key in set(spec['fields']) - {'courses', 'appointments', 'score', 'full_score'} - ARRAY_FIELDS:
         if key in data:
-            result[key] = day(data[key], key) if key in ('as_of', 'award_date', 'test_date') else text(data[key], key, key in spec['required'], 128 if key == 'reference_id' else 200)
+            result[key] = day(data[key], key) if key in ('as_of', 'award_date', 'test_date', 'issue_date', 'honor_date') else text(data[key], key, key in spec['required'], 128 if key == 'reference_id' else 200)
     result.setdefault('reference_id', '')
     for optional in ('certificate_no', 'score_scale'):
         if optional in spec['fields']:
@@ -133,8 +140,9 @@ def normalize(category, data):
                 raise ValueError('任职结束日期不能早于开始日期')
             normalized.append({k:text(role[k],k) for k in APPOINTMENT_FIELDS - {'start_date','end_date'}} | {'start_date':start,'end_date':end})
         result['appointments'] = sorted(normalized, key=lambda r:(r['start_date'],r['organization'],r['position']))
-    if category == 'competition' and result.get('project_key','manual') not in ('manual','lanqiao'):
-        raise ValueError('竞赛项目暂仅支持manual或lanqiao；其他项目请选择manual')
+    normalize_extra(category, data, result, spec, text, numeric)
+    if category == 'competition' and result.get('project_key','manual') not in COMPETITION_PROJECTS:
+        raise ValueError('竞赛项目不支持，请从识别目录选择或使用manual')
     return result
 
 
@@ -176,6 +184,16 @@ def analyze(category, data):
 
 
 def type_view():
-    return {'types':[{'key':key, **value, 'recognition_status':'not_implemented', 'auto_bonus_enabled':False} for key,value in TYPES.items()],
-            'course_fields':sorted(COURSE_FIELDS), 'appointment_fields':sorted(APPOINTMENT_FIELDS),
-            'note':'已有蓝桥杯识别继续通过/api/certificates使用；本批新增接口不启动OCR。'}
+    from domain.competition_rules import COMPETITION_FACT_FIELDS
+    from .ocr_schemas import MANUAL_TYPES
+    types = []
+    for key, value in TYPES.items():
+        spec = dict(value)
+        if key == 'competition':
+            spec.update(fields=sorted(COMPETITION_FACT_FIELDS),
+                        required=['competition_id','project_name','award_date','level','award','event_year','participation_mode'],
+                        field_schema_url='/api/materials/competition/context')
+        types.append({'key':key, **spec, 'recognition_status':'available' if key in OCR_CATEGORIES else 'not_implemented',
+                      'auto_bonus_enabled':key == 'competition', 'manual_only':key in MANUAL_TYPES})
+    return {'types':types, 'course_fields':sorted(COURSE_FIELDS), 'appointment_fields':sorted(APPOINTMENT_FIELDS),
+            'note':'识别建议经学生确认保存；正式竞赛教师核验后按固定规则计分，目录外材料仅人工核验。'}

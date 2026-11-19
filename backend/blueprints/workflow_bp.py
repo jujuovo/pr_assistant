@@ -81,6 +81,19 @@ def student_score(student_id):
     return _student_score_response(user, student, year)
 
 
+@workflow_bp.get("/students/<student_id>/score-sources/<source_type>/<int:source_id>")
+def score_source_route(student_id,source_type,source_id):
+    user=actor()
+    student=Student.query.filter_by(student_id=student_id).first_or_404()
+    _authorize_student_score(user,student)
+    try:
+        year=integer(int(request.args.get("year","0")),"year",2000,2100)
+    except (ValueError,TypeError):
+        raise ScoringUseCaseError("请选择有效推免周期",status_code=400,code="invalid_cycle") from None
+    from services.score_sources import score_source_detail
+    return jsonify(score_source_detail(user,student,year,source_type,source_id))
+
+
 @workflow_bp.post("/scores/recalculate")
 def recalculate_scores():
     user = actor()
