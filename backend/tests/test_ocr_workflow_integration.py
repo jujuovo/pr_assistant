@@ -76,11 +76,11 @@ def test_material_page_ocr_reaches_real_worker_then_teacher_scoring(env):
     context=env[1].get(path+'/review-context')
     assert context.status_code==200,context.json
     assert context.json['ocr_links'][0]['job_id']==job['job_id']
-    approved=env[1].post(path+'/review',json={"version":submitted.json['version'],"decision":"approve","comment":"原件与学生确认内容一致","idempotency_key":"ocr-integration-approve"})
+    approved=env[1].post(path+'/review',json={"version":submitted.json['version'],"decision":"approve","comment":"原件与学生确认内容一致","idempotency_key":"ocr-integration-approve","ocr_confirmed":True})
     assert approved.status_code==200,approved.json
     assert ScoreEntry.query.count()==1 and StudentScoreSnapshot.query.count()==1
     assert Application.query.count()==0 and OCRMaterialLink.query.count()==1
-    assert env[1].post(path+'/review',json={"version":submitted.json['version'],"decision":"approve","comment":"原件与学生确认内容一致","idempotency_key":"ocr-integration-approve"}).status_code==200
+    assert env[1].post(path+'/review',json={"version":submitted.json['version'],"decision":"approve","comment":"原件与学生确认内容一致","idempotency_key":"ocr-integration-approve","ocr_confirmed":True}).status_code==200
     assert ScoreEntry.query.count()==1
 
 

@@ -23,7 +23,7 @@ def review_manual(user, row, payload):
         raise MaterialUseCaseError("没有本学院材料核验权限", code="forbidden", status_code=403)
     if payload["decision"] not in ("verified", "rejected", "needs_correction"):
         raise MaterialUseCaseError("人工核验结论无效")
-    comment = text(payload["comment"], "核验意见", maximum=2000)
+    comment = text(payload.get("comment", ""), "核验意见", required=payload["decision"] != "verified", maximum=2000)
     from services.materials.originals import verify_ocr_originals
     verify_ocr_originals(row)
     _cas_change(row, payload["version"], ("submitted",), {"status": payload["decision"]})

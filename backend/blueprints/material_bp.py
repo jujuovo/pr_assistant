@@ -105,6 +105,22 @@ def competition_current_package():
     })
 
 
+@material_bp.post('/competition/estimate')
+def estimate_competition_route():
+    from domain.competition_rules import normalize_competition_facts, CompetitionPackageError
+    user=actor()
+    if user.role!='student': abort(403)
+    package,_=competition_workflow_context(user)
+    payload=body();object_keys(payload,{'data'},{'data'})
+    try:
+        facts=normalize_competition_facts(package.snapshot,payload['data'])
+    except CompetitionPackageError as error:
+        raise MaterialUseCaseError(str(error),code=error.code) from error
+    return jsonify({'declared_estimate':facts['candidate_score'], 'ocr_suggested_score':None,
+                    'requires_teacher_review':True, 'rule_package_id':package.id,
+                    'notice':'按手填信息计算单项候选分；最终计入分受审核、去重与上限影响。'})
+
+
 @material_bp.get('/competition/workbench-summary')
 def competition_workbench():
     return jsonify(competition_workbench_summary(actor()))
@@ -157,7 +173,7 @@ def competition_catalog_item(competition_id):
 def create_manual_with_files(category,user):
     from services.materials.ocr_schemas import MANUAL_TYPES
     from services.materials.attachments import prepare_uploads
-    if category not in MANUAL_TYPES | {'student_work'}:
+    if category not in MANUAL_TYPES | {'student_work','competition'}:
         raise ValueError('该类别请使用正式材料申报接口')
     object_keys(request.form,{'year','data'},{'year','data'})
     try:
@@ -166,17 +182,52 @@ def create_manual_with_files(category,user):
         raise ValueError('人工材料字段必须为JSON对象') from None
     files=prepare_uploads(request.files.getlist('files'),current_app.config.get('MATERIAL_MAX_FILE_BYTES',10*1024*1024))
     created=[]
+    job=None
     try:
         row=create_material(user,category,{'year':integer(int(request.form['year']),'year',2000,2100),
-                                         'data':payload,'manual_only':True})
+                                         'data':payload,**({'manual_only':True} if category!='competition' else {})})
         row,created=add_attachments(user,row,row.version,files,stored_path('placeholder').parent)
+        if category=='competition':
+            from services.competition_ocr.bridge import enqueue_created_material
+            job=enqueue_created_material(user,row)
         db.session.commit()
     except Exception:
         db.session.rollback()
         for path in created:
             path.unlink(missing_ok=True)
+        if job is not None:
+            import shutil
+            from services.competition_ocr.jobs import job_root
+            shutil.rmtree(job_root(job.job_id),ignore_errors=True)
         raise
     return jsonify(view(row)),201
+
+
+def update_competition_with_files(user,row):
+    from services.materials.attachments import prepare_uploads
+    from services.competition_ocr.bridge import enqueue_created_material
+    object_keys(request.form,{'version','data'},{'version','data'})
+    data=json.loads(request.form['data'])
+    version=integer(int(request.form['version']),'version',1,2_000_000_000)
+    incoming=request.files.getlist('files')
+    files=prepare_uploads(incoming,current_app.config.get('MATERIAL_MAX_FILE_BYTES',10*1024*1024),len(row.attachments)) if incoming else []
+    created=[]
+    job=None
+    try:
+        edit_material(user,row,version,data)
+        if files:
+            row,created=add_attachments(user,row,row.version,files,stored_path('placeholder').parent)
+        job=enqueue_created_material(user,row)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        for path in created: path.unlink(missing_ok=True)
+        if job is not None:
+            import shutil
+            from services.competition_ocr.jobs import job_root
+            shutil.rmtree(job_root(job.job_id),ignore_errors=True)
+        raise
+    return jsonify(view(row))
 
 
 @material_bp.route('/<category>/records',methods=['GET','POST'])
@@ -229,6 +280,9 @@ def record(category,record_id):
     if request.method=='GET':
         return jsonify(view(row))
     user=actor()
+    if request.mimetype=='multipart/form-data':
+        if category!='competition': raise ValueError('该保存方式仅用于竞赛材料')
+        return update_competition_with_files(user,row)
     payload=body()
     object_keys(payload,{'version','data'},{'version','data'})
     edit_material(user,row,payload['version'],payload['data'])
@@ -315,7 +369,7 @@ def review(category,record_id):
     user=actor()
     payload=body()
     if is_manual(row):
-        object_keys(payload, {'version','decision','comment'}, {'version','decision','comment'})
+        object_keys(payload, {'version','decision','comment'}, {'version','decision'})
         review_manual(user,row,payload)
         db.session.commit()
         return jsonify(view(row))

@@ -75,3 +75,23 @@ def queue_material(row, version, *, attachment_id=None, expected_key=None):
             import shutil
             shutil.rmtree(folder)
         raise
+
+
+def enqueue_created_material(user, row):
+    """Called inside the single original+draft transaction, before committing."""
+    from use_cases.competition_ocr import start_competition_ocr
+    package = db.session.get(CompetitionRulePackage, row.competition_rule_package_id)
+    item = next((i for i in package.snapshot["catalog"]
+                 if i["competition_id"] == row.data.get("competition_id")), None)
+    if not item or item["event_family"] not in FAMILIES.values():
+        return None
+    if not any(Path(a.filename).suffix.lower() in IMAGE_EXTENSIONS for a in row.attachments):
+        return None
+    job, _ = start_competition_ocr(user, row, row.version)
+    try:
+        enqueue_material(row, job)
+    except Exception:
+        import shutil
+        shutil.rmtree(job_root(job.job_id),ignore_errors=True)
+        raise
+    return job

@@ -228,8 +228,8 @@ def validate_competition_review_command(user, row, payload):
         raise MaterialUseCaseError("该审核命令仅适用于竞赛材料")
     if not isinstance(payload, dict):
         raise MaterialUseCaseError("审核请求必须是对象")
-    unexpected = sorted(set(payload) - COMPETITION_REVIEW_FIELDS)
-    missing = sorted(COMPETITION_REVIEW_FIELDS - set(payload))
+    unexpected = sorted(set(payload) - COMPETITION_REVIEW_FIELDS - {"ocr_confirmed"})
+    missing = sorted((COMPETITION_REVIEW_FIELDS - {"comment"}) - set(payload))
     if unexpected:
         raise MaterialUseCaseError(
             f"竞赛审核不允许字段: {', '.join(unexpected)}",
@@ -256,16 +256,19 @@ def validate_competition_review_command(user, row, payload):
             "竞赛审核动作只能是 approve 或 return",
             code="competition_review_invalid_decision",
         )
-    comment = payload["comment"]
-    if not isinstance(comment, str) or not comment.strip() or len(comment) > 2000:
+    comment = payload.get("comment", "")
+    if not isinstance(comment, str) or len(comment) > 2000 or (decision == "return" and not comment.strip()):
         raise MaterialUseCaseError(
-            "审核意见为必填项，且不得超过2000字符",
+            "审核意见不得超过2000字符，退回修改时必须填写原因",
             code="competition_review_comment_required",
         )
     key = payload["idempotency_key"]
     if not isinstance(key, str) or not 1 <= len(key) <= 128:
         raise MaterialUseCaseError("幂等键必须为1至128字符")
+    if "ocr_confirmed" in payload and type(payload["ocr_confirmed"]) is not bool:
+        raise MaterialUseCaseError("OCR人工确认必须为布尔值", code="invalid_ocr_confirmation")
     return {
+        **({"ocr_confirmed":payload["ocr_confirmed"]} if "ocr_confirmed" in payload else {}),
         "version": version,
         "decision": decision,
         "comment": comment.strip(),
@@ -275,6 +278,7 @@ def validate_competition_review_command(user, row, payload):
 
 def competition_review_context(user, row):
     """Build the immutable evidence/rule projection used by reviewers."""
+    from services.competition_ocr.assessment import assessment
     if row.category != "competition":
         raise MaterialUseCaseError("该审核上下文仅适用于竞赛材料")
     if user is None or user.role != "teacher" or not user.faculty_id:
@@ -332,6 +336,7 @@ def competition_review_context(user, row):
             for attachment in row.attachments
         ],
         "ocr_raw_terms": row.ocr_raw_terms,
+        "ocr_assessment": assessment(row),
         "ocr_links": _ocr_links(row),
         "confirmed_terms": facts,
         "rule_basis": {
@@ -560,6 +565,7 @@ def edit_material(user, row, version, data):
             "confirmed_terms": (dict(normalized) if row.category == "competition" else row.confirmed_terms),
             "normalized_terms": (dict(normalized) if row.category == "competition" else row.normalized_terms),
             "check_report": None,
+            "ocr_raw_terms": None,
             "status": "draft",
             "rule_version_id": None,
         },

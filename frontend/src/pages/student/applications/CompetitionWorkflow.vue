@@ -3,14 +3,16 @@
     <header class="card hero"
       ><div
         ><p class="eyebrow">证明材料 · 学业竞赛</p><h2 id="competition-title">学业竞赛申报</h2
-        ><p>依据后端正式目录填写获奖事实；规则分类、候选分与审核结论均为只读权威信息。</p></div
+        ><p
+          >按证书手动填写申报信息。OCR在保存后后台运行，用于核对与预估分数，不会替您填写字段。</p
+        ></div
       ><button
         class="btn btn-outline"
         type="button"
         data-test="refresh-records"
-        :disabled="!context || recordsLoading"
-        @click="load"
-        >{{ recordsLoading ? '刷新中…' : '刷新竞赛记录' }}</button
+        :disabled="!context || savingDraft"
+        @click="retry"
+        >刷新申报目录</button
       ></header
     >
     <p
@@ -105,11 +107,11 @@
             data-state="search-empty"
             >正式目录无匹配结果，请修改搜索词。</p
           ><div v-if="selected" class="authority"
-            ><span>后端分类</span><strong>{{ selected.category }}</strong
-            ><span>赛事族</span><strong>{{ selected.event_family }}</strong></div
+            ><span>计分分类</span><strong>{{ selected.category }}</strong
+            ><span>申报方式</span><strong>手动填写 · 后台识别</strong></div
           >
         </section>
-        <OcrUploadPreview formal-only @use="applyOcr" />
+
         <form class="card workflow-section" novalidate @submit.prevent="validateAndSaveDraft"
           ><Heading step="2" title="填写材料事实" hint="带 * 的字段必填，请按证明原件填写。" />
           <p v-if="editingRecord" class="editing-notice" role="status" data-test="editing-notice"
@@ -186,7 +188,9 @@
                 :aria-invalid="Boolean(fieldErrors.level)"
                 :aria-describedby="fieldErrors.level ? 'level-error' : undefined"
                 ><option value="">请选择</option
-                ><option v-for="x in options.levels" :key="x">{{ x }}</option></select
+                ><option v-for="x in options.levels" :key="x" :value="x">{{
+                  displayValue(x)
+                }}</option></select
               ><small v-if="fieldErrors.level" id="level-error" class="field-error">{{
                 fieldErrors.level
               }}</small></label
@@ -200,7 +204,9 @@
                 :aria-invalid="Boolean(fieldErrors.award)"
                 :aria-describedby="fieldErrors.award ? 'award-error' : undefined"
                 ><option value="">请选择</option
-                ><option v-for="x in options.awards" :key="x">{{ x }}</option></select
+                ><option v-for="x in options.awards" :key="x" :value="x">{{
+                  displayValue(x)
+                }}</option></select
               ><small v-if="fieldErrors.award" id="award-error" class="field-error">{{
                 fieldErrors.award
               }}</small></label
@@ -211,7 +217,9 @@
                 v-model="form.participation_mode"
                 class="form-control"
                 :aria-invalid="Boolean(fieldErrors.participation_mode)"
-                ><option v-for="x in options.participationModes" :key="x">{{ x }}</option></select
+                ><option v-for="x in options.participationModes" :key="x" :value="x">{{
+                  displayValue(x)
+                }}</option></select
               ></label
             >
             <template v-if="form.participation_mode === 'team'"
@@ -243,7 +251,9 @@
             <label v-if="options.formats.length" class="field"
               >赛制<select v-model="form.event_format" class="form-control"
                 ><option value="">请选择</option
-                ><option v-for="x in options.formats" :key="x">{{ x }}</option></select
+                ><option v-for="x in options.formats" :key="x" :value="x">{{
+                  displayValue(x)
+                }}</option></select
               ></label
             ><label v-if="selected?.event_family === 'csp'" class="field"
               >CSP 排名前百分比<input
@@ -253,143 +263,72 @@
                 step=".01"
             /></label>
           </div>
-          <section v-if="Object.keys(form.evidence || {}).length"><h4>证书补充字段</h4><p>请核对姓名、编号及成绩等识别内容，修改后与申报事实一起保存。</p><MaterialFieldsEditor v-model="form.evidence" /></section>
+          <label class="upload-area" for="attachment-upload"
+            >证明原件{{ editingRecord?.attachments?.length ? '（已有原件，无须重复上传）' : ' *'
+            }}<input
+              id="attachment-upload"
+              ref="fileInput"
+              type="file"
+              accept=".pdf,.png,.jpg,.jpeg,.webp"
+              multiple
+              @change="files = Array.from($event.target.files || [])"
+            /><small>图片支持后台识别；PDF和未适配项目走人工核验。最多10个附件。</small></label
+          >
+          <MaterialImagePreview :files="files" :attachments="editingRecord?.attachments || []" />
+          <p v-if="fieldErrors.attachments" class="field-error" role="alert">{{
+            fieldErrors.attachments
+          }}</p>
+          <p v-if="actionNotice" role="status">{{ actionNotice }}</p>
+          <OcrAssessment v-if="estimate" :advice="estimate" />
           <div class="form-actions"
-            ><p>保存后可上传证明原件并选择 OCR 辅助核对。</p
-            ><button class="btn btn-primary" type="submit" :disabled="!canSaveDraft || savingDraft">{{
-              editingRecord ? '更新草稿' : '保存草稿'
-            }}</button></div
+            ><p>只上传一次，保存后可直接离开页面。</p
+            ><button
+              class="btn btn-outline"
+              type="button"
+              :disabled="savingDraft"
+              @click="previewScore"
+              >预估分数</button
+            ><button
+              class="btn btn-primary"
+              type="submit"
+              :disabled="!canSaveDraft || savingDraft"
+              >{{
+                savingDraft ? '正在保存原件…' : editingRecord ? '保存修改' : '保存材料并后台识别'
+              }}</button
+            ></div
           >
         </form>
-        <section class="card workflow-section"
-          ><Heading
-            step="3"
-            title="附件、OCR 与提交"
-            hint="OCR 仅辅助预览，不会覆盖学生确认事实。"
-          /><p v-if="actionNotice" class="action-notice" role="status" aria-live="polite">{{
-            actionNotice
-          }}</p
+        <section
+          v-if="savedRecord"
+          class="card workflow-section"
+          role="status"
+          data-test="saved-material"
+        >
+          <h3>材料已保存，可继续申报下一项</h3
           ><p
-            v-if="pageState.kind === 'ready' && !recordsLoading && !records.length"
-            class="inline-empty"
-            role="status"
-            data-state="empty"
-            >当前周期还没有竞赛材料，可从正式目录开始申报。</p
+            >{{ savedRecord.data?.project_name }} ·
+            {{
+              savedRecord.ocr_assessment?.job
+                ? 'OCR已在后台排队，离开页面不影响识别。'
+                : '原件已保存，可通过人工通道核验。'
+            }}</p
           >
-          <article v-for="row in records" :key="row.id" class="record-card"
-            ><header
-              ><div
-                ><span class="status-badge">{{ row.status }}</span
-                ><h4>{{ row.data?.competition_name || row.data?.project_name }}</h4></div
-              ><span>版本 {{ row.version }}</span></header
-            ><p v-if="row.superseded_by_record_id" class="action-notice" role="status"
-              >此记录已由补正版本 #{{ row.superseded_by_record_id }} 取代，仅保留用于审计。</p
-            ><p class="ocr-boundary"
-              >OCR
-              仅用于辅助预览，不会认定真实性、审核结论或最终加分；失败时请按学生确认值人工处理。</p
-            ><div class="facts"
-              ><div
-                ><span>OCR 原文</span
-                ><MaterialFacts :data="row.ocr_raw_terms?.report?.fields || row.ocr_raw_terms?.fields || row.ocr_raw_terms || {}" /></div
-              ><div
-                ><span>学生确认值</span><MaterialFacts :data="row.data" />
-              </div></div
-            ><label v-if="row.allowed_actions?.includes('add_attachment')" class="upload-area"
-              >上传证明附件<input type="file" multiple @change="upload(row, $event)" /><small
-                >支持 PDF、图片、CSV、XLSX；最多 10 个文件。</small
-              ></label
-            ><p v-if="jobs[row.id]"
-              >OCR 状态：{{ jobs[row.id].status
-              }}<span v-if="jobs[row.id].late_result_ignored">；迟到结果已隔离</span
-              ><span v-if="jobs[row.id].error">；{{ jobs[row.id].error }}</span></p
-            ><p
-              v-if="ocrNotice(jobs[row.id])"
-              class="ocr-warning"
-              role="status"
-              :data-test="`ocr-notice-${row.id}`"
-              >{{ ocrNotice(jobs[row.id]) }}</p
-            ><a v-if="row.ocr_raw_terms?.artifact_urls?.original" :href="row.ocr_raw_terms.artifact_urls.original" target="_blank" rel="noopener">查看OCR原始图片</a>
-            <button v-if="jobs[row.id]?.status==='completed' && jobs[row.id]?.raw_result?.mapping && row.allowed_actions?.includes('edit')" class="btn btn-outline" type="button" @click="useBoundOcr(row)">核对本次识别建议</button>
-            <footer class="record-actions"
-              ><button
-                v-if="row.allowed_actions?.includes('edit')"
-                class="btn btn-outline"
-                type="button"
-                :data-test="`edit-${row.id}`"
-                @click="editDraft(row)"
-                >编辑草稿</button
-              ><button
-                v-if="row.status === 'draft'"
-                class="btn btn-outline"
-                type="button"
-                @click="startOcr(row)"
-                >等待 OCR 并核对</button
-              ><button
-                v-if="jobs[row.id]"
-                class="btn btn-outline"
-                type="button"
-                @click="stopOcr(row)"
-                >停止 OCR 后手填</button
-              ><button
-                v-if="row.allowed_actions?.includes('submit')"
-                class="btn btn-primary"
-                type="button"
-                @click="submit(row)"
-                >提交审核</button
-              ><button
-                v-if="row.allowed_actions?.includes('withdraw')"
-                class="btn btn-outline"
-                type="button"
-                :data-test="`withdraw-${row.id}`"
-                @click="withdraw(row)"
-                >撤回为草稿</button
-              ><button
-                v-if="row.allowed_actions?.includes('create_correction')"
-                class="btn btn-primary"
-                type="button"
-                @click="createCorrection(row)"
-                >修改并重提</button
-              ><button
-                v-if="row.allowed_actions?.includes('abandon')"
-                class="btn btn-danger"
-                type="button"
-                :data-test="`abandon-${row.id}`"
-                @click="abandon(row)"
-                >{{ row.status === 'draft' ? '删除草稿' : '放弃材料' }}</button
-              ><button
-                v-if="row.status === 'rule_reconfirmation_required'"
-                class="btn btn-primary"
-                type="button"
-                @click="reconfirm(row)"
-                >确认新规则并重提</button
-              ></footer
-            ></article
+          <MaterialImagePreview :attachments="savedRecord.attachments || []" />
+          <OcrAssessment :advice="savedRecord.ocr_assessment" />
+          <button class="btn btn-outline" type="button" @click="goHistory"
+            >前往我的材料查看进度或正式提交</button
           >
         </section>
       </main>
       <aside
         ><section class="card side-card"
-          ><h3>本人竞赛计分反馈</h3
-          ><template v-if="feedback"
-            ><div class="score"
-              ><strong>{{ feedback.competition_total }}</strong
-              ><span>竞赛计入合计</span></div
-            ><p>周期总分：{{ feedback.cycle_snapshot.comprehensive_score ?? '暂无权威快照' }}</p
-            ><ul
-              ><li v-for="item in feedback.items" :key="item.material_id"
-                ><strong>{{ item.project_name }}</strong
-                ><span>候选 {{ item.candidate_score }} · 计入 {{ item.effective_score }}</span></li
-              ></ul
-            ></template
-          ><p v-else>正在读取权威反馈…</p></section
-        ><section class="card side-card"
           ><h3>申报顺序</h3
           ><ol
-            ><li>选择正式目录条目</li
-            ><li>按原件填写事实</li
-            ><li>保存并上传附件</li
-            ><li>可选 OCR 辅助核对</li
-            ><li>确认后提交审核</li></ol
+            ><li>选择项目并手动填写信息</li
+            ><li>上传一次证明原件</li
+            ><li>保存后继续申报下一项</li
+            ><li>我的材料查看后台OCR及分数预估</li
+            ><li>正式提交，等待教师审核</li></ol
           ></section
         ></aside
       >
@@ -405,20 +344,22 @@ import {
   onBeforeUnmount,
   onMounted,
   reactive,
-  ref
+  ref,
+  watch
 } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import materialApi from '@/services/materialApi.js'
-import ocrApi from '@/services/ocrApi.js'
-import OcrUploadPreview from '@/components/student/OcrUploadPreview.vue'
-import MaterialFieldsEditor from '@/components/common/MaterialFieldsEditor.vue'
-import MaterialFacts from '@/components/common/MaterialFacts.vue'
+import OcrAssessment from '@/components/common/OcrAssessment.vue'
+import MaterialImagePreview from '@/components/common/MaterialImagePreview.vue'
+import { displayValue } from '@/services/materialFields.js'
 import {
   buildCompetitionFacts,
   competitionErrorState,
   legalCompetitionOptions,
   validateCompetitionForm
 } from '@/services/competitionMaterial.js'
-const props = defineProps({ocrJobId:{type:String,default:''}})
+const route = useRoute(),
+  router = useRouter()
 const Heading = defineComponent({
   props: { step: String, title: String, hint: String },
   setup: (p) => () =>
@@ -429,253 +370,20 @@ const Heading = defineComponent({
 })
 const context = ref(null),
   catalog = ref([]),
-  records = ref([]),
-  feedback = ref(null),
   query = ref(''),
   selected = ref(null),
   schema = ref(null),
-  editingRecord = ref(null),
-  jobs = reactive({}),
-  fieldErrors = reactive({})
-const pageState = ref({ kind: 'loading', message: '' }),
-  recordsLoading = ref(false),
-  searchLoading = ref(false),
+  editingRecord = ref(null)
+const savedRecord = ref(null),
+  estimate = ref(null),
+  files = ref([]),
+  fileInput = ref(null),
+  savingDraft = ref(false),
   actionNotice = ref(''),
   errorSummary = ref(null)
-const pendingOcr = ref(null), savingDraft = ref(false)
-const form = reactive({
-  competition_id: '',
-  project_name: '',
-  award_date: '',
-  event_year: '',
-  level: '',
-  award: '',
-  participation_mode: 'individual',
-  team_size: '',
-  personal_rank: '',
-  event_format: '',
-  csp_percentile: '',
-  evidence: {}
-})
-const options = computed(() => legalCompetitionOptions(schema.value, form.level))
-const canSaveDraft = computed(
-  () =>
-    editingRecord.value?.allowed_actions?.includes('edit') ||
-    context.value?.allowed_actions?.includes('create_draft')
-)
-const stateTitle = computed(
-  () =>
-    ({
-      configuration: '竞赛申报暂未开放',
-      validation: '请修正材料信息',
-      permission: '没有访问权限',
-      conflict: '内容已发生变化',
-      'backend-unavailable': '服务暂不可用'
-    })[pageState.value.kind] || '需要处理'
-)
-const fail = (e) => {
-  pageState.value = competitionErrorState(e)
-  if (e?.code === 'competition_attachment_required')
-    replaceErrors({ attachments: '请先上传证明原件，再提交审核' })
-  else if (e?.code === 'duplicate_submission')
-    replaceErrors({ competition_id: '该竞赛材料已提交，请处理已有记录' })
-  if (['competition_attachment_required', 'duplicate_submission'].includes(e?.code))
-    nextTick(() => errorSummary.value?.focus())
-}
-const ocrNotice = (j) =>
-  !j
-    ? ''
-    : j.status === 'failed'
-      ? 'OCR 失败，请继续使用人工填写的学生确认值'
-      : j.status === 'completed' &&
-          Number.isFinite(Number(j.raw_result?.confidence)) &&
-          Number(j.raw_result.confidence) < 0.8
-        ? 'OCR 置信度较低，请人工核对并以学生确认值为准'
-        : ''
-let searchTimer = null,
-  searchController = null
-async function loadContext() {
-  pageState.value = { kind: 'loading', message: '' }
-  try {
-    context.value = await materialApi.getCompetitionContext()
-    catalog.value = context.value.catalog?.items || []
-    schema.value = context.value.field_schema
-    pageState.value = { kind: 'ready', message: '' }
-  } catch (e) {
-    context.value = null
-    fail(e)
-    throw e
-  }
-}
-async function load() {
-  if (!context.value) return
-  recordsLoading.value = true
-  try {
-    const year = context.value.cycle.cycle_code
-    const [list, scores] = await Promise.all([
-      materialApi.listRecords('competition', { year }),
-      materialApi.getCompetitionFeedback(year)
-    ])
-    records.value = list.records || []
-    feedback.value = scores
-    pageState.value = { kind: 'ready', message: '' }
-  } catch (e) {
-    fail(e)
-  } finally {
-    recordsLoading.value = false
-  }
-}
-function scheduleSearch() {
-  clearTimeout(searchTimer)
-  searchTimer = setTimeout(search, 250)
-}
-async function search() {
-  searchController?.abort()
-  searchController = new AbortController()
-  searchLoading.value = true
-  try {
-    catalog.value =
-      (await materialApi.searchCompetitionCatalog(query.value, searchController.signal)).items || []
-  } catch (e) {
-    if (e?.name !== 'AbortError') fail(e)
-  } finally {
-    searchLoading.value = false
-  }
-}
-async function retry() {
-  try {
-    await loadContext()
-    await load()
-    if(props.ocrJobId) await applyOcr(await ocrApi.getJob(props.ocrJobId))
-  } catch {}
-}
-async function selectCompetition() {
-  if (!form.competition_id) {
-    selected.value = null
-    schema.value = context.value?.field_schema || null
-    return
-  }
-  try {
-    const data = await materialApi.getCompetitionCatalogItem(form.competition_id)
-    selected.value = data.competition
-    schema.value = data.field_schema
-    form.level = data.field_schema.levels[0] || ''
-    form.award = legalCompetitionOptions(schema.value, form.level).awards[0] || ''
-  } catch (e) {
-    fail(e)
-  }
-}
-async function upload(row, e) {
-  try {
-    await materialApi.uploadAttachments('competition', row.id, row.version, e.target.files)
-    await load()
-  } catch (x) {
-    fail(x)
-  }
-}
-async function pollOcr(row) {
-  try {
-    const job = await materialApi.getCompetitionOcr(row.id, jobs[row.id].job_id)
-    jobs[row.id] = job
-    if (['queued', 'running'].includes(job.status)) setTimeout(() => pollOcr(row), 1200)
-    else if (job.status === 'completed') await load()
-    else if (job.status === 'failed')
-      jobs[row.id] = { ...job, error: job.error || 'OCR 失败，请手工填写' }
-  } catch (e) {
-    fail(e)
-  }
-}
-async function startOcr(row) {
-  try {
-    jobs[row.id] = await materialApi.startCompetitionOcr(row.id, row.version)
-    pollOcr(row)
-  } catch (e) {
-    fail(e)
-  }
-}
-async function stopOcr(row) {
-  try {
-    await materialApi.cancelCompetitionOcr(row.id, row.version, jobs[row.id].job_id)
-    delete jobs[row.id]
-    await load()
-  } catch (e) {
-    fail(e)
-  }
-}
-async function submit(row) {
-  try {
-    await materialApi.submit('competition', row.id, row.version)
-    await load()
-  } catch (e) {
-    fail(e)
-  }
-}
-async function confirmedPayload(row) {
-  const d = await materialApi.getCompetitionCatalogItem(row.data.competition_id)
-  return buildCompetitionFacts(row.data, d.field_schema)
-}
-async function createCorrection(row) {
-  try {
-    const correction = await materialApi.createCorrection(
-      'competition',
-      row.id,
-      row.version,
-      await confirmedPayload(row)
-    )
-    await load()
-    await editDraft(correction)
-  } catch (e) {
-    fail(e)
-  }
-}
-async function abandon(row) {
-  try {
-    await materialApi.abandon('competition', row.id, row.version)
-    await load()
-  } catch (e) {
-    fail(e)
-  }
-}
-async function reconfirm(row) {
-  try {
-    await materialApi.reconfirmCompetition(row.id, row.version, await confirmedPayload(row))
-    await load()
-  } catch (e) {
-    fail(e)
-  }
-}
-onMounted(async () => {
-  try {
-    await loadContext()
-    await load()
-  } catch {}
-})
-onBeforeUnmount(() => {
-  clearTimeout(searchTimer)
-  searchController?.abort()
-})
-const fieldIds = {
-  competition_id: 'competition-select',
-  project_name: 'project-name',
-  award_date: 'award-date',
-  event_year: 'event-year',
-  level: 'level',
-  award: 'award',
-  participation_mode: 'mode',
-  team_size: 'team-size',
-  personal_rank: 'personal-rank',
-  attachments: 'attachment-upload'
-}
-function focusField(key) {
-  ;(
-    document.getElementById(fieldIds[key]) ||
-    document.querySelector('.upload-area input[type="file"]')
-  )?.focus()
-}
-function replaceErrors(errors) {
-  for (const key of Object.keys(fieldErrors)) delete fieldErrors[key]
-  Object.assign(fieldErrors, errors)
-}
+const pageState = ref({ kind: 'loading', message: '' }),
+  searchLoading = ref(false),
+  fieldErrors = reactive({})
 const emptyForm = () => ({
   competition_id: '',
   project_name: '',
@@ -687,107 +395,196 @@ const emptyForm = () => ({
   team_size: '',
   personal_rank: '',
   event_format: '',
-  csp_percentile: '',
-  evidence: {}
+  csp_percentile: ''
 })
+const form = reactive(emptyForm())
+const options = computed(() => legalCompetitionOptions(schema.value, form.level))
+const canSaveDraft = computed(
+  () =>
+    editingRecord.value?.allowed_actions?.includes('edit') ||
+    context.value?.allowed_actions?.includes('create_draft')
+)
+const stateTitle = computed(
+  () =>
+    ({
+      configuration: '竞赛申报暂未开放',
+      permission: '没有访问权限',
+      conflict: '材料或规则已更新',
+      validation: '请检查申报信息'
+    })[pageState.value.kind] || '服务暂不可用'
+)
+function fail(e) {
+  pageState.value = competitionErrorState(e)
+}
+function replaceErrors(errors) {
+  Object.keys(fieldErrors).forEach((k) => delete fieldErrors[k])
+  Object.assign(fieldErrors, errors)
+}
+function focusField(key) {
+  document
+    .getElementById(
+      {
+        competition_id: 'competition-select',
+        project_name: 'project-name',
+        award_date: 'award-date',
+        event_year: 'event-year',
+        participation_mode: 'mode',
+        attachments: 'attachment-upload'
+      }[key] || key
+    )
+    ?.focus()
+}
+function resetForm() {
+  for (const key of Object.keys(form)) delete form[key]
+  Object.assign(form, emptyForm())
+}
 function cancelEditing() {
-  pendingOcr.value = null
   editingRecord.value = null
   selected.value = null
-  schema.value = context.value?.field_schema || null
-  Object.assign(form, emptyForm())
+  resetForm()
+  files.value = []
   replaceErrors({})
-  actionNotice.value = '已取消编辑，表单已恢复为新建草稿。'
+  router.replace({ query: { ...route.query, editId: undefined } })
 }
-async function editDraft(row) {
-  if (!row?.allowed_actions?.includes('edit')) return
+let scoreRequest = 0
+watch(
+  form,
+  () => {
+    scoreRequest += 1
+    estimate.value = null
+  },
+  { deep: true, flush: 'sync' }
+)
+let timer = null,
+  controller = null,
+  alive = true
+function scheduleSearch() {
+  clearTimeout(timer)
+  timer = setTimeout(search, 250)
+}
+async function search() {
+  controller?.abort()
+  controller = new AbortController()
+  searchLoading.value = true
   try {
-    const data = await materialApi.getCompetitionCatalogItem(row.data.competition_id)
-    editingRecord.value = row
-    selected.value = data.competition
-    schema.value = data.field_schema
-    Object.assign(form, emptyForm(), row.data)
-    replaceErrors({})
-    pageState.value = { kind: 'ready', message: '' }
-    actionNotice.value = '已载入草稿，请修改后点击“更新草稿”。'
-    await nextTick()
-    document.getElementById('project-name')?.focus()
-    document.getElementById('project-name')?.scrollIntoView?.({ block: 'center' })
+    catalog.value =
+      (await materialApi.searchCompetitionCatalog(query.value, controller.signal)).items || []
+  } catch (e) {
+    if (e.name !== 'AbortError') fail(e)
+  } finally {
+    searchLoading.value = false
+  }
+}
+async function selectCompetition() {
+  estimate.value = null
+  if (!form.competition_id) {
+    selected.value = null
+    return
+  }
+  try {
+    const d = await materialApi.getCompetitionCatalogItem(form.competition_id)
+    selected.value = d.competition
+    schema.value = d.field_schema
+    form.level = ''
+    form.award = ''
   } catch (e) {
     fail(e)
   }
 }
-async function applyOcr(result) {
-  const mapped = result.mapping
-  if (!mapped || mapped.material_category !== 'competition' || !mapped.data.competition_id) {
-    actionNotice.value = '该材料没有对应正式竞赛条目，请在其他材料通道保存或联系管理员。'
-    return
+async function retry() {
+  pageState.value = { kind: 'loading', message: '' }
+  try {
+    const d = await materialApi.getCompetitionContext()
+    if (!alive) return
+    context.value = d
+    catalog.value = d.catalog?.items || []
+    schema.value = d.field_schema
+    if (route.query.editId) {
+      const row = await materialApi.getRecord('competition', route.query.editId)
+      if (!row.allowed_actions?.includes('edit'))
+        throw { status: 409, message: '该材料已不可编辑，请返回我的材料查看最新状态。' }
+      editingRecord.value = row
+      const entry = await materialApi.getCompetitionCatalogItem(row.data.competition_id)
+      selected.value = entry.competition
+      schema.value = entry.field_schema
+      Object.assign(form, row.data)
+    }
+    pageState.value = { kind: 'ready', message: '' }
+  } catch (e) {
+    fail(e)
   }
-  form.competition_id = mapped.data.competition_id
-  await choose()
-  Object.assign(form, mapped.data)
-  pendingOcr.value = result.id
-  actionNotice.value = '识别建议已填入，请核对并补齐必填项后保存；当前尚未提交审核。'
 }
-async function useBoundOcr(row) {
-  await editDraft(row)
-  await applyOcr({id:jobs[row.id].job_id,mapping:jobs[row.id].raw_result.mapping})
-}
-async function validateAndSaveDraft() {
-  if(savingDraft.value) return
+function validate() {
   const errors = validateCompetitionForm(form, schema.value, context.value?.evidence_period)
   replaceErrors(errors)
   if (Object.keys(errors).length) {
-    pageState.value = { kind: 'validation', message: '请修正标记字段后再保存。' }
-    await nextTick()
-    errorSummary.value?.focus()
+    pageState.value = { kind: 'validation', message: '请修正标记的字段。' }
+    nextTick(() => errorSummary.value?.focus())
+    return false
+  }
+  return true
+}
+async function previewScore() {
+  if (!validate()) return
+  const token = ++scoreRequest
+  try {
+    const result = await materialApi.estimateCompetition(buildCompetitionFacts(form, schema.value))
+    if (token !== scoreRequest || !alive) return
+    estimate.value = result
+    pageState.value = { kind: 'ready', message: '' }
+  } catch (e) {
+    if (token === scoreRequest && alive) fail(e)
+  }
+}
+async function validateAndSaveDraft() {
+  if (savingDraft.value || !validate()) return
+  if (!files.value.length && !editingRecord.value?.attachments?.length) {
+    replaceErrors({ attachments: '请上传证明原件。' })
+    nextTick(() => focusField('attachments'))
     return
   }
+  savingDraft.value = true
   try {
-    savingDraft.value = true
     const facts = buildCompetitionFacts(form, schema.value)
-    if (pendingOcr.value) {
-      await ocrApi.confirmMaterial(pendingOcr.value, editingRecord.value
-        ? {material_record_id:editingRecord.value.id,version:editingRecord.value.version,data:facts}
-        : {year:context.value.cycle.cycle_code,data:facts})
-      pendingOcr.value = null
-    } else if (editingRecord.value)
-      await materialApi.updateRecord(
-        'competition',
-        editingRecord.value.id,
-        editingRecord.value.version,
-        facts
-      )
-    else
-      await materialApi.createRecord('competition', {
-        year: context.value.cycle.cycle_code,
-        data: facts
-      })
-    replaceErrors({})
+    const row = editingRecord.value
+      ? await materialApi.saveCompetitionDraft(
+          editingRecord.value.id,
+          editingRecord.value.version,
+          facts,
+          files.value
+        )
+      : await materialApi.createManualRecord(
+          'competition',
+          context.value.cycle.cycle_code,
+          facts,
+          files.value
+        )
+    if (!alive) return
+    savedRecord.value = row
+    estimate.value = null
     editingRecord.value = null
     selected.value = null
-    schema.value = context.value?.field_schema || null
-    Object.assign(form, emptyForm())
-    actionNotice.value = '草稿已保存，可继续上传附件或提交审核。'
-    await load()
+    resetForm()
+    files.value = []
+    if (fileInput.value) fileInput.value.value = ''
+    replaceErrors({})
+    pageState.value = { kind: 'ready', message: '' }
+    actionNotice.value = '保存成功。可继续填写下一个项目，稍后到“我的材料”查看进度。'
   } catch (e) {
-    if (e.code === 'duplicate_submission')
-      replaceErrors({ competition_id: '该竞赛材料已提交，请处理已有记录' })
     fail(e)
-    await nextTick()
-    errorSummary.value?.focus()
   } finally {
     savingDraft.value = false
   }
 }
-async function withdraw(row) {
-  try {
-    await materialApi.withdraw('competition', row.id, row.version)
-    await load()
-  } catch (e) {
-    fail(e)
-  }
+function goHistory() {
+  router.replace({ query: { page: 'application-record' } })
 }
+onMounted(retry)
+onBeforeUnmount(() => {
+  alive = false
+  clearTimeout(timer)
+  controller?.abort()
+})
 </script>
 <style scoped>
 .competition-flow,

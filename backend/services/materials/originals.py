@@ -3,11 +3,11 @@ from hashlib import sha256
 
 
 def verify_ocr_originals(row):
-    report = row.ocr_raw_terms
-    if not isinstance(report, dict):
-        return
-    report = report.get("report", report)
-    if not isinstance(report, dict) or not report.get("source_sha256"):
+    from material_models import CompetitionOcrJob
+    from ocr_models import OCRMaterialLink
+    # Editing can invalidate raw OCR but must never disable original integrity checks.
+    has_ocr = isinstance(row.ocr_raw_terms,dict) or CompetitionOcrJob.query.filter_by(record_id=row.id).first() is not None or OCRMaterialLink.query.filter_by(material_record_id=row.id).first() is not None
+    if not has_ocr:
         return
     from services.materials.service import stored_path
     from use_cases.materials import MaterialUseCaseError

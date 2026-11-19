@@ -46,6 +46,7 @@ class Config:
     CERTIFICATE_MAX_FILE_BYTES = 10 * 1024 * 1024
     CERTIFICATE_MAX_PIXELS = 20_000_000
     CERTIFICATE_MAX_PDF_PAGES = 4
+    OCR_MATURE_EVENT_FAMILIES = ()  # Enable only after template acceptance; teacher review remains required.
     ALLOW_LEGACY_CERTIFICATE_PREVIEWS = False
     OCR_STORAGE_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'private-ocr')
     MATERIAL_STORAGE_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'private-evidence')

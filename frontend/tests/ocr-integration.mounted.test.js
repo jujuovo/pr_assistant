@@ -134,7 +134,7 @@ test('manual-only opt out retains evidence and never submits a formal competitio
   wrapper.unmount()
 })
 
-test('manual teacher review requires an opinion and preserves failed-command context', async () => {
+test('manual return requires an opinion and failed approval preserves its context', async () => {
   mocks.material.listRecords.mockResolvedValue({
     records: [
       {
@@ -154,7 +154,7 @@ test('manual teacher review requires an opinion and preserves failed-command con
   await flushPromises()
   await wrapper
     .findAll('button')
-    .find((b) => b.text() === '核验通过')
+    .find((b) => b.text() === '退回补充')
     .trigger('click')
   expect(mocks.material.review).not.toHaveBeenCalled()
   expect(wrapper.text()).toContain('填写具体')
@@ -202,4 +202,37 @@ test('manual-only entry saves fields and originals with one request and never in
   expect(mocks.ocr.recognize).not.toHaveBeenCalled()
   expect(wrapper.emitted('saved')).toHaveLength(1)
   wrapper.unmount()
+})
+
+test('manual verification can approve without comment but still requires return reasons', async () => {
+  mocks.material.listRecords.mockResolvedValue({
+    records: [
+      {
+        id: 31,
+        version: 2,
+        status: 'submitted',
+        student_id: 'S1',
+        manual_only: true,
+        data: {},
+        attachments: []
+      }
+    ]
+  })
+  mocks.material.review.mockResolvedValue({})
+  const w = mount(ManualReview)
+  await flushPromises()
+  await w
+    .findAll('button')
+    .find((b) => b.text() === '退回补充')
+    .trigger('click')
+  await flushPromises()
+  expect(mocks.material.review).not.toHaveBeenCalled()
+  expect(w.text()).toContain('填写具体的核验意见')
+  await w
+    .findAll('button')
+    .find((b) => b.text() === '核验通过')
+    .trigger('click')
+  await flushPromises()
+  expect(mocks.material.review).toHaveBeenCalledWith('social_practice', 31, 2, 'verified', '')
+  w.unmount()
 })

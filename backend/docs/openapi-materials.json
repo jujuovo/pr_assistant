@@ -486,7 +486,8 @@
                       "format": "binary"
                     }
                   }
-                }
+                },
+                "description": "手填事实JSON与原件单次上传；competition适配图片同事务后台排队，其他类别人工核验，不自动计分"
               },
               "description": "人工类别专用；字段与原件同事务创建，不启动OCR、不计分"
             }
@@ -663,6 +664,32 @@
               "schema": {
                 "$ref": "#/components/schemas/EditRecord"
               }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "version",
+                  "data"
+                ],
+                "properties": {
+                  "version": {
+                    "type": "integer"
+                  },
+                  "data": {
+                    "type": "string",
+                    "description": "竞赛手填事实JSON；不接受候选分字段"
+                  },
+                  "files": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    }
+                  }
+                }
+              },
+              "description": "仅正式竞赛，原件与草稿修改同事务，适配图片自动后台排队"
             }
           }
         },
@@ -2176,6 +2203,43 @@
           }
         }
       }
+    },
+    "/api/materials/competition/estimate": {
+      "post": {
+        "summary": "基于手填事实只读预估本项候选分，不创建材料或计分",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "data"
+                ],
+                "properties": {
+                  "data": {
+                    "$ref": "#/components/schemas/CompetitionData"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "declared_estimate为候选分；最终计入仍需教师审核、去重及上限规则"
+          },
+          "400": {
+            "description": "事实无效"
+          },
+          "403": {
+            "description": "仅学生"
+          },
+          "409": {
+            "description": "周期或正式规则未就绪"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2641,8 +2705,7 @@
         "additionalProperties": false,
         "required": [
           "version",
-          "decision",
-          "comment"
+          "decision"
         ],
         "properties": {
           "version": {
@@ -2660,14 +2723,19 @@
           },
           "comment": {
             "type": "string",
-            "minLength": 1,
-            "maxLength": 2000
+            "minLength": 0,
+            "maxLength": 2000,
+            "description": "审核通过时选填；退回或驳回时必填，不超过2000字符"
           },
           "idempotency_key": {
             "type": "string",
             "minLength": 1,
             "maxLength": 128,
             "description": "客户端重试同一审核命令时复用；省略时旧客户端按材料版本和结论生成兼容键"
+          },
+          "ocr_confirmed": {
+            "type": "boolean",
+            "description": "存在OCR差异或依据不足时，教师通过审核必须明确传true；不得用于覆盖分数"
           }
         }
       },
@@ -2904,6 +2972,16 @@
           "manual_only": {
             "type": "boolean",
             "description": "仅人工核验，不计分"
+          },
+          "workflow_state": {
+            "type": "string",
+            "readOnly": true
+          },
+          "ocr_assessment": {
+            "type": "object",
+            "nullable": true,
+            "readOnly": true,
+            "description": "手填预估、OCR条件建议、差异、队列状态；不具备计分写权限"
           }
         }
       },

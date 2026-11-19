@@ -40,8 +40,8 @@ defineEmits(['select', 'navigate'])
 const categories = [
   {
     key: 'competition',
-    title: '学业竞赛（新链路）',
-    description: '进入正式目录、规则包与证明材料链路',
+    title: '学业竞赛',
+    description: '手动填写、上传原件，后台识别与分数预估',
     icon: 'trophy',
     color: '#8b5cf6',
     background: '#f3efff'

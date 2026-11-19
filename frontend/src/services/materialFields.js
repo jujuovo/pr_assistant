@@ -1,4 +1,5 @@
 export const FIELD_LABELS = {
+  description: '申报说明',
   name: '姓名',
   total_score: '总成绩',
   student: '学生姓名',
@@ -61,6 +62,10 @@ export const FIELD_LABELS = {
   assessment_result: '考核结果',
   reference_id: '学校核验记录编号',
   competition_id: '正式竞赛条目',
+  scoring_basis: '完整计分依据',
+  recognition_quality: '识别质量与证书字段',
+  evidence_period: '获奖日期有效期',
+  world_final: '全球总决赛',
   level: '竞赛级别',
   award: '奖项',
   event_year: '赛事年份',
@@ -87,6 +92,11 @@ export function displayValue(value) {
       .join('；')
   return (
     {
+      world_final: '全球总决赛',
+      regional: '区域赛',
+      asia_regional: '亚洲区域赛',
+      continental_final: '洲际总决赛',
+      invitation: '邀请赛',
       national: '国家级',
       provincial: '省级',
       first_or_above: '一等奖及以上',

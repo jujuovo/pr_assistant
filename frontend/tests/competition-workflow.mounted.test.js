@@ -1,409 +1,449 @@
 // @vitest-environment happy-dom
 import { flushPromises, mount } from '@vue/test-utils'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 const state = vi.hoisted(() => ({
   route: { query: { page: 'materials', category: 'competition' } },
   router: { replace: vi.fn() },
   api: {
     getCompetitionContext: vi.fn(),
-    listRecords: vi.fn(),
-    getCompetitionFeedback: vi.fn(),
-    searchCompetitionCatalog: vi.fn(),
     getCompetitionCatalogItem: vi.fn(),
-    createRecord: vi.fn(),
-    updateRecord: vi.fn(),
-    createCorrection: vi.fn(),
-    startCompetitionOcr: vi.fn(),
-    getCompetitionOcr: vi.fn(),
-    cancelCompetitionOcr: vi.fn(),
-    abandon: vi.fn(),
-    withdraw: vi.fn(),
+    searchCompetitionCatalog: vi.fn(),
+    createManualRecord: vi.fn(),
+    saveCompetitionDraft: vi.fn(),
+    getRecord: vi.fn(),
+    estimateCompetition: vi.fn(),
+    listRecords: vi.fn(),
     submit: vi.fn(),
-  },
+    withdraw: vi.fn(),
+    abandon: vi.fn(),
+    createCorrection: vi.fn(),
+    startCompetitionOcr: vi.fn()
+  }
 }))
-
-vi.mock('@/services/ocrApi.js',()=>({default:{getCategories:vi.fn().mockResolvedValue({categories:[]})}}))
-
-vi.mock('vue-router', () => ({
-  useRoute: () => state.route,
-  useRouter: () => state.router,
-}))
+vi.mock('vue-router', () => ({ useRoute: () => state.route, useRouter: () => state.router }))
 vi.mock('@/services/materialApi.js', () => ({
   default: state.api,
-  MATERIAL_CATEGORIES: ['academic', 'competition', 'language', 'student_work', 'honor'],
+  MATERIAL_CATEGORIES: ['competition', 'social_practice']
 }))
-
-import CompetitionWorkflow from '../src/pages/student/applications/CompetitionWorkflow.vue'
+import Form from '../src/pages/student/applications/CompetitionWorkflow.vue'
+import History from '../src/pages/student/applications/StudentMaterialsHub.vue'
 import MaterialWorkflow from '../src/pages/student/applications/MaterialWorkflow.vue'
-
-const context = {
-  available: true,
-  cycle: { cycle_code: 2028 },
-  catalog: {
-    count: 1,
-    items: [{ competition_id: 'c09', name: '计算机设计大赛', category: 'A-', levels: ['national'], event_family: 'computer-design' }],
+const schema = {
+  required: [
+    'competition_id',
+    'project_name',
+    'award_date',
+    'event_year',
+    'level',
+    'award',
+    'participation_mode'
+  ],
+  levels: ['national', 'provincial'],
+  awards_by_level: {
+    national: ['first_or_above', 'second', 'third'],
+    provincial: ['first_or_above', 'second']
   },
-  field_schema: {
-    required: ['competition_id', 'project_name', 'award_date', 'level', 'award', 'event_year', 'participation_mode'],
-    awards: { national: ['first_or_above'] },
-    participation_modes: ['individual', 'team'],
-    team_required: ['team_size', 'personal_rank'],
-  },
-  allowed_actions: ['view_catalog', 'list_records', 'create_draft'],
+  participation_modes: ['individual', 'team'],
+  formats: []
 }
-
+const item = {
+  competition_id: 'c09',
+  name: '计算机设计大赛',
+  category: 'A-',
+  event_family: 'computer-design'
+}
+const facts = {
+  competition_id: 'c09',
+  project_name: '手动填写的作品',
+  award_date: '2027-05-20',
+  event_year: 2027,
+  level: 'national',
+  award: 'first_or_above',
+  participation_mode: 'individual'
+}
+const row = {
+  id: 7,
+  category: 'competition',
+  year: 2028,
+  version: 2,
+  status: 'draft',
+  workflow_state: 'ocr_queued',
+  data: facts,
+  updated_at: '2026-11-19',
+  attachments: [{ id: 1, filename: 'proof.png', url: '/original' }],
+  allowed_actions: ['edit', 'submit', 'abandon'],
+  ocr_assessment: {
+    declared_estimate: '3.3333',
+    job: { job_id: 'job7', status: 'queued' },
+    requires_teacher_review: true
+  }
+}
+let wrappers = []
+const render = (component = Form) => {
+  const w = mount(component, {
+    attachTo: document.body,
+    global: { stubs: { ApplicationHistory: true } }
+  })
+  wrappers.push(w)
+  return w
+}
 beforeEach(() => {
   vi.clearAllMocks()
   state.route.query = { page: 'materials', category: 'competition' }
-  state.api.getCompetitionContext.mockResolvedValue(structuredClone(context))
+  state.api.getCompetitionContext.mockResolvedValue({
+    cycle: { cycle_code: 2028 },
+    catalog: { count: 1, items: [item] },
+    field_schema: schema,
+    evidence_period: { start: '2025-09-01', end: '2028-08-31' },
+    allowed_actions: ['create_draft']
+  })
+  state.api.getCompetitionCatalogItem.mockResolvedValue({ competition: item, field_schema: schema })
+  state.api.searchCompetitionCatalog.mockResolvedValue({ items: [item] })
+  state.api.createManualRecord.mockResolvedValue(structuredClone(row))
+  state.api.saveCompetitionDraft.mockResolvedValue(structuredClone(row))
+  state.api.getRecord.mockResolvedValue({
+    ...structuredClone(row),
+    workflow_state: 'ready_to_submit'
+  })
+  state.api.estimateCompetition.mockResolvedValue({ declared_estimate: '3.3333' })
   state.api.listRecords.mockResolvedValue({ records: [] })
-  state.api.getCompetitionFeedback.mockResolvedValue({
-    competition_total: 0,
-    cycle_snapshot: { comprehensive_score: null },
-    items: [],
-  })
-  state.api.searchCompetitionCatalog.mockResolvedValue({ items: context.catalog.items })
-  state.api.getCompetitionCatalogItem.mockResolvedValue({
-    competition: context.catalog.items[0],
-    field_schema: { ...context.field_schema, levels: ['national'], awards_by_level: { national: ['first_or_above'] }, formats: [] },
-  })
-  state.api.startCompetitionOcr.mockResolvedValue({ job_id: 'job-1', status: 'queued', material_version: 1 })
-  state.api.getCompetitionOcr.mockResolvedValue({ job_id: 'job-1', status: 'failed', error: '识别服务失败' })
-  state.api.cancelCompetitionOcr.mockResolvedValue({ job_id: 'job-1', status: 'cancelled', version: 2 })
-  state.api.abandon.mockResolvedValue({ id: 7, status: 'abandoned', version: 2 })
-  state.api.withdraw.mockResolvedValue({ id: 7, status: 'draft', version: 4 })
-  state.api.submit.mockResolvedValue({ id: 7, status: 'submitted', version: 2 })
-  state.api.updateRecord.mockResolvedValue({ id: 7, status: 'draft', version: 2 })
+  state.api.submit.mockResolvedValue({})
+  state.api.withdraw.mockResolvedValue({})
+  state.api.abandon.mockResolvedValue({})
 })
-
-describe('competition request ownership', () => {
-  it('mounts the product sections, labelled controls, attachment area and action region', async () => {
-    state.api.listRecords.mockResolvedValueOnce({ records: [{
-      id: 7, version: 1, status: 'draft', data: { project_name: '布局测试作品' },
-      allowed_actions: ['add_attachment', 'submit'],
-    }] })
-    const wrapper = mount(CompetitionWorkflow)
-    await flushPromises()
-
-    for (const heading of ['学业竞赛申报', '选择正式竞赛', '填写材料事实', '附件、OCR 与提交', '本人竞赛计分反馈']) {
-      expect(wrapper.text()).toContain(heading)
-    }
-    for (const id of ['competition-search', 'competition-select', 'project-name', 'award-date', 'event-year', 'level', 'award', 'mode']) {
-      expect(wrapper.get(`#${id}`).attributes('id')).toBe(id)
-      expect(wrapper.get(`label[for="${id}"]`).exists()).toBe(true)
-    }
-    expect(wrapper.get('.upload-area input[type="file"]').exists()).toBe(true)
-    expect(wrapper.get('.record-actions').text()).toContain('提交审核')
-  })
-
-  it('mounts through MaterialWorkflow without a duplicate parent records request', async () => {
-    mount(MaterialWorkflow)
-    await flushPromises()
-
-    expect(state.api.getCompetitionContext).toHaveBeenCalledTimes(1)
-    expect(state.api.listRecords).toHaveBeenCalledTimes(1)
-    expect(state.api.listRecords).toHaveBeenCalledWith('competition', { year: 2028 })
-    expect(state.api.getCompetitionFeedback).toHaveBeenCalledTimes(1)
-  })
-
-  it('refreshes records exactly once and keeps catalog selection independent', async () => {
-    const wrapper = mount(CompetitionWorkflow)
-    await flushPromises()
-    expect(state.api.listRecords).toHaveBeenCalledTimes(1)
-
-    await wrapper.get('[data-test="refresh-records"]').trigger('click')
-    await flushPromises()
-    expect(state.api.listRecords).toHaveBeenCalledTimes(2)
-    expect(state.api.getCompetitionFeedback).toHaveBeenCalledTimes(2)
-    expect(state.api.getCompetitionContext).toHaveBeenCalledTimes(1)
-
-    await wrapper.get('select').setValue('c09')
-    await flushPromises()
-    expect(state.api.getCompetitionCatalogItem).toHaveBeenCalledTimes(1)
-    expect(state.api.listRecords).toHaveBeenCalledTimes(2)
-  })
-
-  it('removes a draft through the backend-authorized abandon action', async () => {
-    state.api.listRecords
-      .mockResolvedValueOnce({ records: [{
-        id: 7, version: 1, status: 'draft', data: { project_name: '多余草稿' },
-        allowed_actions: ['submit', 'abandon'],
-      }] })
-      .mockResolvedValueOnce({ records: [] })
-    const wrapper = mount(CompetitionWorkflow)
-    await flushPromises()
-
-    expect(wrapper.get('[data-test="abandon-7"]').text()).toBe('删除草稿')
-    await wrapper.get('[data-test="abandon-7"]').trigger('click')
-    await flushPromises()
-    expect(state.api.abandon).toHaveBeenCalledWith('competition', 7, 1)
-    expect(wrapper.text()).not.toContain('多余草稿')
-  })
-
-  it('hides upload for submitted material and allows an authority-driven withdrawal', async () => {
-    state.api.listRecords
-      .mockResolvedValueOnce({ records: [{
-        id: 8, version: 3, status: 'submitted', data: { project_name: '已提交作品' },
-        allowed_actions: ['withdraw'],
-      }] })
-      .mockResolvedValueOnce({ records: [{
-        id: 8, version: 4, status: 'draft', data: { project_name: '已提交作品' },
-        allowed_actions: ['add_attachment', 'submit', 'abandon'],
-      }] })
-    const wrapper = mount(CompetitionWorkflow)
-    await flushPromises()
-
-    expect(wrapper.find('.upload-area').exists()).toBe(false)
-    await wrapper.get('[data-test="withdraw-8"]').trigger('click')
-    await flushPromises()
-    expect(state.api.withdraw).toHaveBeenCalledWith('competition', 8, 3)
-    expect(wrapper.find('.upload-area').exists()).toBe(true)
-    expect(wrapper.get('[data-test="abandon-8"]').text()).toBe('删除草稿')
-  })
+afterEach(() => {
+  wrappers.forEach((w) => w.unmount())
+  wrappers = []
+  vi.useRealTimers()
+  document.body.innerHTML = ''
 })
-
-describe('competition page states', () => {
-  it('renders loading and successful empty states from mounted async behavior', async () => {
-    state.api.getCompetitionContext.mockReturnValue(new Promise(() => {}))
-    const loading = mount(CompetitionWorkflow)
-    expect(loading.get('[data-state="loading"]').text()).toContain('正在加载')
-    loading.unmount()
-
-    state.api.getCompetitionContext.mockResolvedValue(structuredClone(context))
-    const empty = mount(CompetitionWorkflow)
-    await flushPromises()
-    expect(empty.get('[data-state="empty"]').text()).toContain('还没有竞赛材料')
+async function fill(w) {
+  await w.get('#competition-select').setValue('c09')
+  await flushPromises()
+  await w.get('#project-name').setValue(facts.project_name)
+  await w.get('#award-date').setValue(facts.award_date)
+  await w.get('#event-year').setValue('2027')
+  await w.get('#level').setValue('national')
+  await w.get('#award').setValue('first_or_above')
+}
+async function file(w) {
+  const el = w.get('#attachment-upload')
+  Object.defineProperty(el.element, 'files', {
+    value: [new File(['image'], 'proof.png', { type: 'image/png' })],
+    configurable: true
   })
+  await el.trigger('change')
+}
+function button(w, text) {
+  return w.findAll('button').find((b) => b.text().includes(text))
+}
 
+describe('single upload submission', () => {
+  it('renders one manual form and one original upload without OCR autofill or history', async () => {
+    const w = render()
+    await flushPromises()
+    expect(w.findAll('input[type=file]')).toHaveLength(1)
+    expect(w.text()).not.toContain('使用建议')
+    expect(w.find('.record-card').exists()).toBe(false)
+    expect(state.api.listRecords).not.toHaveBeenCalled()
+    expect(state.api.getCompetitionContext).toHaveBeenCalledTimes(1)
+  })
+  it('shows Chinese labels while preserving backend enum values', async () => {
+    const w = render()
+    await flushPromises()
+    await fill(w)
+    expect(w.get('#award option[value=first_or_above]').text()).toBe('一等奖及以上')
+    expect(w.get('#level option[value=national]').text()).toBe('国家级')
+    expect(w.get('#mode option[value=individual]').text()).toBe('个人')
+    expect(w.get('#award').element.value).toBe('first_or_above')
+  })
+  it('submits the original once, returns immediately after queueing and accepts a second project', async () => {
+    const w = render()
+    await flushPromises()
+    await fill(w)
+    await file(w)
+    await w.get('form').trigger('submit')
+    await flushPromises()
+    expect(state.api.createManualRecord).toHaveBeenCalledTimes(1)
+    expect(state.api.createManualRecord.mock.calls[0][2]).toEqual(facts)
+    expect(w.text()).toContain('OCR已在后台排队')
+    expect(w.get('#project-name').element.value).toBe('')
+    await fill(w)
+    await w.get('#project-name').setValue('另一个项目')
+    await file(w)
+    await w.get('form').trigger('submit')
+    await flushPromises()
+    expect(state.api.createManualRecord).toHaveBeenCalledTimes(2)
+    expect(state.api.startCompetitionOcr).not.toHaveBeenCalled()
+  })
+  it('prevents duplicate save while the single upload is in flight', async () => {
+    state.api.createManualRecord.mockReturnValue(new Promise(() => {}))
+    const w = render()
+    await flushPromises()
+    await fill(w)
+    await file(w)
+    await w.get('form').trigger('submit')
+    await w.get('form').trigger('submit')
+    expect(state.api.createManualRecord).toHaveBeenCalledTimes(1)
+    expect(w.get('button[type=submit]').attributes('disabled')).toBeDefined()
+  })
+  it('requires the original before creating any material', async () => {
+    const w = render()
+    await flushPromises()
+    await fill(w)
+    await w.get('form').trigger('submit')
+    expect(w.text()).toContain('请上传证明原件')
+    expect(state.api.createManualRecord).not.toHaveBeenCalled()
+  })
+  it('focuses validation without replacing manual input', async () => {
+    const w = render()
+    await flushPromises()
+    await w.get('#project-name').setValue('保留输入')
+    await w.get('form').trigger('submit')
+    await flushPromises()
+    expect(w.get('.error-summary').element).toBe(document.activeElement)
+    expect(w.get('#project-name').element.value).toBe('保留输入')
+    await w.get('.error-summary button').trigger('click')
+    expect(document.activeElement.id).toBe('competition-select')
+  })
+  it('previews authoritative score without saving, OCR or submitting', async () => {
+    const w = render()
+    await flushPromises()
+    await fill(w)
+    await button(w, '预估分数').trigger('click')
+    await flushPromises()
+    expect(state.api.estimateCompetition).toHaveBeenCalledWith(facts)
+    expect(w.text()).toContain('3.3333')
+    expect(state.api.createManualRecord).not.toHaveBeenCalled()
+    expect(state.api.submit).not.toHaveBeenCalled()
+  })
   it.each([
-    [{ code: 'competition_package_missing', status: 409 }, 'configuration', '管理员'],
-    [{ code: 'forbidden', status: 403 }, 'permission', '权限'],
-    [{ status: 503 }, 'backend-unavailable', '问题不一定来自材料内容'],
-  ])('maps context failure %j to actionable %s state', async (failure, kind, message) => {
-    state.api.getCompetitionContext.mockRejectedValue(Object.assign(new Error('backend'), failure))
-    const wrapper = mount(CompetitionWorkflow)
+    [{ code: 'competition_package_missing', status: 409 }, 'configuration'],
+    [{ code: 'forbidden', status: 403 }, 'permission'],
+    [{ status: 503 }, 'backend-unavailable']
+  ])('renders actionable context error %s', async (failure, kind) => {
+    state.api.getCompetitionContext.mockRejectedValue(failure)
+    const w = render()
     await flushPromises()
-
-    expect(wrapper.get(`[data-state="${kind}"]`).text()).toContain(message)
-    expect(wrapper.find('form').exists()).toBe(false)
-    expect(wrapper.text()).not.toContain('操作失败，请核对材料后重试')
+    expect(w.find(`[data-state="${kind}"]`).exists()).toBe(true)
+    expect(w.find('form').exists()).toBe(false)
+    expect(button(w, '重新加载')).toBeDefined()
   })
-
-  it('keeps the form mounted for validation and conflict recovery', async () => {
-    const wrapper = mount(CompetitionWorkflow, { attachTo: document.body })
+  it('retains input after version conflict or upload failure', async () => {
+    state.api.createManualRecord.mockRejectedValue({ code: 'version_conflict', status: 409 })
+    const w = render()
     await flushPromises()
-    await wrapper.get('form').trigger('submit')
+    await fill(w)
+    await file(w)
+    await w.get('form').trigger('submit')
     await flushPromises()
-    expect(wrapper.get('[data-state="validation"]').text()).toContain('修正标记字段')
-    expect(wrapper.get('.error-summary').text()).toContain('正式目录条目为必填项')
-    expect(wrapper.get('.error-summary').element).toBe(document.activeElement)
-    await wrapper.get('.error-summary button').trigger('click')
-    expect(wrapper.get('#competition-select').element).toBe(document.activeElement)
-    expect(state.api.createRecord).not.toHaveBeenCalled()
-    expect(wrapper.find('form').exists()).toBe(true)
-
-    state.api.listRecords.mockRejectedValueOnce(Object.assign(new Error('stale'), {
-      code: 'version_conflict', status: 409,
-    }))
-    await wrapper.get('[data-test="refresh-records"]').trigger('click')
-    await flushPromises()
-    expect(wrapper.get('[data-state="conflict"]').text()).toContain('刷新权威状态')
-    expect(wrapper.find('form').exists()).toBe(true)
-    wrapper.unmount()
+    expect(w.find('[data-state=conflict]').exists()).toBe(true)
+    expect(w.get('#project-name').element.value).toBe(facts.project_name)
+    expect(w.get('form').exists()).toBe(true)
   })
-
-  it('distinguishes a successful catalog search with no matches', async () => {
+  it('edits a persisted draft without requiring a second original upload', async () => {
+    state.route.query.editId = 7
+    const w = render()
+    await flushPromises()
+    expect(w.get('#project-name').element.value).toBe(facts.project_name)
+    await w.get('#project-name').setValue('修改作品')
+    await w.get('form').trigger('submit')
+    await flushPromises()
+    expect(state.api.saveCompetitionDraft).toHaveBeenCalledWith(
+      7,
+      2,
+      expect.objectContaining({ project_name: '修改作品' }),
+      []
+    )
+    expect(state.api.createManualRecord).not.toHaveBeenCalled()
+  })
+  it('debounces search and renders an empty result', async () => {
     vi.useFakeTimers()
-    state.api.searchCompetitionCatalog.mockResolvedValueOnce({ items: [] })
-    const wrapper = mount(CompetitionWorkflow)
+    state.api.searchCompetitionCatalog.mockResolvedValue({ items: [] })
+    const w = render()
     await flushPromises()
-    await wrapper.get('input').setValue('不存在的竞赛')
-    await vi.advanceTimersByTimeAsync(250)
-    await flushPromises()
-    expect(wrapper.get('[data-state="search-empty"]').text()).toContain('正式目录无匹配结果')
-    vi.useRealTimers()
-  })
-
-  it('debounces catalog input and never requests an empty catalog item id', async () => {
-    vi.useFakeTimers()
-    const wrapper = mount(CompetitionWorkflow)
-    await flushPromises()
-
-    await wrapper.get('#competition-search').setValue('计')
-    await wrapper.get('#competition-search').setValue('计算机')
-    await wrapper.get('#competition-search').setValue('计算机设计')
+    await w.get('#competition-search').setValue('计')
+    await w.get('#competition-search').setValue('计算机')
     await vi.advanceTimersByTimeAsync(250)
     await flushPromises()
     expect(state.api.searchCompetitionCatalog).toHaveBeenCalledTimes(1)
-    expect(state.api.searchCompetitionCatalog.mock.calls[0][0]).toBe('计算机设计')
-
-    await wrapper.get('#competition-select').setValue('')
-    await flushPromises()
-    expect(state.api.getCompetitionCatalogItem).not.toHaveBeenCalled()
-    vi.useRealTimers()
+    expect(w.find('[data-state=search-empty]').exists()).toBe(true)
   })
-
-  it('focuses actionable attachment and duplicate errors without partial creation', async () => {
-    state.api.listRecords.mockResolvedValue({ records: [{
-      id: 9, version: 1, status: 'draft', data: { project_name: '缺附件作品' },
-      allowed_actions: ['add_attachment', 'submit', 'abandon'],
-    }] })
-    state.api.submit.mockRejectedValueOnce(Object.assign(new Error('attachment'), {
-      code: 'competition_attachment_required', status: 409,
-    }))
-    const wrapper = mount(CompetitionWorkflow, { attachTo: document.body })
+  it('stays a single form when mounted through the category page', async () => {
+    const w = render(MaterialWorkflow)
     await flushPromises()
-    await wrapper.findAll('.record-actions button').find(button => button.text().includes('提交审核')).trigger('click')
-    await flushPromises()
-    expect(wrapper.get('.error-summary').text()).toContain('请先上传证明原件')
-    await wrapper.get('.error-summary button').trigger('click')
-    expect(wrapper.get('.upload-area input').element).toBe(document.activeElement)
-
-    state.api.createRecord.mockRejectedValueOnce(Object.assign(new Error('duplicate'), {
-      code: 'duplicate_submission', status: 409,
-    }))
-    await wrapper.get('#competition-select').setValue('c09')
-    await flushPromises()
-    await wrapper.get('#project-name').setValue('重复作品')
-    await wrapper.get('#award-date').setValue('2027-05-20')
-    await wrapper.get('#event-year').setValue('2027')
-    await wrapper.get('form').trigger('submit')
-    await flushPromises()
-    expect(state.api.createRecord).toHaveBeenCalledTimes(1)
-    expect(wrapper.get('.error-summary').text()).toContain('该竞赛材料已提交')
-    wrapper.unmount()
+    expect(w.findAll('input[type=file]')).toHaveLength(1)
+    expect(state.api.getCompetitionContext).toHaveBeenCalledTimes(1)
+    expect(state.api.listRecords).not.toHaveBeenCalled()
   })
 })
 
-describe('manual OCR fallback', () => {
-  const draft = {
-    id: 7,
-    version: 1,
-    status: 'draft',
-    data: { competition_id: 'c09', project_name: '人工填写作品' },
-    allowed_actions: ['edit', 'add_attachment', 'submit'],
-  }
-
-  beforeEach(() => {
-    state.api.listRecords.mockResolvedValue({ records: [structuredClone(draft)] })
+describe('persistent material history', () => {
+  it('shows queued history, no creation form, and resumes completed status after reopening', async () => {
+    state.api.listRecords.mockImplementation(async (c) => ({
+      records: c === 'competition' ? [structuredClone(row)] : []
+    }))
+    const first = render(History)
+    await flushPromises()
+    expect(first.text()).toContain('OCR队列中')
+    expect(first.find('input[type=file]').exists()).toBe(false)
+    expect(button(first, '正式提交审核')).toBeUndefined()
+    first.unmount()
+    wrappers = []
+    state.api.listRecords.mockImplementation(async (c) => ({
+      records:
+        c === 'competition'
+          ? [
+              {
+                ...structuredClone(row),
+                workflow_state: 'ready_to_submit',
+                ocr_assessment: {
+                  ...row.ocr_assessment,
+                  job: { status: 'completed' },
+                  missing_fields: ['level'],
+                  differences: [
+                    { field: 'award', declared: 'first_or_above', recognized: 'second' }
+                  ]
+                }
+              }
+            ]
+          : []
+    }))
+    const second = render(History)
+    await flushPromises()
+    expect(second.text()).toContain('待提交')
+    expect(second.text()).toContain('奖项不一致')
+    expect(second.text()).toContain('一等奖及以上')
+    expect(button(second, '正式提交审核')).toBeDefined()
   })
-
-  it('keeps confirmed facts visible while OCR is pending', async () => {
-    state.api.getCompetitionOcr.mockReturnValue(new Promise(() => {}))
-    const wrapper = mount(CompetitionWorkflow)
+  it('formally submits only via the authorized history action', async () => {
+    state.api.listRecords.mockImplementation(async (c) => ({
+      records:
+        c === 'competition' ? [{ ...structuredClone(row), workflow_state: 'ready_to_submit' }] : []
+    }))
+    const w = render(History)
     await flushPromises()
-    const start = wrapper.findAll('button').find(button => button.text().includes('等待 OCR'))
-    await start.trigger('click')
+    await button(w, '正式提交审核').trigger('click')
     await flushPromises()
-    expect(wrapper.text()).toContain('OCR 状态：queued')
-    expect(wrapper.text()).toContain('人工填写作品')
-    expect(state.api.createRecord).not.toHaveBeenCalled()
+    expect(state.api.submit).toHaveBeenCalledWith('competition', 7, 2)
+    expect(w.text()).toContain('等待教师审核')
   })
-
-  it('shows failed and low-confidence results without replacing manual facts', async () => {
-    const failed = mount(CompetitionWorkflow)
+  it('retains withdrawal and delete with backend versions', async () => {
+    state.api.listRecords
+      .mockResolvedValueOnce({
+        records: [
+          {
+            ...structuredClone(row),
+            status: 'submitted',
+            workflow_state: 'pending_review',
+            allowed_actions: ['withdraw']
+          }
+        ]
+      })
+      .mockResolvedValueOnce({ records: [] })
+    const w = render(History)
     await flushPromises()
-    await failed.findAll('button').find(button => button.text().includes('等待 OCR')).trigger('click')
+    await button(w, '撤回为草稿').trigger('click')
     await flushPromises()
-    expect(failed.get('[data-test="ocr-notice-7"]').text()).toContain('人工填写')
-    expect(failed.text()).toContain('人工填写作品')
-    failed.unmount()
-
-    state.api.getCompetitionOcr.mockResolvedValueOnce({
-      job_id: 'job-1', status: 'completed', raw_result: { confidence: 0.42, project_name: '机器猜测' },
+    expect(state.api.withdraw).toHaveBeenCalledWith('competition', 7, 2)
+  })
+  it('routes correction to an editable successor rather than overwriting history', async () => {
+    state.api.listRecords
+      .mockResolvedValueOnce({
+        records: [
+          {
+            ...structuredClone(row),
+            status: 'needs_correction',
+            workflow_state: 'needs_correction',
+            allowed_actions: ['create_correction']
+          }
+        ]
+      })
+      .mockResolvedValueOnce({ records: [] })
+    state.api.createCorrection.mockResolvedValue({ id: 8, category: 'competition' })
+    const w = render(History)
+    await flushPromises()
+    await button(w, '补正材料').trigger('click')
+    await flushPromises()
+    expect(state.api.createCorrection).toHaveBeenCalledWith('competition', 7, 2, facts)
+    expect(state.router.replace).toHaveBeenCalledWith({
+      query: { page: 'materials', category: 'competition', editId: 8 }
     })
-    const low = mount(CompetitionWorkflow)
-    await flushPromises()
-    await low.findAll('button').find(button => button.text().includes('等待 OCR')).trigger('click')
-    await flushPromises()
-    expect(low.get('[data-test="ocr-notice-7"]').text()).toContain('置信度较低')
-    expect(low.text()).toContain('人工填写作品')
-    expect(low.text()).not.toContain('机器猜测')
   })
-
-  it('keeps the manual form when the OCR service is unavailable', async () => {
-    state.api.startCompetitionOcr.mockRejectedValueOnce(Object.assign(new Error('offline'), { status: 503 }))
-    const wrapper = mount(CompetitionWorkflow)
+  it('renders partial failure and empty history with retry', async () => {
+    state.api.listRecords.mockRejectedValue(new Error('offline'))
+    const w = render(History)
     await flushPromises()
-    await wrapper.findAll('button').find(button => button.text().includes('等待 OCR')).trigger('click')
+    expect(w.get('[role=alert]').text()).toContain('未能加载')
+    expect(w.text()).toContain('暂无符合条件')
+  })
+  it('filters states and never offers a command without allowed_actions', async () => {
+    state.api.listRecords
+      .mockResolvedValueOnce({
+        records: [
+          {
+            ...structuredClone(row),
+            status: 'scored',
+            workflow_state: 'approved',
+            allowed_actions: []
+          }
+        ]
+      })
+      .mockResolvedValueOnce({ records: [] })
+    const w = render(History)
     await flushPromises()
-    expect(wrapper.get('[data-state="backend-unavailable"]').text()).toContain('问题不一定来自材料内容')
-    expect(wrapper.find('form').exists()).toBe(true)
-    expect(wrapper.text()).toContain('人工填写作品')
+    expect(w.text()).toContain('已通过')
+    expect(button(w, '正式提交审核')).toBeUndefined()
+    await w.get('select').setValue('draft')
+    expect(w.text()).toContain('暂无符合条件')
+  })
+  it('loads additional pages without losing earlier materials', async () => {
+    state.api.listRecords.mockImplementation(async (c, f) => ({
+      records: c === 'competition' ? [{ ...structuredClone(row), id: f.after_id ? 8 : 7 }] : [],
+      next_after_id: c === 'competition' && !f.after_id ? 7 : null
+    }))
+    const w = render(History)
+    await flushPromises()
+    await button(w, '加载更多').trigger('click')
+    await flushPromises()
+    expect(w.findAll('.history-card')).toHaveLength(2)
+    expect(state.api.listRecords).toHaveBeenCalledWith('competition', { after_id: 7 })
   })
 })
 
-describe('draft and correction editing', () => {
-  const facts = {
-    competition_id: 'c09', competition_name: '计算机设计大赛', project_name: '退回前作品',
-    award_date: '2027-05-20', event_year: 2027, level: 'national', award: 'first_or_above',
-    participation_mode: 'individual',
-  }
-
-  it('creates a correction, opens its draft, patches the current version and never posts a duplicate draft', async () => {
-    const returned = { id: 21, version: 4, status: 'needs_correction', data: facts, allowed_actions: ['view', 'create_correction', 'abandon'] }
-    const correction = { id: 22, version: 1, status: 'draft', data: facts, allowed_actions: ['edit', 'add_attachment', 'submit'] }
-    state.api.listRecords
-      .mockResolvedValueOnce({ records: [returned] })
-      .mockResolvedValueOnce({ records: [returned, correction] })
-      .mockResolvedValueOnce({ records: [returned, { ...correction, version: 2, data: { ...facts, project_name: '修正后作品' } }] })
-    state.api.createCorrection.mockResolvedValueOnce(correction)
-
-    const wrapper = mount(CompetitionWorkflow, { attachTo: document.body })
-    await flushPromises()
-    await wrapper.findAll('button').find(button => button.text().includes('修改并重提')).trigger('click')
-    await flushPromises()
-
-    expect(state.api.createCorrection).toHaveBeenCalledWith('competition', 21, 4, expect.objectContaining({ project_name: '退回前作品' }))
-    expect(wrapper.get('[data-test="editing-notice"]').text()).toContain('版本 1')
-    expect(wrapper.get('#project-name').element.value).toBe('退回前作品')
-    expect(wrapper.get('#project-name').element).toBe(document.activeElement)
-
-    await wrapper.get('#project-name').setValue('修正后作品')
-    await wrapper.get('form').trigger('submit')
-    await flushPromises()
-    expect(state.api.updateRecord).toHaveBeenCalledWith('competition', 22, 1, expect.objectContaining({ project_name: '修正后作品' }))
-    expect(state.api.createRecord).not.toHaveBeenCalled()
-    wrapper.unmount()
+it('isolates an old score response after the student changes declared facts', async () => {
+  let resolve
+  state.api.estimateCompetition.mockReturnValue(new Promise((r) => (resolve = r)))
+  const w = render()
+  await flushPromises()
+  await fill(w)
+  await button(w, '预估分数').trigger('click')
+  await w.get('#project-name').setValue('已改变的信息')
+  resolve({ declared_estimate: '99.9999' })
+  await flushPromises()
+  expect(w.text()).not.toContain('99.9999')
+  expect(w.get('#project-name').element.value).toBe('已改变的信息')
+})
+it('refreshes only persisted pending jobs and stops watching when history unmounts', async () => {
+  vi.useFakeTimers()
+  state.api.listRecords.mockImplementation(async (c) => ({
+    records: c === 'competition' ? [structuredClone(row)] : []
+  }))
+  state.api.getRecord.mockResolvedValue({
+    ...structuredClone(row),
+    workflow_state: 'ready_to_submit',
+    ocr_assessment: { ...row.ocr_assessment, job: { status: 'completed' } }
   })
-
-  it('uses the refreshed draft version for resubmission after an edit', async () => {
-    const draft = { id: 31, version: 5, status: 'draft', data: facts, allowed_actions: ['edit', 'submit'] }
-    const updated = { ...draft, version: 6, data: { ...facts, project_name: '版本六作品' } }
-    state.api.listRecords
-      .mockResolvedValueOnce({ records: [draft] })
-      .mockResolvedValueOnce({ records: [updated] })
-      .mockResolvedValueOnce({ records: [{ ...updated, version: 7, status: 'submitted', allowed_actions: ['withdraw'] }] })
-    const wrapper = mount(CompetitionWorkflow)
-    await flushPromises()
-    await wrapper.get('[data-test="edit-31"]').trigger('click')
-    await flushPromises()
-    await wrapper.get('#project-name').setValue('版本六作品')
-    await wrapper.get('form').trigger('submit')
-    await flushPromises()
-    await wrapper.findAll('.record-actions button').find(button => button.text().includes('提交审核')).trigger('click')
-    await flushPromises()
-
-    expect(state.api.updateRecord).toHaveBeenCalledWith('competition', 31, 5, expect.any(Object))
-    expect(state.api.submit).toHaveBeenCalledWith('competition', 31, 6)
-  })
-
-  it('preserves edited input when a stale PATCH is rejected', async () => {
-    const draft = { id: 41, version: 2, status: 'draft', data: facts, allowed_actions: ['edit', 'submit'] }
-    state.api.listRecords.mockResolvedValue({ records: [draft] })
-    state.api.updateRecord.mockRejectedValueOnce(Object.assign(new Error('stale'), { code: 'version_conflict', status: 409 }))
-    const wrapper = mount(CompetitionWorkflow)
-    await flushPromises()
-    await wrapper.get('[data-test="edit-41"]').trigger('click')
-    await flushPromises()
-    await wrapper.get('#project-name').setValue('尚未覆盖的输入')
-    await wrapper.get('form').trigger('submit')
-    await flushPromises()
-
-    expect(wrapper.get('[data-state="conflict"]').text()).toContain('刷新权威状态')
-    expect(wrapper.get('#project-name').element.value).toBe('尚未覆盖的输入')
-    expect(wrapper.get('[data-test="editing-notice"]').exists()).toBe(true)
-    expect(state.api.createRecord).not.toHaveBeenCalled()
-  })
+  const w = render(History)
+  await flushPromises()
+  await vi.advanceTimersByTimeAsync(5000)
+  await flushPromises()
+  expect(state.api.getRecord).toHaveBeenCalledWith('competition', 7)
+  expect(w.text()).toContain('待提交')
+  expect(state.api.createManualRecord).not.toHaveBeenCalled()
+  const count = state.api.getRecord.mock.calls.length
+  w.unmount()
+  wrappers = []
+  await vi.advanceTimersByTimeAsync(10000)
+  expect(state.api.getRecord).toHaveBeenCalledTimes(count)
 })

@@ -78,6 +78,10 @@ def review_competition_material(user, row, payload, *, fail_at=None):
     package = db.session.get(CompetitionRulePackage, locked.competition_rule_package_id)
     if not package:
         raise MaterialUseCaseError("固定竞赛规则包不存在", code="rule_package_missing", status_code=409)
+    from services.competition_ocr.assessment import assessment
+    advice=assessment(locked)
+    if command["decision"]=="approve" and locked.ocr_raw_terms and advice["review_mode"]=="manual_confirmation" and command.get("ocr_confirmed") is not True:
+        raise MaterialUseCaseError("请人工核对OCR差异、缺失依据及申报分数后明确确认",code="ocr_manual_confirmation_required",status_code=409)
     if fail_at == "after_lock": raise RuntimeError("injected after_lock failure")
     from services.materials.originals import verify_ocr_originals
     verify_ocr_originals(locked)
@@ -111,7 +115,8 @@ def review_competition_material(user, row, payload, *, fail_at=None):
         scoring = None
     if fail_at == "before_audit": raise RuntimeError("injected before_audit failure")
     details = {**command, "version": locked.version, "scoring": scoring,
-               "data_snapshot": locked.data, "ocr_links_snapshot": ocr_snapshot}
+               "data_snapshot": locked.data, "ocr_links_snapshot": ocr_snapshot,
+               "ocr_assessment_snapshot": advice, "ocr_raw_snapshot":locked.ocr_raw_terms}
     db.session.add(MaterialEvent(record_id=locked.id, actor_id=user.id,
         action="competition_approved" if command["decision"] == "approve" else "competition_returned",
         details=details))

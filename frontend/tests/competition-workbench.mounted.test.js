@@ -187,7 +187,8 @@ describe('authoritative competition workbench projection', () => {
       3,
       'return',
       '请修改后重提',
-      expect.any(String)
+      expect.any(String),
+      undefined
     )
 
     const approve = mount(TeacherCompetitionReview)
@@ -205,22 +206,23 @@ describe('authoritative competition workbench projection', () => {
       3,
       'approve',
       '材料核验通过',
-      expect.any(String)
+      expect.any(String),
+      undefined
     )
   })
 
-  it('blocks an empty review comment and focuses the actionable field', async () => {
+  it('requires a reason when returning material and focuses the field', async () => {
     const wrapper = mount(TeacherCompetitionReview, { attachTo: document.body })
     await flushPromises()
     await wrapper.get('.pending-card button').trigger('click')
     await flushPromises()
     await wrapper
       .findAll('.review-dialog footer button')
-      .find((button) => button.text().includes('审核通过'))
+      .find((button) => button.text().includes('退回修改'))
       .trigger('click')
     await flushPromises()
 
-    expect(wrapper.get('#review-comment-error').text()).toContain('请填写材料核验意见')
+    expect(wrapper.get('#review-comment-error').text()).toContain('退回修改时，请填写具体原因')
     expect(wrapper.get('#review-comment').attributes('aria-invalid')).toBe('true')
     expect(wrapper.get('#review-comment').element).toBe(document.activeElement)
     expect(state.api.reviewCompetition).not.toHaveBeenCalled()
@@ -252,7 +254,7 @@ describe('authoritative competition workbench projection', () => {
     await processed.get('.pending-card button').trigger('click')
     await flushPromises()
     expect(processed.text()).toContain('当前不可处理')
-    expect(processed.text()).not.toContain('审核通过')
+    expect(processed.findAll('button').some((b) => b.text() === '审核通过')).toBe(false)
   })
 
   it('renders a successful empty teacher workbench', async () => {
@@ -287,6 +289,71 @@ describe('authoritative competition workbench projection', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('材料核验通过')
     expect(wrapper.text()).toContain('该材料当前不可处理')
-    expect(wrapper.text()).not.toContain('审核通过')
+    expect(wrapper.findAll('button').some((b) => b.text() === '审核通过')).toBe(false)
   })
+})
+
+it('requires explicit manual OCR confirmation before teacher approves', async () => {
+  state.api.getCompetitionReviewContext.mockResolvedValue({
+    record_id: 1,
+    material_version: 3,
+    attachments: [],
+    confirmed_terms: { project_name: '作品' },
+    ocr_raw_terms: {},
+    candidate_score: 3.33,
+    rule_basis: { competition_name: '比赛', category: 'A', package_version: 1 },
+    allowed_actions: ['approve', 'return'],
+    ocr_assessment: {
+      declared_estimate: '3.33',
+      review_mode: 'manual_confirmation',
+      job: { status: 'completed' },
+      missing_fields: ['level'],
+      differences: []
+    }
+  })
+  const w = mount(TeacherCompetitionReview)
+  await flushPromises()
+  await w
+    .findAll('button')
+    .find((b) => b.text() === '核对材料')
+    .trigger('click')
+  await flushPromises()
+  await w.get('textarea').setValue('核对原件与申报分数')
+  await w
+    .findAll('button')
+    .find((b) => b.text() === '审核通过')
+    .trigger('click')
+  await flushPromises()
+  expect(state.api.reviewCompetition).not.toHaveBeenCalled()
+  expect(w.text()).toContain('请先人工核对')
+  await w.get('input[type=checkbox]').setValue(true)
+  await w
+    .findAll('button')
+    .find((b) => b.text() === '审核通过')
+    .trigger('click')
+  await flushPromises()
+  expect(state.api.reviewCompetition.mock.calls[0].at(-1)).toBe(true)
+  w.unmount()
+})
+
+it('approves without requiring review text', async () => {
+  const w = mount(TeacherCompetitionReview)
+  await flushPromises()
+  await w.get('.pending-card button').trigger('click')
+  await flushPromises()
+  expect(w.get('#review-comment').attributes('required')).toBeUndefined()
+  await w
+    .findAll('.review-dialog footer button')
+    .find((b) => b.text() === '审核通过')
+    .trigger('click')
+  await flushPromises()
+  expect(state.api.reviewCompetition).toHaveBeenCalledWith(
+    1,
+    3,
+    'approve',
+    '',
+    expect.any(String),
+    undefined
+  )
+  w.unmount()
 })

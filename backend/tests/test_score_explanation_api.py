@@ -48,6 +48,8 @@ def test_student_score_contract_explains_totals_rules_and_exclusions(env):
     }
     assert data["comprehensive_score"] == "69.0000"
     assert data["rule_version_ids"]
+    assert data["rule_versions"][0]["label"] == "竞赛（第1版）"
+    assert data["entries"][0]["rule_label"] == "竞赛（第1版）"
     assert data["updated_at"].endswith("Z")
     assert [entry["included"] for entry in data["entries"]] == [True, False]
     assert data["entries"][1]["exclusion_reason"] == "max_count_exceeded"
@@ -56,7 +58,7 @@ def test_student_score_contract_explains_totals_rules_and_exclusions(env):
         "cycle_code", "cycle_policy_version_id", "rule_version_id",
         "automatic_score", "override_score", "candidate_score",
         "included_score", "included", "exclusion_reason", "allowed_actions",
-        "updated_at",
+        "updated_at", "rule_label",
     }
     assert data["entries"][0]["project_source"] == {
         "type": "material", "id": "1", "category": "competition"

@@ -28,11 +28,10 @@
       /></div>
       <template v-if="!history && row.status === 'submitted'"
         ><label :for="'comment-' + row.id"
-          >核验意见<textarea
+          >核验意见（通过时选填；退回或不通过时必填）<textarea
             :id="'comment-' + row.id"
             v-model="comments[row.id]"
             maxlength="2000"
-            required
           /></label
         ><div class="actions"
           ><button
@@ -100,7 +99,7 @@ async function load() {
   }
 }
 async function review(row, decision) {
-  if (!comments.value[row.id]?.trim()) {
+  if (decision !== 'verified' && !comments.value[row.id]?.trim()) {
     error.value = '请先填写具体的核验意见。'
     document.getElementById('comment-' + row.id)?.focus()
     return
@@ -108,7 +107,13 @@ async function review(row, decision) {
   busy.value = true
   error.value = ''
   try {
-    await materialApi.review(category.value, row.id, row.version, decision, comments.value[row.id])
+    await materialApi.review(
+      category.value,
+      row.id,
+      row.version,
+      decision,
+      comments.value[row.id] || ''
+    )
     notice.value = '核验结果已保存。'
     await load()
   } catch (e) {
