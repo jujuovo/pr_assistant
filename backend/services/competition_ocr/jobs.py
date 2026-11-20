@@ -30,7 +30,7 @@ def authorized_job(job_id):
         from services.materials.service import record_at
         link = db.session.get(OCRMaterialLink, row.id)
         bound = CompetitionOcrJob.query.filter_by(job_id=row.id).one_or_none()
-        record_id = link.material_record_id if link else bound.record_id if bound else None
+        record_id = row.material_record_id or (link.material_record_id if link else bound.record_id if bound else None)
         if record_id is None:
             abort(403, description="材料尚未提交教师核验")
         material = db.session.get(MaterialRecord, record_id)
@@ -51,7 +51,7 @@ def job_view(row):
     material = db.session.get(MaterialRecord, link.material_record_id) if link else None
     return {"id": row.id, "category": row.category, "status": row.status, "report": row.report,
             "error": row.error, "authenticity": "not_assessed",
-            "mapping": suggestions(row.category, row.report, package),
+            "mapping": None if row.category == "volunteer" else suggestions(row.category, row.report, package),
             "material_record_id": material.id if material else None,
             "material_url": f"/api/materials/{material.category}/records/{material.id}" if material else None,
             "application_id": material.application_id if material else None,
@@ -60,9 +60,10 @@ def job_view(row):
                               for key in (row.report or {}).get("images", {})}}
 
 
-def enqueue(key, payload, filename, *, job_id=None, commit=True):
+def enqueue(key, payload, filename, *, job_id=None, commit=True, material=None, attachment=None):
     user = actor()
-    category(key)
+    if key != "volunteer" or material is None or attachment is None:
+        category(key)
     if user.role not in ("student", "teacher", "admin") or not user.faculty_id:
         abort(403, description="请完善学院资料")
     if OCRJob.query.filter_by(user_id=user.id).filter(OCRJob.status.in_(("queued", "processing"))).count() >= 10:
@@ -72,7 +73,10 @@ def enqueue(key, payload, filename, *, job_id=None, commit=True):
     if Path(name).suffix.lower() not in IMAGE_EXTENSIONS or len(name) > 255:
         raise ValueError("请输入有效的图片文件名")
     row = OCRJob(id=job_id or str(uuid.uuid4()), user_id=user.id, faculty_id=user.faculty_id, category=key,
-                 filename=name, sha256=sha256(payload).hexdigest())
+                 filename=name, sha256=sha256(payload).hexdigest(),
+                 material_record_id=material.id if material is not None else None,
+                 material_version=material.version if material is not None else None,
+                 attachment_id=attachment.id if attachment is not None else None)
     folder = job_root(row.id)
     folder.mkdir(parents=True, exist_ok=False)
     path = folder / ("input" + Path(name).suffix.lower())

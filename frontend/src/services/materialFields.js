@@ -1,4 +1,15 @@
 export const FIELD_LABELS = {
+  check_in: '签到时间',
+  check_out: '签退时间',
+  activity_name: '参与活动',
+  volunteer_name: '志愿者姓名',
+  recorder_name: '录入人姓名',
+  recording_organization: '录入组织',
+  recorded_at: '平台录入时间',
+  record_type: '录入类型',
+  record_reason: '录入原因',
+  hours: '本次工时（小时）',
+  service_type: '工时类别',
   regular_hours: '本次普通志愿工时',
   reduced_hours: '本次大型赛会及支教工时（原始小时）',
   description: '申报说明',
@@ -87,6 +98,8 @@ export const INTERNAL_FIELDS = new Set([
 ])
 export function displayValue(value) {
   if (value == null || value === '') return '未识别到'
+  if (value === 'regular') return '普通志愿服务'
+  if (value === 'reduced') return '大型赛会或支教'
   if (Array.isArray(value)) return value.map(displayValue).join('、')
   if (typeof value === 'object')
     return Object.entries(value)

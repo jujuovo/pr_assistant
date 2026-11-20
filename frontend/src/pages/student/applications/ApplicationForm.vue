@@ -145,6 +145,7 @@
               @change="handleFileSelect"
             />
 
+            <MaterialImagePreview :files="previewLocalFiles" :attachments="previewStoredFiles" />
             <div v-if="formData.files.length" class="file-list">
               <div class="file-list-header"
                 ><span>已选择文件（{{ formData.files.length }}）</span></div
@@ -189,9 +190,14 @@
           ></button>
         </section>
 
-        <CertificatePreview ref="certificatePreview" :files="formData.files"
-          :project="formData.certificateProject" :existing-id="formData.id"
-          @recognized="fillRecognizedDate" @saving="certificateSaving = $event" />
+        <CertificatePreview
+          ref="certificatePreview"
+          :files="formData.files"
+          :project="formData.certificateProject"
+          :existing-id="formData.id"
+          @recognized="fillRecognizedDate"
+          @saving="certificateSaving = $event"
+        />
 
         <div class="form-actions">
           <button type="button" class="btn btn-outline" @click="saveDraft">
@@ -233,6 +239,7 @@
 import { ref, reactive, watch, onMounted, computed } from 'vue'
 import CertificateSelection from '@/components/student/CertificateSelection.vue'
 import CertificatePreview from '@/components/student/CertificatePreview.vue'
+import MaterialImagePreview from '@/components/common/MaterialImagePreview.vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { useApplicationsStore } from '@/stores/applications.js'
 import { useToastStore } from '@/stores/toast.js'
@@ -248,7 +255,7 @@ const toastStore = useToastStore()
 const fileInput = ref(null)
 const certificateSaving = ref(false)
 const certificatePreview = ref(null)
-const fillRecognizedDate = pages => {
+const fillRecognizedDate = (pages) => {
   const value = pages[0]?.date
   if (!formData.awardDate && /^\d{4}-\d{2}-\d{2}$/.test(value || '')) formData.awardDate = value
 }
@@ -308,8 +315,12 @@ const syncRuleForProjectType = () => {
   if (!formData.applicationType || !availableRules.value.length) return
   if (formData.certificateProject === 'lanqiao') {
     const facultyId = authStore.user?.faculty_id || authStore.user?.facultyId
-    const rules = availableRules.value.filter(rule => rule.type === 'academic' && rule.sub_type === 'competition')
-    const rule = rules.find(rule => Number(rule.faculty_id) === Number(facultyId)) || rules.find(rule => !rule.faculty_id)
+    const rules = availableRules.value.filter(
+      (rule) => rule.type === 'academic' && rule.sub_type === 'competition'
+    )
+    const rule =
+      rules.find((rule) => Number(rule.faculty_id) === Number(facultyId)) ||
+      rules.find((rule) => !rule.faculty_id)
     formData.ruleId = rule?.id || ''
     return
   }
@@ -410,6 +421,17 @@ const systemSettings = ref({
 })
 
 // 计算属性，确保模板始终能获取到正确的值
+const previewLocalFiles = computed(() => formData.files.filter((file) => file instanceof Blob))
+const previewStoredFiles = computed(() =>
+  formData.files
+    .filter((file) => file.isBackendFile)
+    .map((file) => ({
+      id: file.id,
+      filename: file.name,
+      url: getFileFullUrl(file.path || `/uploads/files/${file.id}`)
+    }))
+)
+
 const fileUploadSettings = computed(() => ({
   allowedFileTypesString:
     systemSettings.value?.allowedFileTypesString || '.pdf, .jpg, .jpeg, .png, .webp',
@@ -1596,7 +1618,9 @@ const saveDraft = async () => {
       syncRuleForProjectType()
       await certificatePreview.value.confirm(formData, false)
       toastStore.success('识别预览与申报值已保存为草稿')
-    } catch (error) { toastStore.error(error.message) }
+    } catch (error) {
+      toastStore.error(error.message)
+    }
     return
   }
   try {
@@ -1691,7 +1715,9 @@ const submitForm = async () => {
       await certificatePreview.value.confirm(formData, true)
       toastStore.success('已提交申报内容，教师将核对OCR结果和原图')
       resetForm()
-    } catch (error) { toastStore.error(error.message) }
+    } catch (error) {
+      toastStore.error(error.message)
+    }
     return
   }
 

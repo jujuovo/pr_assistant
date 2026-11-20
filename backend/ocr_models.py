@@ -12,6 +12,9 @@ class OCRJob(db.Model):
     category = db.Column(db.String(64), nullable=False)
     filename = db.Column(db.String(255), nullable=False)
     sha256 = db.Column(db.String(64), nullable=False)
+    material_record_id = db.Column(db.Integer, db.ForeignKey("material_record.id"), nullable=True)
+    material_version = db.Column(db.Integer, nullable=True)
+    attachment_id = db.Column(db.Integer, db.ForeignKey("material_attachment.id"), nullable=True)
     status = db.Column(db.String(32), nullable=False, default="queued")
     report = db.Column(db.JSON)
     error = db.Column(db.Text)
@@ -19,7 +22,8 @@ class OCRJob(db.Model):
     lease_token = db.Column(db.String(36))
     lease_until = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
-    __table_args__ = (db.Index("ix_ocr_job_queue", "status", "lease_until"),)
+    __table_args__ = (db.Index("ix_ocr_job_queue", "status", "lease_until"),
+                      db.Index("ix_ocr_material_version", "material_record_id", "material_version"))
 
 
 class OCRMaterialLink(db.Model):

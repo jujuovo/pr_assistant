@@ -9,8 +9,8 @@ export const MATERIAL_CATEGORIES = Object.freeze([
   'certification',
   'social_practice',
   'research',
-  'competition_evidence'
-  ,'volunteer'
+  'competition_evidence',
+  'volunteer'
 ])
 const base = '/api/materials'
 function recordsPath(category) {
@@ -111,6 +111,12 @@ export const materialApi = {
   getAttachmentUrl: (category, id, attachmentId) =>
     `${recordPath(category, id)}/attachments/${positiveInteger(attachmentId)}`,
   submit: (category, id, version) => versionAction('submit', category, id, version),
+  startVolunteerOcr: (id, version) => versionAction('ocr', 'volunteer', id, version),
+  appealVolunteer: (id, version, reason) =>
+    requestJson(`${recordPath('volunteer', id)}/appeal`, {
+      method: 'POST',
+      data: { version: positiveInteger(version), reason }
+    }),
   reconfirmSubmit: (category, id, version, ruleVersionId) =>
     requestJson(`${recordPath(category, id)}/reconfirm-submit`, {
       method: 'POST',

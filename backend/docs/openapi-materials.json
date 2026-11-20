@@ -121,7 +121,8 @@
               "competition_evidence",
               "certification",
               "social_practice",
-              "research"
+              "research",
+              "volunteer"
             ]
           }
         }
@@ -456,6 +457,17 @@
                       "project_key": "software-design"
                     }
                   }
+                },
+                "volunteer": {
+                  "summary": "志愿服务本次工时",
+                  "value": {
+                    "year": 2028,
+                    "data": {
+                      "regular_hours": "202",
+                      "reduced_hours": "0",
+                      "award_date": "2026-05-08"
+                    }
+                  }
                 }
               }
             },
@@ -513,7 +525,8 @@
               "competition_evidence",
               "certification",
               "social_practice",
-              "research"
+              "research",
+              "volunteer"
             ]
           }
         },
@@ -713,7 +726,8 @@
               "competition_evidence",
               "certification",
               "social_practice",
-              "research"
+              "research",
+              "volunteer"
             ]
           }
         },
@@ -817,7 +831,8 @@
               "competition",
               "language",
               "student_work",
-              "honor"
+              "honor",
+              "volunteer"
             ]
           }
         },
@@ -941,7 +956,8 @@
               "competition",
               "language",
               "student_work",
-              "honor"
+              "honor",
+              "volunteer"
             ]
           }
         },
@@ -1063,7 +1079,8 @@
               "competition_evidence",
               "certification",
               "social_practice",
-              "research"
+              "research",
+              "volunteer"
             ]
           }
         },
@@ -1171,7 +1188,8 @@
               "competition_evidence",
               "certification",
               "social_practice",
-              "research"
+              "research",
+              "volunteer"
             ]
           }
         },
@@ -1279,7 +1297,8 @@
               "competition_evidence",
               "certification",
               "social_practice",
-              "research"
+              "research",
+              "volunteer"
             ]
           }
         },
@@ -1387,7 +1406,8 @@
               "competition_evidence",
               "certification",
               "social_practice",
-              "research"
+              "research",
+              "volunteer"
             ]
           }
         },
@@ -1485,7 +1505,8 @@
               "competition_evidence",
               "certification",
               "social_practice",
-              "research"
+              "research",
+              "volunteer"
             ]
           }
         },
@@ -1590,7 +1611,8 @@
               "competition_evidence",
               "certification",
               "social_practice",
-              "research"
+              "research",
+              "volunteer"
             ]
           }
         },
@@ -1718,7 +1740,8 @@
               "competition_evidence",
               "certification",
               "social_practice",
-              "research"
+              "research",
+              "volunteer"
             ]
           }
         },
@@ -2240,6 +2263,200 @@
           }
         }
       }
+    },
+    "/api/materials/volunteer/records/{record_id}/ocr": {
+      "parameters": [
+        {
+          "name": "record_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "post": {
+        "summary": "启动或重新启动志愿服务后台OCR比对",
+        "responses": {
+          "400": {
+            "description": "参数无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "没有权限",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态或版本冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Material"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VersionRequest"
+              }
+            }
+          }
+        },
+        "operationId": "startVolunteerOcr"
+      }
+    },
+    "/api/materials/volunteer/records/{record_id}/appeal": {
+      "parameters": [
+        {
+          "name": "record_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "post": {
+        "summary": "对OCR打回结果申诉并转重点人工审核",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Material"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "没有权限",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "状态或版本冲突",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "version",
+                  "reason"
+                ],
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "appealVolunteer"
+      }
     }
   },
   "components": {
@@ -2631,6 +2848,9 @@
               },
               {
                 "$ref": "#/components/schemas/CompetitionEvidenceData"
+              },
+              {
+                "$ref": "#/components/schemas/VolunteerData"
               }
             ]
           },
@@ -2681,6 +2901,9 @@
               },
               {
                 "$ref": "#/components/schemas/CompetitionEvidenceData"
+              },
+              {
+                "$ref": "#/components/schemas/VolunteerData"
               }
             ]
           }
@@ -2819,7 +3042,8 @@
               "competition_evidence",
               "certification",
               "social_practice",
-              "research"
+              "research",
+              "volunteer"
             ]
           },
           "student_id": {
@@ -2898,6 +3122,9 @@
               },
               {
                 "$ref": "#/components/schemas/LegacyCompetitionReadData"
+              },
+              {
+                "$ref": "#/components/schemas/VolunteerData"
               }
             ]
           },
@@ -2982,6 +3209,20 @@
             "nullable": true,
             "readOnly": true,
             "description": "手填预估、OCR条件建议、差异、队列状态；不具备计分写权限"
+          },
+          "volunteer_ocr": {
+            "type": "object",
+            "nullable": true,
+            "description": "后台队列状态、三字段比对结果和打回原因"
+          },
+          "appeal": {
+            "type": "object",
+            "nullable": true,
+            "description": "申诉理由、申请人、时间及原识别任务快照"
+          },
+          "priority_review": {
+            "type": "boolean",
+            "description": "申诉材料需重点人工核验"
           }
         }
       },
@@ -3011,7 +3252,8 @@
               "competition_evidence",
               "certification",
               "social_practice",
-              "research"
+              "research",
+              "volunteer"
             ]
           },
           "year": {
@@ -3057,6 +3299,9 @@
               },
               {
                 "$ref": "#/components/schemas/CompetitionEvidenceData"
+              },
+              {
+                "$ref": "#/components/schemas/VolunteerData"
               }
             ]
           }
@@ -3515,6 +3760,32 @@
           }
         },
         "description": "历史竞赛及校方来源导入的兼容字段；正式竞赛创建使用CompetitionData"
+      },
+      "VolunteerData": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "award_date"
+        ],
+        "properties": {
+          "regular_hours": {
+            "type": "string",
+            "description": "本次普通工时，默认0"
+          },
+          "reduced_hours": {
+            "type": "string",
+            "description": "本次大型赛会及支教原始工时，默认0"
+          },
+          "award_date": {
+            "type": "string",
+            "format": "date",
+            "description": "服务记录日期：信用时数按签到签退记录核对并取签退日期（跨日同样取签退日期）；荣誉时数取录入日期。不是教师审核通过日期。"
+          },
+          "reference_id": {
+            "type": "string"
+          }
+        },
+        "description": "两类工时总和必须大于0；OCR按原始小时分别累计并比对，不提前减半。"
       }
     }
   }
