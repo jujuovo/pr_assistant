@@ -3,7 +3,7 @@ from datetime import date
 import re
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from urllib.parse import urlsplit
-from .ocr_schemas import NEW_TYPES, ARRAY_FIELDS, COMPETITION_PROJECTS, normalize_extra
+from .ocr_schemas import NEW_TYPES, ARRAY_FIELDS, COMPETITION_PROJECTS, normalize_extra, ARTS_SPORTS_TYPES
 
 TYPES = {
     'academic': {'name': '学业成绩', 'fields': ['term', 'courses', 'reference_id'], 'required': ['term', 'courses'],
@@ -22,6 +22,13 @@ TYPES = {
 }
 
 TYPES.update(NEW_TYPES)
+TYPES['arts_sports'] = {
+    'name': '文体活动',
+    'fields': ['document_type', 'project_name', 'award_date', 'reference_id'],
+    'required': ['document_type', 'project_name', 'award_date'],
+    'document_types': [{'value': key, 'label': label} for key, label in ARTS_SPORTS_TYPES.items()],
+    'non_ocr': ['文体活动证明人工核验', '不自动计分'],
+}
 TYPES['volunteer'] = {
     'name': '志愿服务工时',
     'field_labels': {'award_date': '服务记录日期'},

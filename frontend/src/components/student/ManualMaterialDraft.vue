@@ -44,7 +44,14 @@
         v-model="data"
         :fields="fields"
         :required="spec.required"
-        :labels="category === 'volunteer' ? { award_date: '服务记录日期' } : {}"
+        :document-types="spec.document_types || []"
+        :labels="
+          category === 'volunteer'
+            ? { award_date: '服务记录日期' }
+            : category === 'arts_sports'
+              ? { award_date: '获得时间' }
+              : {}
+        "
       /><label
         >证明原件<input
           type="file"

@@ -7,6 +7,7 @@ const state = vi.hoisted(() => ({
     getCompetitionWorkbenchSummary: vi.fn(),
     getCompetitionReviewContext: vi.fn(),
     getTeacherCompetitionSummary: vi.fn(),
+    getTeacherMaterialSummary: vi.fn(),
     reviewCompetition: vi.fn()
   },
   applications: []
@@ -67,6 +68,7 @@ beforeEach(() => {
     allowed_actions: ['approve', 'return']
   })
   state.api.reviewCompetition.mockResolvedValue({ status: 'needs_correction', replayed: false })
+  state.api.getTeacherMaterialSummary.mockResolvedValue({ pending_count: 0 })
 })
 
 describe('authoritative competition workbench projection', () => {
@@ -132,7 +134,7 @@ describe('authoritative competition workbench projection', () => {
     })
     await flushPromises()
     expect(wrapper.text()).toContain('1 份竞赛材料待审核')
-    expect(wrapper.text()).toContain('1 份非竞赛兼容申请')
+    expect(wrapper.text()).toContain('1 份非竞赛材料待审核')
   })
 
   it('renders student summary loading and actionable error states', async () => {

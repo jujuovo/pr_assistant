@@ -121,6 +121,7 @@
               "competition_evidence",
               "certification",
               "social_practice",
+              "arts_sports",
               "research",
               "volunteer"
             ]
@@ -435,6 +436,17 @@
                     }
                   }
                 },
+                "arts_sports": {
+                  "summary": "文体活动，仅人工核验",
+                  "value": {
+                    "year": 2026,
+                    "data": {
+                      "document_type": "arts_competition",
+                      "project_name": "校运会田径比赛",
+                      "award_date": "2026-05-01"
+                    }
+                  }
+                },
                 "research": {
                   "summary": "成果检索报告",
                   "value": {
@@ -525,6 +537,7 @@
               "competition_evidence",
               "certification",
               "social_practice",
+              "arts_sports",
               "research",
               "volunteer"
             ]
@@ -726,6 +739,7 @@
               "competition_evidence",
               "certification",
               "social_practice",
+              "arts_sports",
               "research",
               "volunteer"
             ]
@@ -1079,6 +1093,7 @@
               "competition_evidence",
               "certification",
               "social_practice",
+              "arts_sports",
               "research",
               "volunteer"
             ]
@@ -1188,6 +1203,7 @@
               "competition_evidence",
               "certification",
               "social_practice",
+              "arts_sports",
               "research",
               "volunteer"
             ]
@@ -1297,6 +1313,7 @@
               "competition_evidence",
               "certification",
               "social_practice",
+              "arts_sports",
               "research",
               "volunteer"
             ]
@@ -1406,6 +1423,7 @@
               "competition_evidence",
               "certification",
               "social_practice",
+              "arts_sports",
               "research",
               "volunteer"
             ]
@@ -1505,6 +1523,7 @@
               "competition_evidence",
               "certification",
               "social_practice",
+              "arts_sports",
               "research",
               "volunteer"
             ]
@@ -1611,6 +1630,7 @@
               "competition_evidence",
               "certification",
               "social_practice",
+              "arts_sports",
               "research",
               "volunteer"
             ]
@@ -1740,6 +1760,7 @@
               "competition_evidence",
               "certification",
               "social_practice",
+              "arts_sports",
               "research",
               "volunteer"
             ]
@@ -2142,6 +2163,66 @@
         "responses": {
           "200": {
             "description": "角色化竞赛工作台摘要"
+          }
+        }
+      }
+    },
+    "/api/materials/student/summary": {
+      "get": {
+        "summary": "学生本人的非竞赛新材料统计",
+        "responses": {
+          "200": {
+            "description": "非竞赛新材料状态统计",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status_counts": {
+                      "type": "object",
+                      "additionalProperties": { "type": "integer" }
+                    },
+                    "pending_count": { "type": "integer" },
+                    "approved_count": { "type": "integer" },
+                    "needs_correction_count": { "type": "integer" },
+                    "rejected_count": { "type": "integer" },
+                    "submitted_count": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "仅学生本人可读取"
+          }
+        }
+      }
+    },
+    "/api/materials/teacher/summary": {
+      "get": {
+        "summary": "教师本学院非竞赛新材料待审统计",
+        "responses": {
+          "200": {
+            "description": "本学院非竞赛新材料状态统计",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status_counts": {
+                      "type": "object",
+                      "additionalProperties": { "type": "integer" }
+                    },
+                    "pending_count": { "type": "integer" },
+                    "needs_correction_count": { "type": "integer" },
+                    "completed_count": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "仅本学院教师或管理员可读取"
           }
         }
       }
@@ -3042,6 +3123,7 @@
               "competition_evidence",
               "certification",
               "social_practice",
+              "arts_sports",
               "research",
               "volunteer"
             ]
@@ -3252,6 +3334,7 @@
               "competition_evidence",
               "certification",
               "social_practice",
+              "arts_sports",
               "research",
               "volunteer"
             ]

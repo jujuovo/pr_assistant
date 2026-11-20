@@ -4,8 +4,9 @@ export const materialCategoryRoutes = Object.freeze({
   competition: 'competition',
   'social-practice': 'social_practice',
   'academic-innovation': 'research',
-  'social-work': 'student_work'
-  ,'volunteer-service': 'volunteer'
+  'social-work': 'student_work',
+  'volunteer-service': 'volunteer',
+  'arts-sports': 'arts_sports'
 })
 
 export function submissionQuery(key) {

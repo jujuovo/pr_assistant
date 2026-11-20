@@ -8,6 +8,10 @@
 
 五类 category：academic / competition / language / student_work / honor。业务字段原样传给后端，不进行驼峰转换或自行计算加分。
 
+手工核验扩展类别还包括 social_practice / research / certification / competition_evidence / arts_sports；它们复用同一 `createManualRecord`、`submit`、`review` 接口。`arts_sports` 的 `data.document_type` 五选一（arts_competition / performance / arts_honor / dorm_honor / fitness_test），不参与 OCR 或自动计分。
+
+学生主页使用 `getStudentMaterialSummary()` 读取本人非竞赛新材料份数；教师主页使用 `getTeacherMaterialSummary()` 读取本学院非竞赛新材料待审份数。两个接口均为只读聚合，不替代竞赛工作台统计。
+
 ## 示例
 
 ```js

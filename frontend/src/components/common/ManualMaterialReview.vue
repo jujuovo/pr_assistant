@@ -27,7 +27,13 @@
       <h4>学生申报值</h4
       ><MaterialFacts
         :data="row.data"
-        :labels="row.category === 'volunteer' ? { award_date: '服务记录日期' } : {}"
+        :labels="
+          row.category === 'volunteer'
+            ? { award_date: '服务记录日期' }
+            : row.category === 'arts_sports'
+              ? { award_date: '获得时间' }
+              : {}
+        "
       />
       <p v-if="row.analysis?.submitted_hours"
         >本次有效工时：{{
@@ -74,19 +80,21 @@ import MaterialImagePreview from './MaterialImagePreview.vue'
 import VolunteerOcrAssessment from './VolunteerOcrAssessment.vue'
 const props = defineProps({ history: { type: Boolean, default: false } })
 const kinds = [
+  ['all', '全部类别'],
   ['volunteer', '志愿服务累计工时'],
   ['competition_evidence', '目录外竞赛'],
   ['certification', '认证成绩'],
   ['social_practice', '社会实践'],
   ['research', '成果检索报告'],
-  ['student_work', '学生工作']
+  ['student_work', '学生工作'],
+  ['arts_sports', '文体活动']
 ]
 const decisions = [
   ['verified', '核验通过'],
   ['needs_correction', '退回补充'],
   ['rejected', '核验不通过']
 ]
-const category = ref('social_practice'),
+const category = ref('all'),
   rows = ref([]),
   error = ref(''),
   loading = ref(false),
@@ -97,11 +105,28 @@ const category = ref('social_practice'),
 async function load() {
   loading.value = true
   error.value = ''
+  const selected = category.value
+  const categories =
+    selected === 'all'
+      ? kinds.filter(([key]) => key !== 'all').map(([key]) => key)
+      : [selected]
   try {
-    const result = await materialApi.listRecords(category.value, {
-      reviewed: props.history ? '1' : '0'
+    const results = await Promise.allSettled(
+      categories.map((key) =>
+        materialApi.listRecords(key, { reviewed: props.history ? '1' : '0' })
+      )
+    )
+    const merged = []
+    const failures = []
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        merged.push(...(result.value.records || []))
+      } else {
+        const name = kinds.find(([key]) => key === categories[index])?.[1]
+        failures.push(name || categories[index])
+      }
     })
-    rows.value = result.records
+    rows.value = merged
       .sort((a, b) => Number(!!b.priority_review) - Number(!!a.priority_review))
       .filter(
         (row) =>
@@ -116,6 +141,7 @@ async function load() {
               ].includes(row.status)
             : row.status === 'submitted')
       )
+    if (failures.length) error.value = '以下类别未能加载，请重试：' + failures.join('、')
   } catch (e) {
     error.value = e.message
   } finally {
@@ -132,7 +158,7 @@ async function review(row, decision) {
   error.value = ''
   try {
     await materialApi.review(
-      category.value,
+      row.category,
       row.id,
       row.version,
       decision,
@@ -148,7 +174,7 @@ async function review(row, decision) {
 }
 async function events(row) {
   try {
-    audit.value[row.id] = (await materialApi.getEvents(category.value, row.id)).events.filter(
+    audit.value[row.id] = (await materialApi.getEvents(row.category, row.id)).events.filter(
       (e) => e.action === 'reviewed'
     )
   } catch (e) {
