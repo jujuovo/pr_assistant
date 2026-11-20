@@ -3,7 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 const state = vi.hoisted(() => ({
   route: { query: { page: 'materials', category: 'competition' } },
-  router: { replace: vi.fn() },
+  router: { replace: vi.fn(), push: vi.fn() },
   api: {
     getCompetitionContext: vi.fn(),
     getCompetitionCatalogItem: vi.fn(),
@@ -366,7 +366,7 @@ describe('persistent material history', () => {
     await button(w, '补正材料').trigger('click')
     await flushPromises()
     expect(state.api.createCorrection).toHaveBeenCalledWith('competition', 7, 2, facts)
-    expect(state.router.replace).toHaveBeenCalledWith({
+    expect(state.router.push).toHaveBeenCalledWith({
       query: { page: 'materials', category: 'competition', editId: 8 }
     })
   })

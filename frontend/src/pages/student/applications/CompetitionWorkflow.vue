@@ -577,7 +577,7 @@ async function validateAndSaveDraft() {
   }
 }
 function goHistory() {
-  router.replace({ query: { page: 'application-record' } })
+  router.push({ query: { page: 'application-record' } })
 }
 onMounted(retry)
 onBeforeUnmount(() => {

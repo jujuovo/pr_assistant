@@ -94,14 +94,17 @@ const handleSidebarToggle = (isOpen) => {
 
 // 切换页面
 const switchPage = (page) => {
+  if (page === currentPage.value) return
   currentPage.value = page
-  router.replace({ query: { ...route.query, page } })
+  router.push({ query: { ...route.query, page } })
 }
 watch(() => route.query.page, page => { if (page) currentPage.value = page })
 
 // 切换到个人信息页面
 const goToProfile = () => {
+  if (currentPage.value === 'profile') return
   currentPage.value = 'profile'
+  router.push({ query: { ...route.query, page: 'profile' } })
 }
 
 // 权限验证

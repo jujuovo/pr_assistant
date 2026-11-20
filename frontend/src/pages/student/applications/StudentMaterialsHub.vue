@@ -278,7 +278,7 @@ function canSubmit(row) {
   )
 }
 function edit(row) {
-  router.replace({ query: { page: 'materials', category: row.category, editId: row.id } })
+  router.push({ query: { page: 'materials', category: row.category, editId: row.id } })
 }
 async function command(row, action) {
   if (busy.value) return
