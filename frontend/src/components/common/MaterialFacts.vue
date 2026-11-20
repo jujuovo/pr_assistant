@@ -1,7 +1,7 @@
 <template>
   <dl class="material-facts"
     ><template v-for="[key, value] in visible" :key="key"
-      ><dt>{{ fieldLabel(key) }}</dt
+      ><dt>{{ labels[key] || fieldLabel(key) }}</dt
       ><dd>{{ displayValue(value) }}</dd></template
     ><p v-if="!visible.length">暂无识别内容，可按原件人工填写。</p></dl
   >
@@ -9,7 +9,10 @@
 <script setup>
 import { computed } from 'vue'
 import { fieldLabel, displayValue, INTERNAL_FIELDS } from '@/services/materialFields.js'
-const props = defineProps({ data: { type: Object, default: () => ({}) } })
+const props = defineProps({
+  data: { type: Object, default: () => ({}) },
+  labels: { type: Object, default: () => ({}) }
+})
 const visible = computed(() =>
   Object.entries(props.data || {}).filter(([k]) => !INTERNAL_FIELDS.has(k))
 )

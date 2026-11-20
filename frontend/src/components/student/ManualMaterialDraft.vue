@@ -1,23 +1,58 @@
 <template>
   <section class="manual-draft"
-    ><button type="button" class="btn btn-outline" @click="open">不使用识别，直接人工填写</button>
+    ><button type="button" class="btn btn-outline" @click="open">{{
+      category === 'volunteer' ? '填写志愿服务材料' : '不使用识别，直接人工填写'
+    }}</button>
     <form v-if="visible && spec" @submit.prevent="save"
-      ><h3>人工填写材料</h3><p>{{ category === 'volunteer' ? '每份材料只填写本次志愿服务工时，可多次提交。审核通过后系统累计同一推免周期的工时；大型赛会及支教工时按一半计入。认定日期按系统录入并审核通过时间填写，须取得服务对象认可。' : '此通道仅供人工核验，不运行 OCR 或计算加分。' }}</p
+      ><h3>人工填写材料</h3
+      ><p>{{
+        category === 'volunteer'
+          ? '请手填本次工时、工时类别和服务记录日期。信用时数、荣誉时数截图按普通志愿服务核对：信用填写签退当天日期，荣誉填写录入当天日期。后台比对三项，一致后可提交教师审核；有差异可申诉。'
+          : '此通道仅供人工核验，不运行 OCR 或计算加分。'
+      }}</p
       ><label
-        >材料年度<input v-model.number="year" type="number" min="2000" max="2100" required /></label
+        >{{ category === 'volunteer' ? '推免周期' : '材料年度'
+        }}<input
+          v-model.number="year"
+          type="number"
+          min="2000"
+          max="2100"
+          :readonly="category === 'volunteer'"
+          required /></label
       ><div v-if="category === 'volunteer'" class="volunteer-fields">
-        <label>本次工时类别<select v-model="volunteerType"><option value="regular">普通志愿服务</option><option value="reduced">大型赛会或支教</option></select></label>
-        <label>本次工时（小时）<input v-model="volunteerHours" type="number" min="0.0001" max="100000" step="0.0001" required /></label>
-        <label>系统录入并审核通过日期<input v-model="data.award_date" type="date" required /></label>
-      </div><MaterialFieldsEditor v-else v-model="data" :fields="fields" :required="spec.required"
-        :labels="category === 'volunteer' ? { award_date: '系统录入并审核通过日期' } : {}" /><label
+        <label
+          >本次工时类别<select v-model="volunteerType"
+            ><option value="regular">普通志愿服务</option
+            ><option value="reduced">大型赛会或支教</option></select
+          ></label
+        >
+        <label
+          >本次工时（小时）<input
+            v-model="volunteerHours"
+            type="number"
+            min="0.0001"
+            max="100000"
+            step="0.0001"
+            required
+        /></label>
+        <label>服务记录日期<input v-model="data.award_date" type="date" required /></label
+        ><p class="date-guidance"
+          >信用时数同时核对签到、签退时间，跨日按签退日期；荣誉时数按录入日期。不同日期请分次申报。</p
+        > </div
+      ><MaterialFieldsEditor
+        v-else
+        v-model="data"
+        :fields="fields"
+        :required="spec.required"
+        :labels="category === 'volunteer' ? { award_date: '服务记录日期' } : {}"
+      /><label
         >证明原件<input
           type="file"
           multiple
           @change="files = Array.from($event.target.files || [])"
           required /></label
-      ><button class="btn btn-primary" :disabled="busy">{{
-        busy ? '保存中…' : '保存人工材料草稿'
+      ><MaterialImagePreview :files="files" /><button class="btn btn-primary" :disabled="busy">{{
+        busy ? '保存中…' : category === 'volunteer' ? '保存并后台识别' : '保存人工材料草稿'
       }}</button></form
     >
     <p v-if="loading" role="status">正在加载填写项目…</p
@@ -28,6 +63,7 @@
 import { computed, ref, watch } from 'vue'
 import materialApi from '@/services/materialApi.js'
 import MaterialFieldsEditor from '@/components/common/MaterialFieldsEditor.vue'
+import MaterialImagePreview from '@/components/common/MaterialImagePreview.vue'
 const props = defineProps({ category: { type: String, required: true } }),
   emit = defineEmits(['saved'])
 const visible = ref(false),
@@ -48,10 +84,11 @@ const subtypeFields = {
 const fields = computed(() => [
   ...(spec.value?.required || []),
   ...(subtypeFields[data.value.document_type] || []),
-  ...(spec.value?.fields || []).filter((field) =>
-    !(spec.value?.required || []).includes(field) &&
-    !(subtypeFields[data.value.document_type] || []).includes(field) &&
-    field !== 'reference_id'
+  ...(spec.value?.fields || []).filter(
+    (field) =>
+      !(spec.value?.required || []).includes(field) &&
+      !(subtypeFields[data.value.document_type] || []).includes(field) &&
+      field !== 'reference_id'
   )
 ])
 watch(
@@ -63,6 +100,7 @@ watch(
   }
 )
 async function open() {
+  files.value = []
   visible.value = true
   loading.value = true
   error.value = ''
@@ -109,9 +147,11 @@ async function save() {
       error.value = '请填写大于 0 的本次工时。'
       return
     }
-    data.value = { award_date: data.value.award_date,
+    data.value = {
+      award_date: data.value.award_date,
       regular_hours: volunteerType.value === 'regular' ? String(volunteerHours.value) : '0',
-      reduced_hours: volunteerType.value === 'reduced' ? String(volunteerHours.value) : '0' }
+      reduced_hours: volunteerType.value === 'reduced' ? String(volunteerHours.value) : '0'
+    }
   }
   busy.value = true
   error.value = ''
@@ -132,6 +172,13 @@ async function save() {
 }
 </script>
 <style scoped>
+.date-guidance {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #52667c;
+}
 .manual-draft {
   display: grid;
   gap: 12px;
@@ -153,10 +200,25 @@ async function save() {
   border: 1px solid #b9c7d8;
   border-radius: 7px;
 }
-.volunteer-fields { display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.volunteer-fields label { display: grid; gap: 6px; }
-.volunteer-fields select { padding: 9px; border: 1px solid #b9c7d8; border-radius: 7px; }
-@media (max-width: 600px) { .volunteer-fields { grid-template-columns: 1fr; } }
+.volunteer-fields {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.volunteer-fields label {
+  display: grid;
+  gap: 6px;
+}
+.volunteer-fields select {
+  padding: 9px;
+  border: 1px solid #b9c7d8;
+  border-radius: 7px;
+}
+@media (max-width: 600px) {
+  .volunteer-fields {
+    grid-template-columns: 1fr;
+  }
+}
 .manual-draft button {
   justify-self: start;
 }

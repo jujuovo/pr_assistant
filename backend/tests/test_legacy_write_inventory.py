@@ -7,7 +7,7 @@ BACKEND=ROOT/"backend"
 
 
 def _is_production(path):
-    return "tests" not in path.parts and "migrations" not in path.parts
+    return not {"tests", "migrations", "outputs", "__pycache__"}.intersection(path.parts)
 
 
 def test_every_legacy_write_file_is_listed_in_inventory():

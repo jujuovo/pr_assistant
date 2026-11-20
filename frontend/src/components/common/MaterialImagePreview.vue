@@ -101,6 +101,7 @@ watch(
 async function open(item, event) {
   if (!active.value) releaseScroll = lockBodyScroll()
   trigger = event.currentTarget
+  failed.value.delete(item.key)
   active.value = item
   dialogError.value = false
   await nextTick()

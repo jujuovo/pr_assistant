@@ -35,3 +35,24 @@ def submit_volunteer(user, row, version):
         db.session.flush()
         publish_rule_version(rule, cycle_code=policy.cycle_code)
     submit_material(user, row, version)
+
+
+def appeal_volunteer(user, row, version, reason):
+    from services.materials.schemas import text
+    from services.volunteer_ocr import projection
+    from domain.materials import ActorScope, MaterialScope, allowed_actions
+    from use_cases.materials import _cas_change, _event
+    from automation_models import utcnow
+    scope = ActorScope(user.role, user.student_id, user.faculty_id)
+    material = MaterialScope(row.student_id, row.faculty_id, row.status)
+    _, actions = projection(row, user, allowed_actions(scope, material))
+    if 'appeal' not in actions:
+        raise MaterialUseCaseError('仅本人被OCR打回的当前材料可以申诉', code='appeal_not_available', status_code=409)
+    reason = text(reason, '申诉理由', maximum=2000)
+    appeal = {'reason': reason, 'actor_id': user.id, 'created_at': utcnow().isoformat()+'Z',
+              'ocr_jobs': row.analysis['volunteer_ocr']['jobs'], 'from_version': row.version}
+    _cas_change(row, version, ('needs_correction',), {
+        'status': 'draft', 'analysis': {**row.analysis, 'volunteer_appeal': appeal}})
+    _event(row, user, 'appealed', {**appeal, 'priority_review': True})
+    submit_volunteer(user, row, row.version)
+    return row

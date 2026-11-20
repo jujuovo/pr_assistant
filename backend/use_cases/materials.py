@@ -655,6 +655,9 @@ def edit_material(user, row, version, data):
 def submit_material(user, row, version):
     from use_cases.cycles import current_cycle_policy, pin_material_cycle
     _authorize_transition(user, row, "submit", "submitted")
+    if row.category == "volunteer":
+        from services.volunteer_ocr import assert_gate
+        assert_gate(row)
     from services.materials.originals import verify_ocr_originals
     verify_ocr_originals(row)
     policy = current_cycle_policy(required=True)
@@ -759,6 +762,11 @@ def confirm_available_rule(user, row, version, expected_rule_version_id, confirm
         )
     integer(expected_rule_version_id, "rule_version_id", 1, 2_000_000_000)
     _authorize_transition(user, row, "confirm_submit", "submitted")
+    if row.category == "volunteer":
+        from services.volunteer_ocr import assert_gate
+        from services.materials.originals import verify_ocr_originals
+        assert_gate(row)
+        verify_ocr_originals(row)
     from use_cases.cycles import current_cycle_policy, pin_material_cycle
     policy = current_cycle_policy(required=True)
     result = match_material_rule(row, policy.cycle_code)
@@ -1099,6 +1107,8 @@ def review_material(user, row, version, decision, comment, idempotency_key,
     # Authorize before loading policy details so unauthorized actors learn nothing.
     _authorize_transition(user, row, "review", decision)
     if row.category == 'volunteer' and decision == 'verified':
+        from services.volunteer_ocr import assert_gate
+        assert_gate(row)
         from services.materials.originals import verify_ocr_originals
         verify_ocr_originals(row)
     eligibility = None

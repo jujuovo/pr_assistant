@@ -15,10 +15,12 @@
         :disabled="busy"
         @change="file = $event.target.files?.[0]"
     /></label>
+    <MaterialImagePreview :files="selectedFiles" />
     <button
       type="button"
       class="btn btn-outline"
       :disabled="busy || !project || !file"
+      data-test="recognize-image"
       @click="recognize"
       >{{ busy ? '正在识别…' : '识别图片' }}</button
     >
@@ -30,13 +32,6 @@
         :key="warning"
         class="warning"
         >{{ warning }}</p
-      >
-      <a
-        v-if="result.artifact_urls?.original"
-        :href="result.artifact_urls.original"
-        target="_blank"
-        rel="noopener"
-        >查看原始图片</a
       >
       <button
         type="button"
@@ -50,9 +45,10 @@
   </section>
 </template>
 <script setup>
-import { onMounted, onBeforeUnmount, ref } from 'vue'
+import { onMounted, onBeforeUnmount, ref, computed } from 'vue'
 import ocrApi from '@/services/ocrApi.js'
 import MaterialFacts from '@/components/common/MaterialFacts.vue'
+import MaterialImagePreview from '@/components/common/MaterialImagePreview.vue'
 const props = defineProps({ formalOnly: { type: Boolean, default: false } })
 defineEmits(['use'])
 const projects = ref([]),
@@ -61,6 +57,7 @@ const projects = ref([]),
   busy = ref(false),
   error = ref(''),
   result = ref(null)
+const selectedFiles = computed(() => (file.value ? [file.value] : []))
 let controller = null,
   timer = null,
   disposed = false

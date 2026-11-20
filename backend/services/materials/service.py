@@ -149,6 +149,9 @@ def view(row):
         actions = (*actions, 'create_correction')
     from services.competition_ocr.assessment import workflow_projection
     projection=workflow_projection(row)
+    if row.category == 'volunteer':
+        from services.volunteer_ocr import projection as volunteer_projection
+        projection, actions = volunteer_projection(row, user, actions)
     queued_job=((projection.get('ocr_assessment') or {}).get('job') or {})
     return {**projection, 'id':row.id, 'category':row.category, 'student_id':row.student_id, 'faculty_id':row.faculty_id,
             'application_id':row.application_id, 'year':row.year,
@@ -161,7 +164,7 @@ def view(row):
             'competition_rule_package_id':row.competition_rule_package_id,
             'supersedes_record_id':row.supersedes_record_id,
             'superseded_by_record_id':successor.id if successor else None,
-            'recognition_status':queued_job.get('status') or ('confirmed' if links else ('not_requested' if row.category in OCR_CATEGORIES else 'not_implemented')),
+            'recognition_status':(projection.get('volunteer_ocr') or {}).get('status') or queued_job.get('status') or ('confirmed' if links else ('not_requested' if row.category in OCR_CATEGORIES else 'not_implemented')),
             'ocr_links':links, 'bonus_result':None,
             'manual_only':is_manual(row),
             'created_at':row.created_at.isoformat()+'Z', 'updated_at':row.updated_at.isoformat()+'Z',

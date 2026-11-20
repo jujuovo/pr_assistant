@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { submissionQuery } from '../src/services/materialWorkflowRoutes.js'
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8')
 
 test('student navigation exposes the four core workflow destinations', () => {
@@ -9,13 +10,14 @@ test('student navigation exposes the four core workflow destinations', () => {
     assert(source.includes(title))
 })
 
-test('competition selection routes only to MaterialRecord workflow', () => {
+test('competition and volunteer selections use the shared material workflow', () => {
+  assert.deepEqual(submissionQuery('competition'), { page: 'materials', category: 'competition' })
+  assert.deepEqual(submissionQuery('volunteer-service'), {
+    page: 'materials',
+    category: 'volunteer'
+  })
   const layout = read('../src/pages/student/StudentLayout.vue')
-  assert.match(layout, /category\.key === 'competition'/)
-  assert.match(layout, /page: 'materials', category: 'competition'/)
-  const categories = read('../src/pages/student/applications/ApplicationCategories.vue')
-  assert.match(categories, /key: 'competition'/)
-  assert.match(categories, /非竞赛兼容入口/)
+  assert.match(layout, /submissionQuery\(category.key\)/)
 })
 
 test('my materials renders history without a submission form or autofill wizard', () => {

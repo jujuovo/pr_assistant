@@ -53,16 +53,54 @@
           审核通过后计入周期累计；最终得分请查看加分统计。
         </p>
         <details
-          ><summary>申报信息与原件</summary><MaterialFacts :data="row.data" /><ul
-            ><li v-for="f in row.attachments" :key="f.id"
-              ><a :href="f.url" target="_blank" rel="noopener">{{ f.filename }}</a></li
-            ></ul
-          ><h3 v-if="row.ocr_raw_terms">OCR识别结果</h3
+          ><summary>申报信息与原件</summary
           ><MaterialFacts
+            :data="row.data"
+            :labels="
+              row.category === 'volunteer' ? { award_date: '服务记录日期' } : {}
+            " /><MaterialImagePreview :attachments="row.attachments || []" /><h3
             v-if="row.ocr_raw_terms"
+            >OCR识别结果</h3
+          ><MaterialFacts
+            v-if="row.ocr_raw_terms && row.category !== 'volunteer'"
             :data="row.ocr_raw_terms?.report?.fields || row.ocr_raw_terms?.fields || {}"
         /></details>
+        <VolunteerOcrAssessment
+          :assessment="row.volunteer_ocr"
+          :appeal="row.appeal"
+          :priority="row.priority_review"
+          :reports="row.ocr_raw_terms?.reports || []"
+        />
+        <form v-if="appealOpen === row.id" class="appeal-form" @submit.prevent="appeal(row)">
+          <label :for="'appeal-' + row.id"
+            >申诉理由<textarea
+              :id="'appeal-' + row.id"
+              v-model="appealReasons[row.id]"
+              maxlength="2000"
+              required
+              placeholder="说明识别错误或无法识别的原因，教师将结合原件重点核验。"
+            />
+          </label>
+          <button class="btn btn-primary" :disabled="busy">提交申诉并转人工审核</button>
+          <button type="button" class="btn btn-outline" :disabled="busy" @click="appealOpen = null"
+            >取消</button
+          >
+        </form>
         <div class="actions">
+          <button
+            v-if="row.allowed_actions?.includes('recognize')"
+            class="btn btn-outline"
+            :disabled="busy"
+            @click="retryOcr(row)"
+            >重新识别</button
+          >
+          <button
+            v-if="row.allowed_actions?.includes('appeal')"
+            class="btn btn-outline"
+            :disabled="busy"
+            @click="appealOpen = row.id"
+            >提出申诉</button
+          >
           <button
             v-if="row.allowed_actions?.includes('edit')"
             class="btn btn-outline"
@@ -134,7 +172,9 @@ import { useRouter } from 'vue-router'
 import materialApi, { MATERIAL_CATEGORIES } from '@/services/materialApi.js'
 import { formatScoreTime } from '@/services/scorePresentation.js'
 import MaterialFacts from '@/components/common/MaterialFacts.vue'
+import MaterialImagePreview from '@/components/common/MaterialImagePreview.vue'
 import OcrAssessment from '@/components/common/OcrAssessment.vue'
+import VolunteerOcrAssessment from '@/components/common/VolunteerOcrAssessment.vue'
 import ApplicationHistory from './ApplicationHistory.vue'
 import { buildCompetitionFacts } from '@/services/competitionMaterial.js'
 defineEmits(['edit-application'])
@@ -147,6 +187,8 @@ const router = useRouter(),
   notice = ref(''),
   legacy = ref(false),
   cursors = ref({})
+const appealOpen = ref(null),
+  appealReasons = ref({})
 const categoryNames = {
   volunteer: '志愿服务累计工时',
   academic: '学业成绩',
@@ -256,10 +298,31 @@ async function command(row, action) {
 async function retryOcr(row) {
   busy.value = true
   try {
-    await materialApi.startCompetitionOcr(row.id, row.version)
+    if (row.category === 'volunteer') await materialApi.startVolunteerOcr(row.id, row.version)
+    else await materialApi.startCompetitionOcr(row.id, row.version)
     await load()
   } catch (e) {
     error.value = e.message
+  } finally {
+    busy.value = false
+  }
+}
+async function appeal(row) {
+  const reason = appealReasons.value[row.id]?.trim()
+  if (!reason) {
+    error.value = '请填写申诉理由。'
+    return
+  }
+  if (busy.value) return
+  busy.value = true
+  error.value = ''
+  try {
+    await materialApi.appealVolunteer(row.id, row.version, reason)
+    appealOpen.value = null
+    notice.value = '申诉已提交，已转人工审核并标记为重点核验。'
+    await load()
+  } catch (e) {
+    error.value = e.status === 409 ? '材料状态已变化，请刷新后重试。申诉理由已保留。' : e.message
   } finally {
     busy.value = false
   }
@@ -338,6 +401,27 @@ onBeforeUnmount(() => {
 }
 .review-banner small {
   opacity: 0.75;
+}
+.appeal-form {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 16px;
+  border: 1px solid #e6c98d;
+  border-radius: 10px;
+  background: #fffaf0;
+}
+.appeal-form label {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+.appeal-form textarea {
+  min-height: 90px;
+  padding: 12px;
+  border: 1px solid #b9c7d8;
+  border-radius: 8px;
+  font: inherit;
 }
 .material-history {
   display: grid;

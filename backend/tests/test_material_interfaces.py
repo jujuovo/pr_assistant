@@ -286,7 +286,7 @@ def test_openapi_matches_registered_routes_and_all_references(env):
             for child in value: visit(child)
     visit(spec)
     examples=spec['paths']['/api/materials/{category}/records']['post']['requestBody']['content']['application/json']['examples']
-    assert set(examples)==set(SAMPLES)|{'certification','social_practice','research','competition_evidence'}
+    assert set(examples)==set(SAMPLES)|{'certification','social_practice','research','competition_evidence','volunteer'}
 
 
 def test_withdraw_unverified_preserves_audit(env):

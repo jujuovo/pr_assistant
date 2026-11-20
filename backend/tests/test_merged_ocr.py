@@ -119,10 +119,17 @@ def test_new_migration_upgrade_downgrade(env):
     with db.engine.begin() as connection:
         with Operations.context(MigrationContext.configure(connection)):
             migration.upgrade()
+            extension_path = path.with_name("20261120_volunteer_ocr.py")
+            extension_spec = importlib.util.spec_from_file_location("volunteer_ocr_extension", extension_path)
+            extension = importlib.util.module_from_spec(extension_spec)
+            extension_spec.loader.exec_module(extension)
+            extension.upgrade()
             assert {column["name"] for column in inspect(connection).get_columns("ocr_job")} == set(OCRJob.__table__.columns.keys())
+            extension.downgrade()
             migration.downgrade()
             assert "ocr_job" not in inspect(connection).get_table_names()
             migration.upgrade()
+            extension.upgrade()
 
 
 @pytest.mark.skipif(__import__("os").environ.get("RUN_REAL_OCR") != "1", reason="需要本地真实OCR")
