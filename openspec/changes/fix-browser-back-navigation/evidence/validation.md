@@ -27,7 +27,7 @@
 
 `node --test frontend/tests/*.test.mjs` 的失败项是 `teacher-core-workbench.test.mjs`：它要求 `TeacherStudentSummary.vue` 包含 `key_facts`，而 `origin/main` 本身也没有该字段。该失败在修复前已存在，不是本分支引入。
 
-## 明确未验证
+## 手动验收
 
-- 三角色真实浏览器后退旅程（任务 4.3）：等待用户手动验证。
+- 2026-11-21 用户确认：三角色站内页面切换后，浏览器后退回到上一个业务页；登录后后退不再回到登录页。未保留截图。
 - 本次只改前端导航，未修改后端、数据库、权限或计分；未重新执行后端回归。
