@@ -123,12 +123,14 @@ const switchPage = (page) => {
   if (page === 'application-form') {
     editApplicationId.value = null
     selectedCategory.value = null
+    if (currentPage.value === 'application-categories') return
     currentPage.value = 'application-categories'
-    router.replace({ query: { page: 'application-categories' } })
+    router.push({ query: { page: 'application-categories' } })
     return
   }
+  if (page === currentPage.value) return
   currentPage.value = page
-  router.replace({ query: { page } })
+  router.push({ query: { page } })
 }
 
 watch(
@@ -143,7 +145,8 @@ const openApplicationForm = (category) => {
   editApplicationId.value = null
   const query = submissionQuery(category.key)
   currentPage.value = query.page
-  router.replace({ query })
+  if (route.query.page === query.page && route.query.category === query.category) return
+  router.push({ query })
 }
 
 const backToApplicationCategories = () => {
@@ -155,14 +158,18 @@ const backToApplicationCategories = () => {
 
 // 切换到个人信息页面
 const goToProfile = () => {
+  if (currentPage.value === 'profile') return
   currentPage.value = 'profile'
+  router.push({ query: { ...route.query, page: 'profile' } })
 }
 
 // 处理编辑申请
 const handleEditApplication = (applicationId) => {
   editApplicationId.value = applicationId
   selectedCategory.value = null
+  if (currentPage.value === 'application-form' && route.query.page === 'application-form') return
   currentPage.value = 'application-form'
+  router.push({ query: { ...route.query, page: 'application-form' } })
 }
 
 // 权限验证和数据加载

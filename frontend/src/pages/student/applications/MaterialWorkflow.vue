@@ -69,7 +69,7 @@ const names = {
   competition_evidence: '目录外竞赛材料'
 }
 function history() {
-  router.replace({ query: { page: 'application-record' } })
+  router.push({ query: { page: 'application-record' } })
 }
 async function loadEdit() {
   if (category.value === 'competition' || !route.query.editId) return

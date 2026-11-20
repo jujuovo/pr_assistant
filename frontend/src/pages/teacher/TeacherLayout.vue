@@ -86,19 +86,24 @@ const handleSidebarToggle = (isOpen) => {
 
 // 切换页面
 const switchPage = (page) => {
+  if (page === currentPage.value) return
   currentPage.value = page
-  router.replace({ query: { ...route.query, page } })
+  router.push({ query: { ...route.query, page } })
 }
 watch(() => route.query.page, page => { if (page) currentPage.value = page })
 
 // 切换到待审核页面（用于从其他页面跳转）
 const switchToPendingReview = () => {
+  if (currentPage.value === 'pending-review') return
   currentPage.value = 'pending-review'
+  router.push({ query: { ...route.query, page: 'pending-review' } })
 }
 
 // 切换到个人信息页面
 const goToProfile = () => {
+  if (currentPage.value === 'profile') return
   currentPage.value = 'profile'
+  router.push({ query: { ...route.query, page: 'profile' } })
 }
 
 // 权限验证和数据加载
