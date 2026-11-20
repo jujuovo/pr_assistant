@@ -53,6 +53,43 @@ COMPETITION_CONTEXT_ACTIONS = {
 }
 
 
+REVIEW_ACTION_DECISIONS = {"competition_approved": "approve", "competition_returned": "return"}
+
+
+def _latest_review_summaries(rows):
+    """每条材料最近一次审核结论。
+
+    列表页只给状态码时，教师看不出「这条是我通过了还是退回了」，
+    所以结论、审核人、时间和意见必须随列表一起返回，不能靠前端再逐条回查。
+    """
+    from models import User
+
+    record_ids = [row.id for row in rows]
+    if not record_ids:
+        return {}
+    events = MaterialEvent.query.filter(
+        MaterialEvent.record_id.in_(record_ids),
+        MaterialEvent.action.in_(tuple(REVIEW_ACTION_DECISIONS)),
+    ).order_by(MaterialEvent.id).all()
+    if not events:
+        return {}
+    actors = {
+        user.id: {"id": user.id, "name": user.name, "username": user.username, "role": user.role}
+        for user in User.query.filter(
+            User.id.in_({event.actor_id for event in events})
+        ).all()
+    }
+    latest = {}
+    for event in events:
+        latest[event.record_id] = {
+            "decision": REVIEW_ACTION_DECISIONS[event.action],
+            "comment": (event.details or {}).get("comment"),
+            "actor": actors.get(event.actor_id),
+            "at": (event.created_at.isoformat() + "Z") if event.created_at else None,
+        }
+    return latest
+
+
 def competition_workbench_summary(user):
     _package, context = competition_workflow_context(user)
     year = context["cycle"]["cycle_code"]
@@ -61,8 +98,9 @@ def competition_workbench_summary(user):
         MaterialRecord.category == "competition",
         MaterialRecord.year == year,
         MaterialRecord.supersedes_record_id.isnot(None),
+        # 已放弃的补正稿不再隐藏原材料，否则教师端和学生端都会少看见这条材料。
+        MaterialRecord.status != "abandoned",
     )
-    query = query.filter(~MaterialRecord.id.in_(successor_source_ids))
     if user.role == "student" and user.student_id:
         query = query.filter_by(student_id=user.student_id).filter(
             MaterialRecord.status != "abandoned"
@@ -76,26 +114,49 @@ def competition_workbench_summary(user):
             )
     else:
         raise MaterialUseCaseError("当前账号无权读取竞赛工作台", code="forbidden", status_code=403)
+    # 审核记录属于历史证据，不能因为学生开了补正稿就消失；
+    # 只有「待审列表」才需要隐藏已被新版本取代的旧记录。
+    history_query = query
+    query = query.filter(~MaterialRecord.id.in_(successor_source_ids))
     counts = {status: count for status, count in query.with_entities(
         MaterialRecord.status, func.count(MaterialRecord.id)
     ).group_by(MaterialRecord.status).all()}
     rows = query.order_by(MaterialRecord.updated_at.desc(), MaterialRecord.id.desc()).limit(50).all()
+    reviews = _latest_review_summaries(rows)
     def item(row):
         return {
             "id": row.id, "student_id": row.student_id, "status": row.status,
             "version": row.version, "project_name": (row.data or {}).get("project_name"),
             "competition_name": (row.data or {}).get("competition_name"),
             "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+            "review": reviews.get(row.id),
+            "supersedes_record_id": row.supersedes_record_id,
+            "superseded_by_record_id": superseded_by.get(row.id),
             "allowed_actions": list(material_allowed_actions(_actor_scope(user), _material_scope(row))),
         }
     pending_statuses = {"submitted", "under_review"}
     reviewed_statuses = {"needs_correction", "scored", "verified", "verified_not_eligible"}
     if user.role == "teacher":
         item_rows = [row for row in rows if row.status in pending_statuses]
-        reviewed_rows = [row for row in rows if row.status in reviewed_statuses]
+        # 已审记录不受「被取代」影响：退回过的旧版本仍需留在审核记录里。
+        reviewed_rows = history_query.filter(
+            MaterialRecord.status.in_(tuple(reviewed_statuses))
+        ).order_by(
+            MaterialRecord.updated_at.desc(), MaterialRecord.id.desc()
+        ).limit(50).all()
+        reviews.update(_latest_review_summaries(reviewed_rows))
     else:
         item_rows = rows
         reviewed_rows = []
+    # 同一项目补正后会出现新旧两条，必须告诉前端谁取代了谁，否则教师无法判断哪条算数。
+    visible_ids = [row.id for row in item_rows] + [row.id for row in reviewed_rows]
+    superseded_by = {}
+    if visible_ids:
+        for successor in MaterialRecord.query.filter(
+            MaterialRecord.supersedes_record_id.in_(visible_ids),
+            MaterialRecord.status != "abandoned",
+        ).order_by(MaterialRecord.id).all():
+            superseded_by[successor.supersedes_record_id] = successor.id
     return {
         "cycle_code": year,
         "role": user.role,
@@ -351,11 +412,7 @@ def competition_review_context(user, row):
         },
         "candidate_score": (row.analysis or {}).get("candidate_score"),
         "candidate_score_authority": "server",
-        "history": [{
-            "action": event.action,
-            "comment": (event.details or {}).get("comment"),
-            "created_at": event.created_at.isoformat() if event.created_at else None,
-        } for event in sorted(row.events, key=lambda event: (event.created_at, event.id))],
+        "history": _material_history(row),
         "allowed_actions": (
             ["approve", "return"]
             if row.status in {"submitted", "under_review"} else []
@@ -365,6 +422,27 @@ def competition_review_context(user, row):
             "decisions": ["approve", "return"],
         },
     }
+
+
+def _material_history(row):
+    """材料审核轨迹：谁、何时、做了什么、写了什么意见。
+
+    审核人是审核结论的一部分，缺了它教师无法判断这条记录由谁负责。
+    """
+    from models import User
+
+    events = sorted(row.events, key=lambda event: (event.created_at, event.id))
+    actor_ids = {event.actor_id for event in events if event.actor_id}
+    actors = {
+        user.id: {"id": user.id, "name": user.name, "username": user.username, "role": user.role}
+        for user in User.query.filter(User.id.in_(actor_ids)).all()
+    } if actor_ids else {}
+    return [{
+        "action": event.action,
+        "comment": (event.details or {}).get("comment"),
+        "actor": actors.get(event.actor_id),
+        "created_at": (event.created_at.isoformat() + "Z") if event.created_at else None,
+    } for event in events]
 
 
 def _actor_scope(user):
@@ -714,6 +792,33 @@ def confirm_available_rule(user, row, version, expected_rule_version_id, confirm
     }
 
 
+def _inherit_attachments(source, target):
+    """补正/重确认版本继承原件。
+
+    学生只是改了一个日期，不应该被要求重新上传扫描件；证据跟着材料版本走，
+    复制文件而不是共用存储名，避免任一版本被删除时另一个版本丢失原件。
+    """
+    import shutil
+
+    from services.materials.service import stored_path
+
+    inherited = []
+    for attachment in source.attachments:
+        origin = stored_path(attachment.stored_name)
+        if not origin.is_file():
+            continue
+        stored_name = uuid.uuid4().hex + Path(attachment.filename).suffix.lower()
+        destination = stored_path(stored_name)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(origin, destination)
+        db.session.add(MaterialAttachment(
+            record_id=target.id, filename=attachment.filename, stored_name=stored_name,
+            sha256=attachment.sha256, size=attachment.size,
+        ))
+        inherited.append(attachment.filename)
+    return inherited
+
+
 def create_correction_version(user, row, version, confirmed_terms):
     if not is_owner(_actor_scope(user), _material_scope(row)):
         raise MaterialUseCaseError("只能补正本人材料", code="forbidden", status_code=403)
@@ -730,7 +835,10 @@ def create_correction_version(user, row, version, confirmed_terms):
         raise MaterialUseCaseError(
             "材料版本已变化，请刷新后重试", code="version_conflict", status_code=409
         )
-    successor = MaterialRecord.query.filter_by(supersedes_record_id=row.id).first()
+    successor = MaterialRecord.query.filter(
+        MaterialRecord.supersedes_record_id == row.id,
+        MaterialRecord.status != "abandoned",
+    ).first()
     if successor is not None:
         raise MaterialUseCaseError(
             "该退回材料已经创建补正版本，请继续处理现有补正稿",
@@ -772,11 +880,13 @@ def create_correction_version(user, row, version, confirmed_terms):
         # released so the corrected version can be submitted.
         row.competition_duplicate_digest = None
         db.session.add(corrected); db.session.flush()
+        inherited = _inherit_attachments(row, corrected)
         _event(corrected, user, "competition_correction_version_created", {
             "supersedes_record_id": row.id,
             "previous_status": row.status,
             "previous_version": row.version,
             "return_events_preserved": True,
+            "inherited_attachments": inherited,
         })
         return corrected
     from domain.material_terms import (
@@ -859,10 +969,12 @@ def reconfirm_competition_rule(user, row, version, confirmed_terms, confirmed):
         supersedes_record_id=row.id, correction_sequence=(row.correction_sequence or 0) + 1,
     )
     db.session.add(replacement); db.session.flush()
+    inherited = _inherit_attachments(row, replacement)
     _event(replacement, user, "competition_rule_reconfirmed", {
         "supersedes_record_id": row.id, "old_package_id": row.competition_rule_package_id,
         "new_package_id": package.id, "old_material_version": row.version,
         "new_material_version": replacement.version,
+        "inherited_attachments": inherited,
     })
     return replacement
 

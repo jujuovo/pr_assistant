@@ -93,6 +93,33 @@ def event(row, action, details):
     db.session.add(MaterialEvent(record_id=row.id,actor_id=actor().id,action=action,details=details))
 
 
+REVIEWED_STATUSES = frozenset({
+    'needs_correction', 'scored', 'verified', 'rejected', 'verified_not_eligible',
+})
+REVIEW_EVENT_DECISIONS = {
+    'competition_approved': 'approve',
+    'competition_returned': 'return',
+    'reviewed': 'review',
+}
+
+
+def _last_review(row):
+    """最近一次审核结论：学生必须看得到教师为什么退回，否则无法补正。"""
+    event = MaterialEvent.query.filter(
+        MaterialEvent.record_id == row.id,
+        MaterialEvent.action.in_(tuple(REVIEW_EVENT_DECISIONS)),
+    ).order_by(MaterialEvent.id.desc()).first()
+    if event is None:
+        return None
+    actor = db.session.get(User, event.actor_id) if event.actor_id else None
+    return {
+        'decision': REVIEW_EVENT_DECISIONS[event.action],
+        'comment': (event.details or {}).get('comment'),
+        'actor': {'id': actor.id, 'name': actor.name, 'role': actor.role} if actor else None,
+        'at': (event.created_at.isoformat() + 'Z') if event.created_at else None,
+    }
+
+
 def view(row):
     from services.competition_ocr.binding import record_links
     from .schemas import OCR_CATEGORIES
@@ -104,7 +131,12 @@ def view(row):
         ActorScope(user.role, user.student_id, user.faculty_id),
         MaterialScope(row.student_id, row.faculty_id, row.status),
     )
-    successor = MaterialRecord.query.filter_by(supersedes_record_id=row.id).order_by(
+    # 只有「仍然有效」的后继版本才算取代关系。若把已放弃的补正稿也当后继，
+    # 学生放弃补正后原材料会被判定为"已被取代"，两条记录同时不可操作，材料彻底僵死。
+    successor = MaterialRecord.query.filter(
+        MaterialRecord.supersedes_record_id == row.id,
+        MaterialRecord.status != 'abandoned',
+    ).order_by(
         MaterialRecord.correction_sequence.desc(), MaterialRecord.id.desc()
     ).first()
     if successor is not None:
@@ -123,6 +155,7 @@ def view(row):
             'cycle_code':row.year, 'cycle_policy_version_id':row.cycle_policy_version_id,
             'status':row.status, 'version':row.version,
             'allowed_actions':list(actions),
+            'last_review':_last_review(row) if row.status in REVIEWED_STATUSES else None,
             'data':row.data, 'analysis':{**(row.analysis or {}), 'ocr_executed':bool(links) or bool(row.ocr_raw_terms)}, 'check_report':row.check_report,
             'ocr_raw_terms':row.ocr_raw_terms,
             'competition_rule_package_id':row.competition_rule_package_id,
