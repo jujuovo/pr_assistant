@@ -172,3 +172,20 @@ test('nested image and detail dialogs release the shared scroll lock when leavin
   await flushPromises()
   expect(document.body.style.overflow).toBe('')
 })
+
+test('shows the paper bonus separately from the capped academic group', async () => {
+  Object.assign(state.score.entries[0], {
+    project_source: { type: 'material', id: '4', category: 'research_paper' },
+    candidate_score: '20.0000', item_bonus: '20.0000'
+  })
+  state.score.categories.academic = { effective_score: '15.0000', note: '最终实际计分受本组上限影响。' }
+  const w = mount(Statistics, { attachTo: document.body })
+  await flushPromises()
+  expect(w.get('.included-score').text()).toBe('20.0000')
+  expect(w.get('.score-components').text()).toContain('学术专长最终实际计分15.0000')
+  expect(w.get('small.score-cap-note').text()).toContain('受本组上限影响')
+  await w.get('.score-details-button').trigger('click')
+  await flushPromises()
+  expect(document.querySelector('.source-score-summary').textContent).toContain('逐项加分20.0000')
+  w.unmount()
+})

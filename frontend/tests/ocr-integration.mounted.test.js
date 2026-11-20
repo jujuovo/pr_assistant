@@ -140,7 +140,7 @@ test('manual return requires an opinion and failed approval preserves its contex
       {
         id: 7,
         student_id: 'S1',
-        status: 'submitted',
+        status: 'submitted', allowed_actions: ['review'],
         version: 2,
         manual_only: true,
         data: { team: '测试实践队' },
@@ -210,7 +210,7 @@ test('manual verification can approve without comment but still requires return 
       {
         id: 31,
         version: 2,
-        status: 'submitted',
+        status: 'submitted', allowed_actions: ['review'],
         student_id: 'S1',
         manual_only: true,
         data: {},

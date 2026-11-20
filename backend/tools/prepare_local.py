@@ -78,8 +78,41 @@ def ensure_local_competition_context(*, fresh, package_file=COMPETITION_PACKAGE)
             '请修复规则源或显式处理已有 current 包后重试。'
         ) from error
     _package, context = competition_workflow_context(admin)
+    ensure_local_research_rules(admin, policy.cycle_code)
     db.session.commit()
     return package, created, context
+
+
+def ensure_local_research_rules(admin, cycle_code):
+    from domain.research_scoring import POLICY_VERSION
+    from extensions import db
+    from models import Faculty, Rule
+    from use_cases.rule_versions import publish_rule_version
+
+    faculty = Faculty.query.filter_by(name="信息学院").one()
+    from domain.innovation_scoring import POLICY_VERSION as innovation_version
+    from domain.student_work_scoring import POLICY_VERSION as work_version
+    for subtype, kind, label, version in (
+        ("student_work", None, "学生干部", work_version),
+        ("research", "thesis", "论文", POLICY_VERSION),
+        ("research", "patent", "授权发明专利", POLICY_VERSION),
+        ("innovation", None, "创新创业训练", innovation_version),
+    ):
+        rule_type = "comprehensive" if subtype == "student_work" else "academic"
+        formula = {"policy_id": version}
+        existing = Rule.query.filter_by(faculty_id=faculty.id, type=rule_type,
+                                        sub_type=subtype, research_type=kind, status="active")
+        matching = [rule for rule in existing if rule.calculation_formula == formula]
+        if len(matching) > 1:
+            raise RuntimeError(f"信息学院存在多条有效{label}规则，请核对后重试")
+        if matching:
+            rule = matching[0]
+        else:
+            rule = Rule(name=f"信息学院{label}（2025年2月办法）", type=rule_type,
+                        sub_type=subtype, research_type=kind, status="active", score=0,
+                        faculty_id=faculty.id, calculation_formula=formula)
+            db.session.add(rule)
+        publish_rule_version(rule, published_by=admin, cycle_code=cycle_code)
 
 
 def main(database_file=None, competition_package_file=None):

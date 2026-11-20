@@ -68,7 +68,8 @@ def record_at(category, record_id, *, allow_teacher_processed=False):
             'needs_correction', 'scored', 'verified', 'verified_not_eligible'
         })
     )
-    if row.category == 'volunteer' and row.status in {'scored', 'rejected', 'needs_correction', 'verified_not_eligible'}:
+    from domain.student_work_scoring import POLICY_VERSION as WORK_POLICY
+    if (row.normalization_version == WORK_POLICY or row.category in {'volunteer', 'research_paper', 'invention_patent', 'innovation_training'}) and row.status in {'scored', 'rejected', 'needs_correction', 'verified_not_eligible'}:
         teacher_status_allowed = True
     from .ocr_schemas import MANUAL_TYPES
     from use_cases.manual_materials import is_manual
@@ -115,14 +116,27 @@ def view(row):
     ):
         actions = tuple(action for action in actions if action not in {'edit', 'add_attachment'})
         actions = (*actions, 'create_correction')
+    from domain.student_work_scoring import POLICY_VERSION as WORK_POLICY
+    if ((row.normalization_version == WORK_POLICY or row.category in {"research_paper", "invention_patent", "innovation_training"}) and successor is None
+            and user.role == "student" and row.status in {"scored", "verified_not_eligible", "needs_correction"}):
+        actions = (*actions, "create_correction")
     from services.competition_ocr.assessment import workflow_projection
     projection=workflow_projection(row)
     if row.category == 'volunteer':
         from services.volunteer_ocr import projection as volunteer_projection
         projection, actions = volunteer_projection(row, user, actions)
+    bonus_result = None
+    if row.normalization_version == WORK_POLICY or row.category in {"research_paper", "invention_patent", "innovation_training"}:
+        from workflow_models import ScoreEntry
+        entry = ScoreEntry.query.filter_by(material_record_id=row.id, status="active").one_or_none()
+        if entry:
+            bonus_result = {"score_entry_id": entry.id, "candidate_score": str(entry.candidate_score),
+                            "included_score": str(entry.effective_score), "reason": entry.exclusion_reason,
+                            "details": entry.exclusion_basis.get("allocations", [])}
     queued_job=((projection.get('ocr_assessment') or {}).get('job') or {})
     return {**projection, 'id':row.id, 'category':row.category, 'student_id':row.student_id, 'faculty_id':row.faculty_id,
             'application_id':row.application_id, 'year':row.year,
+            'normalization_version':row.normalization_version, 'rule_version_id':row.rule_version_id,
             'cycle_code':row.year, 'cycle_policy_version_id':row.cycle_policy_version_id,
             'status':row.status, 'version':row.version,
             'allowed_actions':list(actions),
@@ -132,7 +146,7 @@ def view(row):
             'supersedes_record_id':row.supersedes_record_id,
             'superseded_by_record_id':successor.id if successor else None,
             'recognition_status':(projection.get('volunteer_ocr') or {}).get('status') or queued_job.get('status') or ('confirmed' if links else ('not_requested' if row.category in OCR_CATEGORIES else 'not_implemented')),
-            'ocr_links':links, 'bonus_result':None,
+            'ocr_links':links, 'bonus_result':bonus_result,
             'manual_only':is_manual(row),
             'created_at':row.created_at.isoformat()+'Z', 'updated_at':row.updated_at.isoformat()+'Z',
             'attachments':[{'id':f.id,'filename':f.filename,'size':f.size,'sha256':f.sha256,
