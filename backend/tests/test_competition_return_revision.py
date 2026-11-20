@@ -119,3 +119,65 @@ def test_existing_correction_supersedes_old_workbench_action_and_blocks_duplicat
     old_projection = next(item for item in records if item['id'] == original.id)
     assert old_projection['superseded_by_record_id'] == corrected.id
     assert old_projection['allowed_actions'] == []
+
+
+def test_abandoned_correction_does_not_lock_original_material(env):
+    """放弃补正稿后，被退回的原材料必须重新可补正，不能两条记录同时卡死。"""
+    student, original, facts, _package = returned_material(env)
+    corrected = create_correction_version(student, original, original.version, facts)
+    db.session.flush()
+    abandon_returned_competition(student, corrected, corrected.version)
+    db.session.flush()
+
+    again = create_correction_version(student, original, original.version, facts)
+    db.session.flush()
+    assert again.status == 'draft'
+    assert again.id != corrected.id
+    assert again.supersedes_record_id == original.id
+
+
+def test_correction_version_inherits_original_attachments(env):
+    """补正稿必须继承原件：改一个日期不该被要求重新上传扫描件。"""
+    import os
+
+    from services.materials.service import stored_path
+    from use_cases.materials import add_attachments
+
+    student, original, facts, _package = returned_material(env)
+    add_attachments(
+        student, original, original.version,
+        [("proof.png", b"proof-bytes")], stored_path("placeholder").parent,
+    )
+    db.session.flush()
+    # 上传附件会把材料状态改回 draft，这里恢复成教师退回后的状态
+    original.status = "needs_correction"
+    db.session.flush()
+    assert original.attachments
+    version = original.version
+
+    corrected = create_correction_version(student, original, version, facts)
+    db.session.flush()
+    assert len(corrected.attachments) == len(original.attachments)
+    source = original.attachments[0]
+    inherited = corrected.attachments[0]
+    assert inherited.filename == source.filename
+    assert inherited.sha256 == source.sha256
+    # 必须复制成新文件，不能共用存储名，否则一方删除会丢另一方原件
+    assert inherited.stored_name != source.stored_name
+    assert stored_path(inherited.stored_name).is_file()
+    for path in (stored_path(source.stored_name), stored_path(inherited.stored_name)):
+        os.remove(path)
+
+
+def test_student_projection_exposes_last_review_comment(env):
+    """学生必须能读到自己为什么被退回，否则无法按要求补正。"""
+    student, original, _facts, _package = returned_material(env)
+    db.session.commit()
+    login(env[1], env[2]['student'])
+    records = env[1].get('/api/materials/competition/records?year=2028').json['records']
+    projection = next(item for item in records if item['id'] == original.id)
+    assert 'create_correction' in projection['allowed_actions']
+    assert projection['superseded_by_record_id'] is None
+    assert projection['last_review']['decision'] == 'return'
+    assert projection['last_review']['comment'] == '请核对作品名称'
+    assert projection['last_review']['actor']['role'] == 'admin'
