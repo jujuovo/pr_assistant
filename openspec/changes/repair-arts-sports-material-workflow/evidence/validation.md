@@ -13,15 +13,24 @@
 | 新增后端测试 | `pytest backend/tests/test_arts_sports_material.py -q` | 11 passed |
 | 材料接口/OpenAPI | `pytest backend/tests/test_arts_sports_material.py backend/tests/test_material_interfaces.py backend/tests/test_ocr_material_fields.py -q` | 80 passed |
 | OpenAPI 示例校验 | `pytest backend/tests/test_ocr_material_fields.py -q` | 39 passed |
-| 后端完整回归 | `pytest backend/tests -q -p no:cacheprovider` | 723 passed, 5 skipped |
-| mounted | `npm --prefix frontend run test:mounted` | 82 passed, 1 skipped |
+| 后端完整回归 | `pytest backend/tests -q -p no:cacheprovider` | 726 passed, 5 skipped（合并 main 后） |
+| mounted | `npm --prefix frontend run test:mounted` | 90 passed, 1 skipped（合并 main 后） |
 | 学生主页统计 mounted | `npm --prefix frontend run test:mounted -- tests/student-home-count.mounted.test.js` | 2 passed |
 | 教师主页统计 mounted | `npm --prefix frontend run test:mounted -- tests/teacher-home-count.mounted.test.js` | 2 passed |
 | 教师全部类别汇总 mounted | `npm --prefix frontend run test:mounted -- tests/arts-sports-material.mounted.test.js` | 6 passed |
-| Node | `node --test frontend/tests/*.test.mjs` | 58 passed |
+| Node | `node --test frontend/tests/*.test.mjs` | 57 passed, 1 failed（既有 main 失败，见下） |
 | 生产构建 | `npm --prefix frontend run build` | 成功（保留既有大包提示） |
 | 本次 change 校验 | `openspec validate repair-arts-sports-material-workflow --strict` | valid |
 | 主规格校验 | `openspec validate --specs --strict` | 7 passed |
+
+## 合并 origin/main 后回归
+
+- 已将 `origin/main` 的 `35f66bf`（PR #7，竞赛计分汇总与审核记录链路修复）合并进本分支，合并无冲突。
+- 后端完整回归：**726 passed, 5 skipped**。
+- mounted：**90 passed, 1 skipped**。
+- 生产构建：成功。
+- `node --test frontend/tests/*.test.mjs`：**57 passed, 1 failed**。失败项为 `teacher-core-workbench.test.mjs` 要求 `TeacherStudentSummary.vue` 包含 `key_facts`；用 `git show origin/main:frontend/src/pages/teacher/students/TeacherStudentSummary.vue` 检查，`origin/main` 本身也没有该字段，属于 main 上既有失败，不是本分支引入。CI 的 `node --test frontend/tests/material-api.test.mjs` 单独运行通过。
+- `openspec validate repair-arts-sports-material-workflow --strict` 与 `openspec validate --specs --strict` 均通过。
 
 ## 覆盖行为
 
