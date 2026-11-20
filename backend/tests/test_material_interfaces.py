@@ -223,7 +223,11 @@ def test_auth_schema_student_import_and_input_score_forbidden(env):
     assert env[1].get('/api/materials/types').status_code==401
     login(env[1],env[2]['student'])
     types=env[1].get('/api/materials/types')
-    assert types.status_code==200 and {t['key'] for t in types.json['types']}==set(SAMPLES)|{'certification','social_practice','research','competition_evidence','volunteer'}
+    assert types.status_code == 200
+    assert {t['key'] for t in types.json['types']} == set(SAMPLES) | {
+        'certification', 'social_practice', 'research', 'competition_evidence', 'volunteer',
+        'research_paper', 'invention_patent', 'innovation_training',
+    }
     assert all(t['auto_bonus_enabled']==(t['key'] in {'competition','volunteer'}) for t in types.json['types'])
     assert env[1].post('/api/materials/sources/import',json=source_payload()).status_code==403
     assert env[1].post('/api/materials/honor/records',json={'year':2026,'data':SAMPLES['honor'],'final_score':6}).status_code==400
