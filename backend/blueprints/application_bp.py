@@ -436,6 +436,11 @@ def create_application():
             abort(409, description="审核状态和最终分数只能通过统一审核入口修改")
         if data.get("rule_id") is not None:
             submitted_rule = db.session.get(Rule, data["rule_id"])
+            if submitted_rule is not None and submitted_rule.sub_type in {'volunteer','volunteer_credit','volunteer_honor'}:
+                from use_cases.cycles import current_cycle_policy
+                policy = current_cycle_policy(required=False)
+                if policy and policy.cycle_code >= 2028:
+                    abort(409, description='志愿工时请使用累计工时材料入口，不能通过旧申请计分')
             if submitted_rule is not None and submitted_rule.sub_type == "competition":
                 return jsonify({
                     "error": "学业竞赛必须使用新材料申报入口",
@@ -962,6 +967,10 @@ def review_application(id):
     reviewer = actor()
     if reviewer.role not in ("teacher", "admin") or reviewer.faculty_id != application.faculty_id:
         abort(403, description="没有该申请的审核权限")
+    legacy_rule = db.session.get(Rule, application.rule_id) if application.rule_id else None
+    if (application.cycle_code and application.cycle_code >= 2028 and legacy_rule
+            and legacy_rule.sub_type in {'volunteer','volunteer_credit','volunteer_honor'}):
+        abort(409, description='2028届起请通过志愿累计工时材料审核，旧申请仅保留历史')
     certificate = CertificateAssessment.query.filter_by(application_id=id).first()
     if ((certificate and not certificate.claims.get("preview_flow")) or
             (has_linked_material(id) and not (certificate and certificate.claims.get("preview_flow")))):

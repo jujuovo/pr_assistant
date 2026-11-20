@@ -462,6 +462,8 @@ def recalculate_year(batch):
 
 def review_batch(batch, data):
     user = authorize(batch, reviewer=True)
+    if batch.year >= 2028:
+        abort(409, description='2028届起不得按旧志愿工时费率计分，请核验累计工时材料')
     if not isinstance(data, dict):
         abort(400, description="审核数据必须是对象")
     claim_transition(batch, data.get("version"), ("submitted", "approved"))

@@ -1,4 +1,6 @@
 export const FIELD_LABELS = {
+  regular_hours: '本次普通志愿工时',
+  reduced_hours: '本次大型赛会及支教工时（原始小时）',
   description: '申报说明',
   name: '姓名',
   total_score: '总成绩',

@@ -41,6 +41,10 @@
         <OcrAssessment v-if="row.category === 'competition'" :advice="row.ocr_assessment" />
         <p v-else-if="row.manual_only">此项通过人工通道核验，不自动计分。</p
         ><p v-else>根据该类别的现行规则审核计分。</p>
+        <p v-if="row.category === 'volunteer' && row.analysis?.submitted_hours">
+          本次有效工时 {{ row.analysis.submitted_hours.effective_hours }} 小时。
+          审核通过后计入周期累计；最终得分请查看加分统计。
+        </p>
         <details
           ><summary>申报信息与原件</summary><MaterialFacts :data="row.data" /><ul
             ><li v-for="f in row.attachments" :key="f.id"
@@ -136,6 +140,7 @@ const router = useRouter(),
   legacy = ref(false),
   cursors = ref({})
 const categoryNames = {
+  volunteer: '志愿服务累计工时',
   academic: '学业成绩',
   language: '外语能力',
   student_work: '学生工作',

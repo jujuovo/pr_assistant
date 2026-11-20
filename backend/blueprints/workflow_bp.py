@@ -1,6 +1,6 @@
 """HTTP adapters for auditable score and ranking workflow use cases."""
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from flask import Blueprint, abort, jsonify, request
 
@@ -16,8 +16,9 @@ from use_cases.scoring import (
 from use_cases.ranking import (
     RankingUseCaseError, execute_ranking_command, generate_ranking_command,
 )
-from use_cases.cycles import CycleUseCaseError, current_cycle_policy
-from workflow_models import (RankingBatch, RankingEntry, RankingExportAudit,
+from use_cases.cycles import (CycleUseCaseError, current_cycle_policy,
+                             create_cycle_policy, activate_cycle_policy, switch_cycle_policy)
+from workflow_models import (RecommendationCyclePolicy, RankingBatch, RankingEntry, RankingExportAudit,
                              StudentScoreSnapshot)
 from extensions import db
 from services.workflow_schemas import (
@@ -50,6 +51,65 @@ def cycle_error(error):
 def current_cycle():
     actor()
     return jsonify(cycle_policy_dto(current_cycle_policy()))
+
+
+def _admin_cycle(user):
+    if user.role != "admin":
+        raise CycleUseCaseError("仅管理员可管理推免周期", code="forbidden")
+
+
+def _cycle_admin_dto(policy):
+    return {"id": policy.id, **cycle_policy_dto(policy)}
+
+
+@workflow_bp.get("/cycles")
+def list_cycles():
+    _admin_cycle(actor())
+    policies = RecommendationCyclePolicy.query.order_by(
+        RecommendationCyclePolicy.cycle_code.desc(), RecommendationCyclePolicy.version.desc()
+    ).all()
+    return jsonify({"items": [_cycle_admin_dto(item) for item in policies],
+                    "active_id": next((item.id for item in policies if item.active_marker == 1), None)})
+
+
+@workflow_bp.post("/cycles")
+def create_cycle():
+    user = actor()
+    _admin_cycle(user)
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        abort(400, description="请求体必须为 JSON 对象")
+    try:
+        start = date.fromisoformat(payload.get("eligible_award_start_date", ""))
+        end = date.fromisoformat(payload.get("eligible_award_end_date", ""))
+    except (TypeError, ValueError):
+        abort(400, description="请填写有效的奖项起止日期")
+    policy, created = create_cycle_policy(user, payload.get("cycle_code"), start, end,
+                                           payload.get("display_name"))
+    db.session.commit()
+    return jsonify(_cycle_admin_dto(policy)), 201 if created else 200
+
+
+@workflow_bp.post("/cycles/<int:policy_id>/activate")
+def activate_cycle(policy_id):
+    user = actor()
+    _admin_cycle(user)
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict) or "expected_active_id" not in payload:
+        abort(400, description="请提供当前活动周期 ID（无活动周期时填 null）")
+    policy = db.get_or_404(RecommendationCyclePolicy, policy_id)
+    active = current_cycle_policy(required=False)
+    expected = payload["expected_active_id"]
+    if isinstance(expected, bool) or (expected is not None and not isinstance(expected, int)):
+        abort(400, description="当前活动周期 ID 无效")
+    if (active.id if active else None) != expected:
+        raise CycleUseCaseError("活动周期已变化，请刷新后重试", code="version_conflict")
+    if active:
+        switch_cycle_policy(user, policy, expected_active_id=expected)
+    else:
+        activate_cycle_policy(user, policy)
+    db.session.commit()
+    return jsonify(_cycle_admin_dto(policy))
 
 
 def _authorize_student_score(user, student):

@@ -68,6 +68,8 @@ def record_at(category, record_id, *, allow_teacher_processed=False):
             'needs_correction', 'scored', 'verified', 'verified_not_eligible'
         })
     )
+    if row.category == 'volunteer' and row.status in {'scored', 'rejected', 'needs_correction', 'verified_not_eligible'}:
+        teacher_status_allowed = True
     from .ocr_schemas import MANUAL_TYPES
     from use_cases.manual_materials import is_manual
     if is_manual(row):

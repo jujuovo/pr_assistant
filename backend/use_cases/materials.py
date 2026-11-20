@@ -944,6 +944,8 @@ def review_material(user, row, version, decision, comment, idempotency_key,
         raise MaterialUseCaseError("无效核验结论")
     if not isinstance(comment, str) or len(comment) > 2000:
         raise MaterialUseCaseError("核验说明必须为不超过2000字符的文字")
+    if row.category == 'volunteer' and decision != 'verified' and not comment.strip():
+        raise MaterialUseCaseError('退回或不通过必须填写原因')
     if not isinstance(idempotency_key, str) or not 1 <= len(idempotency_key) <= 128:
         raise MaterialUseCaseError("幂等键必须为1至128字符")
     payload = {
@@ -984,6 +986,9 @@ def review_material(user, row, version, decision, comment, idempotency_key,
 
     # Authorize before loading policy details so unauthorized actors learn nothing.
     _authorize_transition(user, row, "review", decision)
+    if row.category == 'volunteer' and decision == 'verified':
+        from services.materials.originals import verify_ocr_originals
+        verify_ocr_originals(row)
     eligibility = None
     target_status = decision
     if decision == "verified":

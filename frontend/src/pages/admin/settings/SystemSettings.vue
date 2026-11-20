@@ -4,6 +4,29 @@
       <span>系统设置</span>
     </div>
 
+    <div class="card">
+      <div class="card-title">推免周期</div>
+      <p class="help-text">志愿服务等新材料按活动推免周期开放。下方“学术年度”设置不能启用推免周期。</p>
+      <p v-if="cycleLoading">正在加载推免周期...</p>
+      <p v-else-if="cycleError" role="alert">{{ cycleError }} <button class="btn btn-outline" @click="loadCycles">重试</button></p>
+      <template v-else>
+        <p>当前活动周期：{{ activeCycle ? `${activeCycle.display_name}（${activeCycle.cycle_code}届）` : '未启用' }}</p>
+        <p class="help-text">创建周期时请按正式规则包填写奖项有效期；启用后新材料将归属该周期。</p>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label" for="cycle-code">届别</label><input id="cycle-code" v-model="cycleForm.cycle_code" class="form-control" type="number" min="2028" max="2100" /></div>
+          <div class="form-group"><label class="form-label" for="cycle-start">奖项有效期开始</label><input id="cycle-start" v-model="cycleForm.eligible_award_start_date" class="form-control" type="date" /></div>
+          <div class="form-group"><label class="form-label" for="cycle-end">奖项有效期结束</label><input id="cycle-end" v-model="cycleForm.eligible_award_end_date" class="form-control" type="date" /></div>
+        </div>
+        <p v-if="cycleFormError" role="alert">{{ cycleFormError }}</p>
+        <button class="btn btn-outline" :disabled="cycleSaving" @click="createCycle">{{ cycleSaving ? '正在创建...' : '创建周期草稿' }}</button>
+        <div v-if="cycles.length" class="table-container">
+          <table class="application-table"><thead><tr><th>届别</th><th>奖项有效期</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody><tr v-for="cycle in cycles" :key="cycle.id"><td>{{ cycle.display_name }}</td><td>{{ cycle.eligible_award_start_date }} 至 {{ cycle.eligible_award_end_date }}</td><td>{{ cycle.status === 'active' ? '活动中' : cycle.status === 'retired' ? '已退役' : '草稿' }}</td><td><button v-if="cycle.status === 'draft'" class="btn btn-outline" :disabled="cycleSaving" @click="activateCycle(cycle)">启用此周期</button></td></tr></tbody></table>
+        </div>
+        <p v-else class="help-text">暂无周期草稿，请先创建。</p>
+      </template>
+    </div>
+
     <!-- 学术年度设置 -->
     <div class="card">
       <div class="card-title">学术年度设置</div>
@@ -281,6 +304,63 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import api from '@/services/api.js'
 import { useToastStore } from '@/stores/toast.js'
 const toastStore = useToastStore()
+const cycles = ref([])
+const activeCycleId = ref(null)
+const activeCycle = computed(() => cycles.value.find(item => item.id === activeCycleId.value))
+const cycleLoading = ref(true)
+const cycleSaving = ref(false)
+const cycleError = ref('')
+const cycleFormError = ref('')
+const cycleForm = reactive({ cycle_code: '2028', eligible_award_start_date: '2025-09-01', eligible_award_end_date: '2028-08-31' })
+
+async function loadCycles() {
+  cycleLoading.value = true
+  cycleError.value = ''
+  try {
+    const result = await api.getRecommendationCycles()
+    cycles.value = result.items
+    activeCycleId.value = result.active_id
+  } catch (error) {
+    cycleError.value = error.message || '推免周期加载失败'
+  } finally {
+    cycleLoading.value = false
+  }
+}
+
+async function createCycle() {
+  const code = Number(cycleForm.cycle_code)
+  if (!Number.isInteger(code) || code < 2028 || code > 2100 || !cycleForm.eligible_award_start_date || !cycleForm.eligible_award_end_date || cycleForm.eligible_award_end_date < cycleForm.eligible_award_start_date) {
+    cycleFormError.value = '请填写2028届或之后的届别，以及有效的奖项起止日期'
+    return
+  }
+  cycleFormError.value = ''
+  cycleSaving.value = true
+  try {
+    await api.createRecommendationCycle({ ...cycleForm, cycle_code: code, display_name: `${code} 推免周期` })
+    await loadCycles()
+    toastStore.success('周期草稿已创建，请核对后启用')
+  } catch (error) {
+    cycleFormError.value = error.message || '创建周期失败'
+  } finally {
+    cycleSaving.value = false
+  }
+}
+
+async function activateCycle(cycle) {
+  if (!confirm(`确定启用 ${cycle.display_name}？新材料将归属此周期，现有活动周期会退役。请确认对应规则包已经准备就绪。`)) return
+  cycleSaving.value = true
+  cycleFormError.value = ''
+  try {
+    await api.activateRecommendationCycle(cycle.id, activeCycleId.value)
+    await loadCycles()
+    toastStore.success('推免周期已启用')
+  } catch (error) {
+    cycleFormError.value = error.message || '启用失败，请刷新后重试'
+    await loadCycles()
+  } finally {
+    cycleSaving.value = false
+  }
+}
 
 // 动态生成学术年度选项（最近5年）
 const generateAcademicYearOptions = () => {
@@ -753,6 +833,7 @@ const toggleSystemStatus = async () => {
 
 // 生命周期
 onMounted(() => {
+  loadCycles()
   // 加载系统设置
   loadSystemSettings()
   // 加载备份文件列表

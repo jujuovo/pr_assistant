@@ -1,7 +1,7 @@
 <template>
   <div class="fields-editor"
     ><label v-for="field in visible" :key="field"
-      >{{ fieldLabel(field) }}<span v-if="required.includes(field)"> *</span>
+      >{{ labels[field] || fieldLabel(field) }}<span v-if="required.includes(field)"> *</span>
       <select
         v-if="field === 'document_type'"
         :value="modelValue[field]"
@@ -49,6 +49,7 @@ const props = defineProps({
   modelValue: { type: Object, default: () => ({}) },
   fields: { type: Array, default: () => [] },
   required: { type: Array, default: () => [] }
+  ,labels: { type: Object, default: () => ({}) }
 })
 const emit = defineEmits(['update:modelValue'])
 const roleFields = [

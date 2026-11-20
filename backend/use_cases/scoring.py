@@ -366,7 +366,39 @@ def score_verified_material(row, review_key, *, actor=None, override_score=None,
             return {"status": "needs_rule", "reason": match["reason"],
                     "rule_version_ids": match.get("rule_version_ids", [])}
         version, rule = match["version"], match["rule"]
-    calculation = calculate_score(version.snapshot)
+    if row.category == 'volunteer':
+        if override_score is not None:
+            raise ScoringUseCaseError('志愿工时按学院办法计算，不能人工覆盖分数', status_code=400)
+        # Each approved document contributes its own hours. Keep one active
+        # score fact for the aggregate to avoid counting each document's score.
+        Student.query.filter_by(student_id=row.student_id).with_for_update().one()
+        from decimal import Decimal
+        from domain.volunteer_policy import calculate_hours
+        approved = MaterialRecord.query.filter_by(
+            student_id=row.student_id, year=row.year, category='volunteer', status='scored'
+        ).all()
+        if any(item.analysis and item.analysis.get('volunteer_score') for item in approved):
+            raise ScoringUseCaseError(
+                '已有按累计报表计算的历史志愿材料，请管理员先核对迁移后再审核新工时',
+                status_code=409, code='legacy_volunteer_reconciliation_required')
+        sources = {item.id: item for item in approved}
+        sources[row.id] = row
+        regular = sum((Decimal(str(item.data['regular_hours'])) for item in sources.values()), Decimal(0))
+        reduced = sum((Decimal(str(item.data['reduced_hours'])) for item in sources.values()), Decimal(0))
+        aggregate_facts = {'regular_hours': str(regular), 'reduced_hours': str(reduced)}
+        aggregate_hours = calculate_hours(regular, reduced)
+        previous_entries = ScoreEntry.query.filter_by(
+            student_id=row.student_id, year=row.year, category='volunteer',
+            source_type='material', status='active').all()
+        for previous in previous_entries:
+            if previous.material_record_id == row.id:
+                continue
+            previous.status, previous.included = 'invalidated', False
+            previous.exclusion_reason = previous.invalidated_reason = 'volunteer_hours_aggregate_updated'
+            previous.invalidated_at = previous.updated_at = utcnow()
+    from domain.material_scoring import calculate_material_score
+    calculation = calculate_material_score(
+        row.category, aggregate_facts if row.category == 'volunteer' else row.data, version.snapshot)
     effective_score = calculation.effective_score
     if override_score is not None:
         from decimal import Decimal, InvalidOperation
@@ -402,7 +434,7 @@ def score_verified_material(row, review_key, *, actor=None, override_score=None,
         faculty_id=row.faculty_id,
         year=row.year,
         cycle_policy_version_id=row.cycle_policy_version_id,
-        score_group=rule.type,
+        score_group=version.snapshot['type'],
         category=row.category,
         source_type="material",
         source_id=str(row.id),
@@ -446,6 +478,7 @@ def score_verified_material(row, review_key, *, actor=None, override_score=None,
         "automatic_score": str(calculation.effective_score),
         "override_score": str(effective_score) if override_score is not None else None,
         "effective_score": str(effective_score),
+        **({'volunteer_aggregate': aggregate_hours} if row.category == 'volunteer' else {}),
         "stale_ranking_batch_ids": [batch.id for batch in stale],
         "replayed": False,
     }

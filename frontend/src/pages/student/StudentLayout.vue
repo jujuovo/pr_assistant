@@ -74,6 +74,7 @@ import Statistics from '@/pages/student/statistics/Statistics.vue'
 import Profile from '@/pages/common/profile/Profile.vue'
 import StudentRanking from '@/pages/student/rankings/StudentRanking.vue'
 import MaterialWorkflow from '@/pages/student/applications/MaterialWorkflow.vue'
+import { submissionQuery } from '@/services/materialWorkflowRoutes.js'
 
 const router = useRouter()
 const route = useRoute()
@@ -140,22 +141,16 @@ watch(
 const openApplicationForm = (category) => {
   selectedCategory.value = category
   editApplicationId.value = null
-  if (category.key === 'academic-performance') {
-    currentPage.value = 'academic-performance'
-    return
-  }
-  if (category.key === 'competition') {
-    currentPage.value = 'materials'
-    router.replace({ query: { page: 'materials', category: 'competition' } })
-    return
-  }
-  currentPage.value = 'application-form'
+  const query = submissionQuery(category.key)
+  currentPage.value = query.page
+  router.replace({ query })
 }
 
 const backToApplicationCategories = () => {
   selectedCategory.value = null
   editApplicationId.value = null
   currentPage.value = 'application-categories'
+  router.replace({ query: { page: 'application-categories' } })
 }
 
 // 切换到个人信息页面

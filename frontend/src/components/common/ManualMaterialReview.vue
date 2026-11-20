@@ -2,7 +2,7 @@
   <section class="manual-review"
     ><header
       ><h2>{{ history ? '其他材料核验记录' : '其他材料人工核验' }}</h2
-      ><p>原件、OCR识别和学生申报值分别展示；本通道核验不生成加分。</p></header
+      ><p>{{ category === 'volunteer' ? '请核对本次工时证明、审核通过日期、服务对象认可，以及大型赛会和支教工时分类。通过后计入该学生本周期累计工时，并按学院办法计分。' : '原件、OCR识别和学生申报值分别展示；本通道核验不生成加分。' }}</p></header
     >
     <label
       >材料类别<select v-model="category" @change="load"
@@ -15,6 +15,7 @@
     <article v-for="row in rows" :key="row.id"
       ><h3>学生 {{ row.student_id }} · 材料 #{{ row.id }}</h3
       ><h4>学生申报值</h4><MaterialFacts :data="row.data" />
+      <p v-if="row.analysis?.submitted_hours">本次有效工时：{{ row.analysis.submitted_hours.effective_hours }} 小时；审核通过后计入累计。</p>
       <details
         ><summary>核对原始识别</summary><MaterialFacts :data="row.ocr_raw_terms?.fields || {}"
       /></details>
@@ -59,6 +60,7 @@ import materialApi from '@/services/materialApi.js'
 import MaterialFacts from './MaterialFacts.vue'
 const props = defineProps({ history: { type: Boolean, default: false } })
 const kinds = [
+  ['volunteer', '志愿服务累计工时'],
   ['competition_evidence', '目录外竞赛'],
   ['certification', '认证成绩'],
   ['social_practice', '社会实践'],
@@ -87,9 +89,9 @@ async function load() {
     })
     rows.value = result.records.filter(
       (row) =>
-        row.manual_only &&
+        (row.manual_only || row.category === 'volunteer') &&
         (props.history
-          ? ['verified', 'rejected', 'needs_correction'].includes(row.status)
+          ? ['verified', 'rejected', 'needs_correction', 'scored', 'verified_not_eligible'].includes(row.status)
           : row.status === 'submitted')
     )
   } catch (e) {

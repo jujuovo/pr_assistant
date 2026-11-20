@@ -88,7 +88,22 @@ async function apiRequest(endpoint, method = 'GET', data = null, token = null, t
     const response = await fetch(url, options)
     clearTimeout(timeoutId)
 
-    // 解析响应数据
+    // API 网关或旧版后端可能返回 HTML 错误页；不要把它当 JSON 解析错误展示给用户。
+    const contentType = response.headers.get('content-type') || ''
+    if (!contentType.toLowerCase().includes('application/json')) {
+      const requestError = new Error(
+        response.status === 404
+          ? '当前后端没有此接口，请重启后端服务并刷新页面'
+          : response.status === 401
+            ? '登录状态已失效，请重新登录'
+            : response.status === 403
+              ? '当前账号没有此操作权限'
+              : `服务返回了非 JSON 响应（HTTP ${response.status}），请检查后端服务`
+      )
+      requestError.status = response.status
+      requestError.code = 'non_json_response'
+      throw requestError
+    }
     const responseData = await response.json()
 
     // 检查响应状态
@@ -201,6 +216,10 @@ export default {
   // 系统设置相关API
   getSystemSettings: () => apiRequest('/admin/system-settings', 'GET'),
   updateSystemSettings: (settingsData) => apiRequest('/admin/system-settings', 'PUT', settingsData),
+  getRecommendationCycles: () => apiRequest('/workflow/cycles', 'GET'),
+  createRecommendationCycle: (data) => apiRequest('/workflow/cycles', 'POST', data),
+  activateRecommendationCycle: (id, expectedActiveId) =>
+    apiRequest(`/workflow/cycles/${id}/activate`, 'POST', { expected_active_id: expectedActiveId }),
 
   // 学院成绩设置相关API
   getFacultyScoreSettings: () => apiRequest('/admin/faculty-score-settings', 'GET'),

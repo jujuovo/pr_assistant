@@ -36,6 +36,7 @@ from workflow_models import CompetitionRulePackage, MaterialReviewCommand
 from use_cases.competition_review import review_competition_material, student_competition_feedback, teacher_competition_summary
 from use_cases.competition_ocr import start_competition_ocr, cancel_competition_ocr
 from use_cases.manual_materials import is_manual, submit_manual, review_manual
+from use_cases.scoring import ScoringUseCaseError
 
 material_bp=Blueprint('materials',__name__,url_prefix='/api/materials')
 
@@ -53,6 +54,7 @@ def invalid(error):
 
 
 @material_bp.errorhandler(MaterialUseCaseError)
+@material_bp.errorhandler(ScoringUseCaseError)
 def use_case_error(error):
     db.session.rollback()
     return jsonify({'error':str(error),'code':error.code}),error.status_code
@@ -173,7 +175,7 @@ def competition_catalog_item(competition_id):
 def create_manual_with_files(category,user):
     from services.materials.ocr_schemas import MANUAL_TYPES
     from services.materials.attachments import prepare_uploads
-    if category not in MANUAL_TYPES | {'student_work','competition'}:
+    if category not in MANUAL_TYPES | {'student_work','competition','volunteer'}:
         raise ValueError('该类别请使用正式材料申报接口')
     object_keys(request.form,{'year','data'},{'year','data'})
     try:
@@ -185,7 +187,7 @@ def create_manual_with_files(category,user):
     job=None
     try:
         row=create_material(user,category,{'year':integer(int(request.form['year']),'year',2000,2100),
-                                         'data':payload,**({'manual_only':True} if category!='competition' else {})})
+                                         'data':payload,**({'manual_only':True} if category not in {'competition','volunteer'} else {})})
         row,created=add_attachments(user,row,row.version,files,stored_path('placeholder').parent)
         if category=='competition':
             from services.competition_ocr.bridge import enqueue_created_material
@@ -245,7 +247,7 @@ def records(category):
         query=query.filter_by(student_id=user.student_id)
     elif user.role=='teacher' and user.faculty_id:
         from services.materials.ocr_schemas import MANUAL_TYPES
-        statuses = ('verified','rejected','needs_correction') if request.args.get('reviewed') == '1' and category in MANUAL_TYPES | {'student_work'} else ('submitted','under_review')
+        statuses = ('verified','rejected','needs_correction','scored','verified_not_eligible') if request.args.get('reviewed') == '1' and category in MANUAL_TYPES | {'student_work','volunteer'} else ('submitted','under_review')
         query=query.filter_by(faculty_id=user.faculty_id).filter(MaterialRecord.status.in_(statuses))
         from services.materials.ocr_schemas import MANUAL_TYPES
         if category == 'student_work':
@@ -295,7 +297,10 @@ def submit(category,record_id):
     row=record_at(category,record_id)
     user=actor()
     payload=body(); object_keys(payload,{'version'},{'version'})
-    if is_manual(row):
+    if category == 'volunteer':
+        from use_cases.volunteer_materials import submit_volunteer
+        submit_volunteer(user,row,payload['version'])
+    elif is_manual(row):
         submit_manual(user,row,payload['version'])
     else:
         submit_material(user,row,payload['version'])
@@ -347,7 +352,11 @@ def abandon_correction(category, record_id):
     row = record_at(category, record_id)
     user = actor(); payload = body()
     object_keys(payload, {'version'}, {'version'})
-    abandon_returned_competition(user, row, payload['version'])
+    if category == 'competition':
+        abandon_returned_competition(user, row, payload['version'])
+    else:
+        from use_cases.materials import transition_material
+        transition_material(user, row, payload['version'], 'abandon', 'abandoned')
     db.session.commit()
     return jsonify(view(row))
 

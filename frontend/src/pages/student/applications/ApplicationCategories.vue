@@ -57,7 +57,7 @@ const categories = [
   {
     key: 'academic-innovation',
     title: '学术创新',
-    description: '科研与创新成果（非竞赛兼容入口）',
+    description: '提交成果检索证明，查看教师核验结果',
     icon: 'lightbulb',
     color: '#d97706',
     background: '#fff5df'

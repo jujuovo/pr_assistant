@@ -82,6 +82,8 @@ def upload_batch():
     if len(choices) != 1 or choices[0] not in aliases:
         abort(400, description="每批必须只选择一种 material_type：credit 或 honor")
     year = year_value(request.form.get("year"))
+    if year >= 2028:
+        abort(409, description='2028届起请通过志愿服务累计工时材料入口提交，旧费率链路已停用')
     files = request.files.getlist("files")
     if not files or len(files) > current_app.config["AUTOMATION_MAX_FILES"]:
         abort(400, description="图片数量为空或超过批次限制")
@@ -210,6 +212,8 @@ def retry(batch_id):
 @automation_bp.post("/volunteer/batches/<int:batch_id>/submit")
 def submit(batch_id):
     batch = batch_at(batch_id)
+    if batch.year >= 2028:
+        abort(409, description='2028届起请通过志愿服务累计工时材料入口提交')
     user = actor()
     if user.role != "student":
         abort(403)

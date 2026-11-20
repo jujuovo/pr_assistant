@@ -7,10 +7,12 @@ def verify_ocr_originals(row):
     from ocr_models import OCRMaterialLink
     # Editing can invalidate raw OCR but must never disable original integrity checks.
     has_ocr = isinstance(row.ocr_raw_terms,dict) or CompetitionOcrJob.query.filter_by(record_id=row.id).first() is not None or OCRMaterialLink.query.filter_by(material_record_id=row.id).first() is not None
-    if not has_ocr:
+    if not has_ocr and row.category != 'volunteer':
         return
     from services.materials.service import stored_path
     from use_cases.materials import MaterialUseCaseError
+    if row.category == 'volunteer' and not row.attachments:
+        raise MaterialUseCaseError('请提供志愿者管理系统工时报表原件', code='original_required')
     for item in row.attachments:
         try:
             digest, size = sha256(), 0

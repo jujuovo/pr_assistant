@@ -22,6 +22,12 @@ TYPES = {
 }
 
 TYPES.update(NEW_TYPES)
+TYPES['volunteer'] = {
+    'name': '志愿服务工时',
+    'fields': ['regular_hours', 'reduced_hours', 'award_date', 'reference_id'],
+    'required': ['award_date'],
+    'non_ocr': ['每份材料记录本次工时', '大型赛会和支教工时减半', '审核通过后累计；200小时后每满2小时加0.05分，上限1分'],
+}
 TYPES['competition']['fields'].extend([
     'project_name', 'participants', 'advisers', 'school', 'edition', 'track', 'group', 'region', 'stage_as_printed'])
 TYPES['student_work']['fields'].extend(['subject_name', 'start_month_as_printed', 'end_month_as_printed'])
@@ -95,10 +101,16 @@ def normalize(category, data):
     spec = TYPES[category]
     object_keys(data, spec['fields'], spec['required'])
     result = {}
-    for key in set(spec['fields']) - {'courses', 'appointments', 'score', 'full_score'} - ARRAY_FIELDS:
+    for key in set(spec['fields']) - {'courses', 'appointments', 'score', 'full_score', 'regular_hours', 'reduced_hours'} - ARRAY_FIELDS:
         if key in data:
             result[key] = day(data[key], key) if key in ('as_of', 'award_date', 'test_date', 'issue_date', 'honor_date') else text(data[key], key, key in spec['required'], 128 if key == 'reference_id' else 200)
     result.setdefault('reference_id', '')
+    if category == 'volunteer':
+        from services.volunteer_rules import parse_number
+        for key in ('regular_hours', 'reduced_hours'):
+            result[key] = str(parse_number(data.get(key, '0') or '0'))
+        if Decimal(result['regular_hours']) + Decimal(result['reduced_hours']) <= 0:
+            raise ValueError('本次志愿工时必须大于0')
     for optional in ('certificate_no', 'score_scale'):
         if optional in spec['fields']:
             result.setdefault(optional, '')
@@ -147,6 +159,13 @@ def normalize(category, data):
 
 
 def analyze(category, data):
+    if category == 'volunteer':
+        from domain.volunteer_policy import calculate_hours
+        hours = calculate_hours(data['regular_hours'], data['reduced_hours'])
+        return {'ocr_executed': False, 'bonus_calculation': 'after_review_aggregate',
+                'submitted_hours': {'regular_hours': hours['regular_hours'],
+                                    'reduced_hours': hours['reduced_hours'],
+                                    'effective_hours': hours['effective_hours']}}
     result = {'ocr_executed':False, 'bonus_calculation':'not_implemented', 'warnings':[],
               'note':'这里只做数据校验和辅助统计，不认定真实性，不修改学业总评或加分。'}
     if category == 'academic':
@@ -184,6 +203,8 @@ def analyze(category, data):
 
 
 def type_view():
+    from use_cases.cycles import current_cycle_policy
+    policy = current_cycle_policy(required=False)
     from domain.competition_rules import COMPETITION_FACT_FIELDS
     from .ocr_schemas import MANUAL_TYPES
     types = []
@@ -194,6 +215,6 @@ def type_view():
                         required=['competition_id','project_name','award_date','level','award','event_year','participation_mode'],
                         field_schema_url='/api/materials/competition/context')
         types.append({'key':key, **spec, 'recognition_status':'available' if key in OCR_CATEGORIES else 'not_implemented',
-                      'auto_bonus_enabled':key == 'competition', 'manual_only':key in MANUAL_TYPES})
-    return {'types':types, 'course_fields':sorted(COURSE_FIELDS), 'appointment_fields':sorted(APPOINTMENT_FIELDS),
+                      'auto_bonus_enabled':key in {'competition','volunteer'}, 'manual_only':key in MANUAL_TYPES})
+    return {'cycle_code':policy.cycle_code if policy else None, 'types':types, 'course_fields':sorted(COURSE_FIELDS), 'appointment_fields':sorted(APPOINTMENT_FIELDS),
             'note':'识别建议经学生确认保存；正式竞赛教师核验后按固定规则计分，目录外材料仅人工核验。'}

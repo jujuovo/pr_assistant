@@ -9,7 +9,11 @@ import Admin from '@/pages/admin/AdminLayout.vue'
 const routes = [
   {
     path: '/',
-    redirect: '/login'
+    redirect: () => {
+      const auth = useAuthStore()
+      return auth.isAuthenticated && ['student', 'teacher', 'admin'].includes(auth.role)
+        ? `/${auth.role}` : '/login'
+    }
   },
   {
     path: '/login',
@@ -33,7 +37,11 @@ const routes = [
   },
   {
     path: '/:pathMatch(.*)*',
-    redirect: '/login'
+    redirect: () => {
+      const auth = useAuthStore()
+      return auth.isAuthenticated && ['student', 'teacher', 'admin'].includes(auth.role)
+        ? `/${auth.role}` : '/login'
+    }
   }
 ]
 

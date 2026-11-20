@@ -1,6 +1,7 @@
 // 页面标识与角色布局内的 pageComponents 对应，顺序决定侧栏显示顺序。
 export const roleNavigation = {
   teacher: [
+    { key: 'home', icon: 'house', title: '主页' },
     { key: 'profile', icon: 'user', title: '个人信息' },
     {
       id: 'recommendation-review',
@@ -16,6 +17,7 @@ export const roleNavigation = {
     }
   ],
   admin: [
+    { key: 'home', icon: 'house', title: '主页' },
     { key: 'profile', icon: 'user', title: '个人信息' },
     {
       id: 'recommendation-management',

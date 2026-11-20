@@ -10,6 +10,7 @@ export const MATERIAL_CATEGORIES = Object.freeze([
   'social_practice',
   'research',
   'competition_evidence'
+  ,'volunteer'
 ])
 const base = '/api/materials'
 function recordsPath(category) {

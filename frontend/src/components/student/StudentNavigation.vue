@@ -31,7 +31,7 @@
         @error="avatarFailed = true"
       /><span v-else class="identity-fallback" aria-hidden="true">演</span
       ><span class="od-field"
-        ><strong>演示同学</strong><span class="identity-role">学生</span></span
+        ><strong>{{ auth.userName || '同学' }}</strong><span class="identity-role">学生</span></span
       ></button
     ><button class="nav-mobile-toggle" :aria-expanded="mobileOpen" @click="mobileOpen = !mobileOpen"
       >{{ mobileOpen ? '收起导航' : '展开导航' }} · {{ currentLabel }}</button
@@ -39,6 +39,11 @@
       id="student-side-navigation"
       :class="{ 'nav-mobile-open': mobileOpen }"
       aria-label="学生导航"
+      ><button type="button" class="student-direct-item"
+        :class="{ selected: activePage === 'home' }"
+        :aria-current="activePage === 'home' ? 'page' : undefined"
+        @click="go('home')"
+        ><font-awesome-icon :icon="['fas', 'house']" aria-hidden="true" /><span>主页</span></button
       ><button
         class="student-direct-item"
         :class="{ selected: activePage === 'profile' }"
@@ -108,7 +113,7 @@ const groups = [
 ]
 const currentLabel = computed(() =>
   props.activePage === 'home'
-    ? '演示同学'
+    ? '主页'
     : props.activePage === 'profile'
       ? '个人信息'
       : groups.flatMap((g) => g.items).find((i) => i.key === props.activePage)?.title || '学生端'

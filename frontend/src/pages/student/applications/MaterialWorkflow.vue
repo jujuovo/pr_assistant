@@ -8,7 +8,7 @@
     >
     <CompetitionWorkflow v-if="category === 'competition'" />
     <template v-else
-      ><p>按原件手动填写，本通道由教师人工核验，不自动计分。</p>
+      ><p>{{ category === 'volunteer' ? '每份材料提交本次志愿服务工时证明，可多次提交。审核通过后同周期累计；大型赛会及支教工时减半，200小时后每满2小时加0.05分，上限1分。' : '按原件手动填写，本通道由教师人工核验，不自动计分。' }}</p>
       <p v-if="loading" role="status">正在加载草稿…</p
       ><p v-if="error" role="alert">{{ error }} <button @click="loadEdit">重试</button></p>
       <form v-if="editing" @submit.prevent="saveEdit"
@@ -39,7 +39,8 @@ const route = useRoute(),
     'certification',
     'social_practice',
     'research',
-    'student_work'
+    'student_work',
+    'volunteer'
   ]
 if (route.query.editId) categories.push('academic', 'language', 'honor')
 const category = ref(
@@ -52,6 +53,7 @@ const category = ref(
   editing = ref(null),
   editData = ref({})
 const names = {
+  volunteer: '志愿服务累计工时',
   academic: '学业成绩',
   language: '外语能力',
   honor: '荣誉称号',

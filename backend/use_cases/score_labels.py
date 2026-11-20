@@ -46,6 +46,8 @@ def decorate_score_entries(entries, facts, student_id, snapshot_references):
         if record:
             data=record.data or {}
             name=data.get('project_name') or data.get('competition_name') or data.get('honor_name') or data.get('certification_name') or data.get('exam_name') or data.get('team')
+            if record.category == 'volunteer':
+                name=f"志愿服务累计工时（{data.get('award_date', '')}）"
             if name:source['name']=name
         elif source['type'] in {'application','legacy_application','volunteer_automation'}:
             application=applications.get(source_id)

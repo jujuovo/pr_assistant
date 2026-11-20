@@ -123,10 +123,16 @@ export const useAuthStore = defineStore('auth', () => {
   const initialize = async () => {
     const savedUser = localStorage.getItem(storageKey)
     if (savedUser) {
-      const userData = JSON.parse(savedUser)
+      let userData
+      try {
+        userData = JSON.parse(savedUser)
+      } catch {
+        localStorage.removeItem(storageKey)
+        return
+      }
 
       // 验证用户数据是否有效，防止username为"student"等错误值
-      if (userData.username && userData.username !== 'student') {
+      if (userData?.username && ['student', 'teacher', 'admin'].includes(userData.role)) {
         // 先调用sessionCheck API验证后端会话是否有效
         try {
           const sessionResponse = await api.sessionCheck()
