@@ -23,9 +23,23 @@
     <div v-else class="pending-grid"
       ><article v-for="row in displayItems" :key="row.id" class="pending-card"
         ><div
-          ><span class="status-badge">{{ row.status }}</span
+          ><span class="status-badge">{{ scoreStatusText(row.status) }}</span
           ><h3>{{ row.project_name || row.competition_name }}</h3
-          ><p>学生 {{ row.student_id }} · 版本 {{ row.version }}</p></div
+          ><p>学生 {{ row.student_id }} · 版本 {{ row.version }}</p
+          ><p v-if="historyMode && row.review" class="review-outcome"
+            ><strong>{{ reviewDecisionText(row.review.decision) }}</strong
+            ><span
+              >· {{ row.review.actor?.name || '未知审核人' }}（{{
+                row.review.actor?.role === 'admin' ? '管理员' : '教师'
+              }}）</span
+            ><time>· {{ formatScoreTime(row.review.at) }}</time></p
+          ><p v-if="historyMode && row.review?.comment" class="review-opinion"
+            >审核意见：{{ row.review.comment }}</p
+          ><p v-if="historyMode && row.superseded_by_record_id" class="review-opinion"
+            >该记录已被新版本（#{{ row.superseded_by_record_id }}）取代，以新版本结果为准。</p
+          ><p v-if="historyMode && !row.review" class="review-opinion"
+            >未找到审核结论记录，请打开记录查看历史。</p
+          ></div
         ><button class="btn btn-primary" type="button" @click="open(row.id)">{{
           historyMode ? '查看记录' : '核对材料'
         }}</button></article
@@ -142,9 +156,11 @@
       ><h3>历史意见与状态</h3><p v-if="!context.history?.length">暂无历史意见。</p
       ><ol v-else
         ><li v-for="(event, index) in context.history" :key="`${event.created_at}-${index}`"
-          ><strong>{{ event.action }}</strong
-          ><span>{{ event.comment || '无文字意见' }}</span
-          ><time>{{ event.created_at }}</time></li
+          ><strong>{{ materialEventText(event.action) }}</strong
+          ><span
+            >{{ event.actor?.name || '系统'
+            }}<template v-if="event.comment">· {{ event.comment }}</template></span
+          ><time>{{ formatScoreTime(event.created_at) }}</time></li
         ></ol
       ></section
     >
@@ -153,6 +169,12 @@
 <script setup>
 import { computed, nextTick, onMounted, ref } from 'vue'
 import materialApi from '@/services/materialApi.js'
+import {
+  scoreStatusText,
+  formatScoreTime,
+  materialEventText,
+  reviewDecisionText
+} from '@/services/scorePresentation.js'
 import MaterialFacts from '@/components/common/MaterialFacts.vue'
 import OcrAssessment from '@/components/common/OcrAssessment.vue'
 const props = defineProps({ mode: { type: String, default: 'pending' } })
@@ -244,6 +266,18 @@ async function loadSummary() {
 onMounted(load)
 </script>
 <style scoped>
+.review-outcome {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: baseline;
+  font-size: 0.85rem;
+}
+.review-opinion {
+  margin: 0.25rem 0 0;
+  font-size: 0.85rem;
+  opacity: 0.85;
+}
 .ocr-confirmation {
   display: flex;
   align-items: flex-start;

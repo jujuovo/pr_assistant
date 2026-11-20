@@ -254,7 +254,10 @@ def records(category):
         query=query.filter_by(student_id=user.student_id)
     elif user.role=='teacher' and user.faculty_id:
         from services.materials.ocr_schemas import MANUAL_TYPES
-        statuses = ('verified','rejected','needs_correction','scored','verified_not_eligible') if request.args.get('reviewed') == '1' and category in MANUAL_TYPES | {'student_work','volunteer'} else ('submitted','under_review')
+        # 已审核态必须包含竞赛：竞赛材料审核后是 needs_correction/scored，
+        # 旧写法只放行人工材料类别，导致教师永远查不到竞赛审核记录。
+        reviewed_categories = MANUAL_TYPES | {'student_work', 'volunteer', 'competition'}
+        statuses = ('verified','rejected','needs_correction','scored','verified_not_eligible') if request.args.get('reviewed') == '1' and category in reviewed_categories else ('submitted','under_review')
         query=query.filter_by(faculty_id=user.faculty_id).filter(MaterialRecord.status.in_(statuses))
         from services.materials.ocr_schemas import MANUAL_TYPES
         if category == 'student_work':
