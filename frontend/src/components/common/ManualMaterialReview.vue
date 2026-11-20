@@ -2,7 +2,11 @@
   <section class="manual-review"
     ><header
       ><h2>{{ history ? '其他材料核验记录' : '其他材料人工核验' }}</h2
-      ><p>{{ category === 'volunteer' ? '请核对本次工时证明、审核通过日期、服务对象认可，以及大型赛会和支教工时分类。通过后计入该学生本周期累计工时，并按学院办法计分。' : '原件、OCR识别和学生申报值分别展示；本通道核验不生成加分。' }}</p></header
+      ><p>{{
+        category === 'volunteer'
+          ? '请核对本次工时证明、服务记录日期、服务对象认可，以及大型赛会和支教工时分类。通过后计入该学生本周期累计工时，并按学院办法计分。'
+          : '原件、OCR识别和学生申报值分别展示；本通道核验不生成加分。'
+      }}</p></header
     >
     <label
       >材料类别<select v-model="category" @change="load"
@@ -14,19 +18,27 @@
     ><p v-if="!loading && !rows.length">当前类别暂无{{ history ? '核验记录' : '待核验材料' }}。</p>
     <article v-for="row in rows" :key="row.id"
       ><h3>学生 {{ row.student_id }} · 材料 #{{ row.id }}</h3
-      ><h4>学生申报值</h4><MaterialFacts :data="row.data" />
-      <p v-if="row.analysis?.submitted_hours">本次有效工时：{{ row.analysis.submitted_hours.effective_hours }} 小时；审核通过后计入累计。</p>
-      <details
+      ><VolunteerOcrAssessment
+        :assessment="row.volunteer_ocr"
+        :appeal="row.appeal"
+        :priority="row.priority_review"
+        :reports="row.ocr_raw_terms?.reports || []"
+      />
+      <h4>学生申报值</h4
+      ><MaterialFacts
+        :data="row.data"
+        :labels="row.category === 'volunteer' ? { award_date: '服务记录日期' } : {}"
+      />
+      <p v-if="row.analysis?.submitted_hours"
+        >本次有效工时：{{
+          row.analysis.submitted_hours.effective_hours
+        }}
+        小时；审核通过后计入累计。</p
+      >
+      <details v-if="row.category !== 'volunteer'"
         ><summary>核对原始识别</summary><MaterialFacts :data="row.ocr_raw_terms?.fields || {}"
       /></details>
-      <div v-for="file in row.attachments" :key="file.id"
-        ><a :href="file.url" target="_blank" rel="noopener">查看原件：{{ file.filename }}</a
-        ><img
-          v-if="/\.(png|jpe?g|webp)$/i.test(file.filename)"
-          :src="file.url + '?inline=1'"
-          :alt="file.filename + '原件'"
-          class="original-image"
-      /></div>
+      <MaterialImagePreview :attachments="row.attachments || []" />
       <template v-if="!history && row.status === 'submitted'"
         ><label :for="'comment-' + row.id"
           >核验意见（通过时选填；退回或不通过时必填）<textarea
@@ -58,6 +70,8 @@
 import { ref, onMounted } from 'vue'
 import materialApi from '@/services/materialApi.js'
 import MaterialFacts from './MaterialFacts.vue'
+import MaterialImagePreview from './MaterialImagePreview.vue'
+import VolunteerOcrAssessment from './VolunteerOcrAssessment.vue'
 const props = defineProps({ history: { type: Boolean, default: false } })
 const kinds = [
   ['volunteer', '志愿服务累计工时'],
@@ -87,13 +101,21 @@ async function load() {
     const result = await materialApi.listRecords(category.value, {
       reviewed: props.history ? '1' : '0'
     })
-    rows.value = result.records.filter(
-      (row) =>
-        (row.manual_only || row.category === 'volunteer') &&
-        (props.history
-          ? ['verified', 'rejected', 'needs_correction', 'scored', 'verified_not_eligible'].includes(row.status)
-          : row.status === 'submitted')
-    )
+    rows.value = result.records
+      .sort((a, b) => Number(!!b.priority_review) - Number(!!a.priority_review))
+      .filter(
+        (row) =>
+          (row.manual_only || row.category === 'volunteer') &&
+          (props.history
+            ? [
+                'verified',
+                'rejected',
+                'needs_correction',
+                'scored',
+                'verified_not_eligible'
+              ].includes(row.status)
+            : row.status === 'submitted')
+      )
   } catch (e) {
     error.value = e.message
   } finally {

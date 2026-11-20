@@ -81,6 +81,8 @@ def _existing_original(row, job):
 def confirm(job_id, payload):
     user = actor()
     job = authorized_job(job_id)
+    if job.category == "volunteer":
+        abort(409, description="志愿服务识别仅用于字段比对，请从我的材料提交或申诉")
     if user.role != "student" or job.user_id != user.id or job.faculty_id != user.faculty_id:
         abort(403, description="仅原上传学生可确认识别结果")
     job = OCRJob.query.filter_by(id=job.id).with_for_update().populate_existing().one()

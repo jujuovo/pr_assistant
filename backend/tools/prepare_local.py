@@ -93,7 +93,9 @@ def main(database_file=None, competition_package_file=None):
     # 附带历史 SQLite 只缺少这些兼容字段；不猜测未知数据库的迁移。
     additions = {'system_settings': {'avatar_file_size_limit':'INTEGER DEFAULT 2'},
                  'rule': {'faculty_id':'INTEGER REFERENCES faculty(id)', 'calculation_formula':'JSON'},
-                 'application': {'dynamic_coefficients':'JSON'}}
+                 'application': {'dynamic_coefficients':'JSON'},
+                 'ocr_job': {'material_record_id':'INTEGER REFERENCES material_record(id)',
+                             'material_version':'INTEGER', 'attachment_id':'INTEGER REFERENCES material_attachment(id)'}}
     try:
         with app.app_context():
             with db.engine.begin() as connection:
@@ -106,6 +108,9 @@ def main(database_file=None, competition_package_file=None):
                         if name not in existing:
                             connection.execute(text(f'ALTER TABLE "{table}" ADD COLUMN "{name}" {declaration}'))
             db.create_all()
+            from ocr_models import OCRJob
+            for index in OCRJob.__table__.indexes:
+                index.create(db.engine, checkfirst=True)
             inspector = inspect(db.engine)
             missing = {t.name:[c.name for c in t.columns if c.name not in {v['name'] for v in inspector.get_columns(t.name)}]
                        for t in db.metadata.sorted_tables}

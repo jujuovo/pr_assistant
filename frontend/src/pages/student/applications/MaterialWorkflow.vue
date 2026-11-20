@@ -1,19 +1,22 @@
 <template>
   <section class="page-content material-submission"
-    ><h1>提交证明材料</h1>
-    <label
-      >材料类别<select v-model="category" @change="changeCategory"
-        ><option v-for="x in categories" :key="x" :value="x">{{ names[x] }}</option></select
-      ></label
-    >
+    ><h1>提交{{ names[category] || '证明材料' }}</h1>
     <CompetitionWorkflow v-if="category === 'competition'" />
     <template v-else
-      ><p>{{ category === 'volunteer' ? '每份材料提交本次志愿服务工时证明，可多次提交。审核通过后同周期累计；大型赛会及支教工时减半，200小时后每满2小时加0.05分，上限1分。' : '按原件手动填写，本通道由教师人工核验，不自动计分。' }}</p>
+      ><p>{{
+        category === 'volunteer'
+          ? '上传本次工时证明后，系统在后台比对工时、工时类别和服务记录日期。信用、荣誉截图均按普通志愿服务，分别采用签退日期、录入日期。一致后可正式提交教师审核；不一致或无法识别会打回，支持申诉转人工审核。'
+          : '按原件手动填写，本通道由教师人工核验，不自动计分。'
+      }}</p>
       <p v-if="loading" role="status">正在加载草稿…</p
       ><p v-if="error" role="alert">{{ error }} <button @click="loadEdit">重试</button></p>
       <form v-if="editing" @submit.prevent="saveEdit"
         ><h2>修改材料 #{{ editing.id }}</h2
-        ><MaterialFieldsEditor v-model="editData" /><p>原件已保留，无须重复上传。</p
+        ><MaterialFieldsEditor
+          v-model="editData"
+          :labels="category === 'volunteer' ? { award_date: '服务记录日期' } : {}"
+        /><MaterialImagePreview :attachments="editing.attachments || []" /><p
+          >原件已保留，无须重复上传。</p
         ><button class="btn btn-primary" :disabled="busy">{{
           busy ? '保存中…' : '保存修改'
         }}</button></form
@@ -25,12 +28,13 @@
   >
 </template>
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import materialApi from '@/services/materialApi.js'
 import CompetitionWorkflow from './CompetitionWorkflow.vue'
 import ManualMaterialDraft from '@/components/student/ManualMaterialDraft.vue'
 import MaterialFieldsEditor from '@/components/common/MaterialFieldsEditor.vue'
+import MaterialImagePreview from '@/components/common/MaterialImagePreview.vue'
 const route = useRoute(),
   router = useRouter(),
   categories = [
@@ -64,9 +68,6 @@ const names = {
   research: '成果检索报告',
   competition_evidence: '目录外竞赛材料'
 }
-function changeCategory() {
-  router.replace({ query: { page: 'materials', category: category.value } })
-}
 function history() {
   router.replace({ query: { page: 'application-record' } })
 }
@@ -90,12 +91,14 @@ async function saveEdit() {
   if (busy.value) return
   busy.value = true
   try {
-    await materialApi.updateRecord(
+    const updated = await materialApi.updateRecord(
       category.value,
       editing.value.id,
       editing.value.version,
       editData.value
     )
+    if (category.value === 'volunteer')
+      await materialApi.startVolunteerOcr(updated.id, updated.version)
     history()
   } catch (e) {
     error.value = e.message
@@ -104,8 +107,20 @@ async function saveEdit() {
   }
 }
 function saved() {
-  notice.value = '草稿和原件已保存。可继续填写下一项，或前往我的材料正式提交。'
+  notice.value =
+    '草稿和原件已保存。已适配材料会在后台识别，可继续填写下一项，或前往我的材料查看进度。'
 }
+watch(
+  () => route.query.category,
+  async (value) => {
+    category.value = categories.includes(value) ? value : 'competition'
+    editing.value = null
+    editData.value = {}
+    error.value = ''
+    notice.value = ''
+    await loadEdit()
+  }
+)
 onMounted(loadEdit)
 </script>
 <style scoped>

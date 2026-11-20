@@ -185,6 +185,7 @@ def create_manual_with_files(category,user):
     files=prepare_uploads(request.files.getlist('files'),current_app.config.get('MATERIAL_MAX_FILE_BYTES',10*1024*1024))
     created=[]
     job=None
+    volunteer_dirs=[]
     try:
         row=create_material(user,category,{'year':integer(int(request.form['year']),'year',2000,2100),
                                          'data':payload,**({'manual_only':True} if category not in {'competition','volunteer'} else {})})
@@ -192,11 +193,17 @@ def create_manual_with_files(category,user):
         if category=='competition':
             from services.competition_ocr.bridge import enqueue_created_material
             job=enqueue_created_material(user,row)
+        elif category=='volunteer':
+            from services.volunteer_ocr import queue
+            queue(row,user,volunteer_dirs)
         db.session.commit()
     except Exception:
         db.session.rollback()
         for path in created:
             path.unlink(missing_ok=True)
+        for folder in volunteer_dirs:
+            import shutil
+            shutil.rmtree(folder,ignore_errors=True)
         if job is not None:
             import shutil
             from services.competition_ocr.jobs import job_root
@@ -304,6 +311,37 @@ def submit(category,record_id):
         submit_manual(user,row,payload['version'])
     else:
         submit_material(user,row,payload['version'])
+    db.session.commit()
+    return jsonify(view(row))
+
+
+@material_bp.post('/volunteer/records/<int:record_id>/ocr')
+def volunteer_ocr_start(record_id):
+    from services.volunteer_ocr import queue
+    from use_cases.materials import _authorize_transition, _cas_change
+    row=record_at('volunteer',record_id)
+    user=actor(); payload=body()
+    object_keys(payload,{'version'},{'version'})
+    _authorize_transition(user,row,'edit','draft')
+    folders=[]
+    try:
+        _cas_change(row,payload['version'],('draft','needs_correction'),{'status':'draft'})
+        queue(row,user,folders)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        import shutil
+        for folder in folders: shutil.rmtree(folder,ignore_errors=True)
+        raise
+    return jsonify(view(row)),202
+
+
+@material_bp.post('/volunteer/records/<int:record_id>/appeal')
+def volunteer_appeal(record_id):
+    from use_cases.volunteer_materials import appeal_volunteer
+    row=record_at('volunteer',record_id)
+    payload=body(); object_keys(payload,{'version','reason'},{'version','reason'})
+    appeal_volunteer(actor(),row,payload['version'],payload['reason'])
     db.session.commit()
     return jsonify(view(row))
 

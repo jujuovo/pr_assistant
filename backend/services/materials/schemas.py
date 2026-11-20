@@ -24,6 +24,7 @@ TYPES = {
 TYPES.update(NEW_TYPES)
 TYPES['volunteer'] = {
     'name': '志愿服务工时',
+    'field_labels': {'award_date': '服务记录日期'},
     'fields': ['regular_hours', 'reduced_hours', 'award_date', 'reference_id'],
     'required': ['award_date'],
     'non_ocr': ['每份材料记录本次工时', '大型赛会和支教工时减半', '审核通过后累计；200小时后每满2小时加0.05分，上限1分'],
@@ -31,7 +32,7 @@ TYPES['volunteer'] = {
 TYPES['competition']['fields'].extend([
     'project_name', 'participants', 'advisers', 'school', 'edition', 'track', 'group', 'region', 'stage_as_printed'])
 TYPES['student_work']['fields'].extend(['subject_name', 'start_month_as_printed', 'end_month_as_printed'])
-OCR_CATEGORIES = {'competition', 'student_work', *NEW_TYPES}
+OCR_CATEGORIES = {'competition', 'student_work', 'volunteer', *NEW_TYPES}
 
 COURSE_FIELDS = {'course_code', 'course_name', 'credits', 'score', 'full_score', 'included'}
 APPOINTMENT_FIELDS = {'organization', 'position', 'position_level', 'start_date', 'end_date', 'assessment_result'}
