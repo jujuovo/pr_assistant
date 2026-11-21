@@ -1,7 +1,7 @@
 <template>
   <section class="home-page student-home-reference">
     <WelcomeHeader :name="auth.userName" subtitle="STUDENT DASHBOARD" />
-    <p v-if="store.loading" role="status">正在获取材料进度…</p>
+    <p v-if="store.loading || materialLoading" role="status">正在获取材料进度…</p>
     <div v-else-if="store.error" class="home-error">
       {{ store.error }}
       <button class="home-link" @click="store.fetchApplications()">重新加载</button>
@@ -14,7 +14,7 @@
       <template #description>
         <p v-if="correctionCount">
           <strong class="action-count od-nowrap">{{ correctionCount }} 份待修改</strong>
-          · 包含竞赛新链路与非竞赛兼容申请，请查看审核意见
+          · 包含竞赛新材料、非竞赛新材料与兼容申请，请查看审核意见
         </p>
         <p v-else>可以查看审核进度，或继续准备新的加分申请。</p>
       </template>
@@ -33,15 +33,15 @@
     </WorkbenchAction>
     <section class="home-panel home-material-panel" aria-label="加分材料进度">
       <div class="workbench-section-head od-row"
-        ><h2 class="od-fill">非竞赛兼容材料审核进度</h2
+        ><h2 class="od-fill">非竞赛材料审核进度</h2
         ><button class="home-link" @click="$emit('navigate', 'application-record')"
           >查看申请记录</button
         ></div
       >
-      <p v-if="store.loading" role="status">正在加载…</p
+      <p v-if="store.loading || materialLoading" role="status">正在加载…</p
       ><p v-else-if="store.error">进度暂不可用，请在上方重新加载。</p>
       <template v-else
-        ><p class="workbench-total">已提交 {{ submitted.length }} 份加分材料</p
+        ><p class="workbench-total">已提交 {{ combinedSubmittedCount }} 份加分材料</p
         ><div class="home-statuses"
           ><div
             v-for="status in statuses"
@@ -49,11 +49,15 @@
             class="od-stat"
             :class="'status-' + status.key"
             ><strong class="workbench-number od-nowrap"
-              >{{ count(status.key) }}<small>份</small></strong
+              >{{ combinedCount(status.key) }}<small>份</small></strong
             ><span class="status-caption"><i aria-hidden="true"></i>{{ status.label }}</span></div
           ></div
-        ><p v-if="!submitted.length" class="home-note"
-          >还没有提交材料，可前往“我的表单”创建申请。</p
+        ><p v-if="materialError" class="home-note" role="alert"
+          >{{ materialError }}
+          <button class="home-link" @click="loadMaterialSummary">重试</button></p
+        ><p v-else class="home-note">包含旧兼容申请与新材料记录。</p
+        ><p v-if="!combinedSubmittedCount" class="home-note"
+          >还没有提交非竞赛材料，可前往“提交材料”创建。</p
         ></template
       >
     </section>
@@ -107,13 +111,27 @@ const isDemo = import.meta.env.MODE === 'demo'
 const competitionSummary = ref({}),
   competitionLoading = ref(true),
   competitionError = ref('')
+const materialSummary = ref({}),
+  materialLoading = ref(true),
+  materialError = ref('')
+const materialNeedsAttention = computed(
+  () =>
+    Number(materialSummary.value.needs_correction_count || 0) +
+    Number(materialSummary.value.rejected_count || 0)
+)
 const correctionCount = computed(
-  () => count('rejected') + Number(competitionSummary.value.needs_correction_count || 0)
+  () =>
+    count('rejected') +
+    Number(competitionSummary.value.needs_correction_count || 0) +
+    materialNeedsAttention.value
 )
 function navigateCorrection() {
+  const competitionNeedsCorrection = Number(
+    competitionSummary.value.needs_correction_count || 0
+  )
   emit(
     'navigate',
-    Number(competitionSummary.value.needs_correction_count || 0) ? 'materials' : 'submit-revision'
+    competitionNeedsCorrection || materialNeedsAttention.value ? 'materials' : 'submit-revision'
   )
 }
 const submitted = computed(() =>
@@ -132,8 +150,33 @@ const statuses = [
   { key: 'rejected', label: '待修改' }
 ]
 const count = (s) => submitted.value.filter((a) => a.status === s).length
+const combinedSubmittedCount = computed(
+  () => submitted.value.length + Number(materialSummary.value.submitted_count || 0)
+)
+const combinedCount = (status) => {
+  const base = count(status)
+  if (status === 'approved') return base + Number(materialSummary.value.approved_count || 0)
+  if (status === 'pending') return base + Number(materialSummary.value.pending_count || 0)
+  return (
+    base +
+    Number(materialSummary.value.needs_correction_count || 0) +
+    Number(materialSummary.value.rejected_count || 0)
+  )
+}
+async function loadMaterialSummary() {
+  materialLoading.value = true
+  materialError.value = ''
+  try {
+    materialSummary.value = await materialApi.getStudentMaterialSummary()
+  } catch (error) {
+    materialError.value = error.message || '非竞赛新材料统计暂不可用'
+  } finally {
+    materialLoading.value = false
+  }
+}
 onMounted(async () => {
   store.fetchApplications()
+  loadMaterialSummary()
   try {
     competitionSummary.value = await materialApi.getCompetitionWorkbenchSummary()
   } catch (error) {

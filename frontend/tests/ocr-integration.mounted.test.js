@@ -139,6 +139,7 @@ test('manual return requires an opinion and failed approval preserves its contex
     records: [
       {
         id: 7,
+        category: 'social_practice',
         student_id: 'S1',
         status: 'submitted', allowed_actions: ['review'],
         version: 2,
@@ -151,6 +152,8 @@ test('manual return requires an opinion and failed approval preserves its contex
   })
   mocks.material.review.mockRejectedValue(Object.assign(new Error('版本已变化'), { status: 409 }))
   const wrapper = mount(ManualReview)
+  await flushPromises()
+  await wrapper.get('select').setValue('social_practice')
   await flushPromises()
   await wrapper
     .findAll('button')
@@ -209,6 +212,7 @@ test('manual verification can approve without comment but still requires return 
     records: [
       {
         id: 31,
+        category: 'social_practice',
         version: 2,
         status: 'submitted', allowed_actions: ['review'],
         student_id: 'S1',
@@ -220,6 +224,8 @@ test('manual verification can approve without comment but still requires return 
   })
   mocks.material.review.mockResolvedValue({})
   const w = mount(ManualReview)
+  await flushPromises()
+  await w.get('select').setValue('social_practice')
   await flushPromises()
   await w
     .findAll('button')

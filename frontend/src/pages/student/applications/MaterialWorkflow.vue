@@ -17,7 +17,14 @@
         <MaterialFieldsEditor
           v-else
           v-model="editData"
-          :labels="category === 'volunteer' ? { award_date: '服务记录日期' } : {}"
+          :labels="
+            category === 'volunteer'
+              ? { award_date: '服务记录日期' }
+              : category === 'arts_sports'
+                ? { award_date: '获得时间' }
+                : {}
+          "
+          :document-types="typeSpec?.document_types || []"
         /><MaterialImagePreview :attachments="editing.attachments || []" /><p v-if="editing.attachments?.length">原件已保留。</p><label v-else>请上传本版本的证明原件<input type="file" multiple required @change="files = Array.from($event.target.files)" /></label
         ><button class="btn btn-primary" :disabled="busy">{{
           busy ? '保存中…' : '保存修改'
@@ -49,6 +56,7 @@ const route = useRoute(),
     'social_practice',
     'research',
     'student_work',
+    'arts_sports',
     'volunteer'
   ]
 if (route.query.editId) categories.push('academic', 'language', 'honor')
@@ -60,7 +68,8 @@ const category = ref(
   loading = ref(false),
   busy = ref(false),
   editing = ref(null),
-  editData = ref({})
+  editData = ref({}),
+  typeSpec = ref(null)
 const names = {
   research_paper: '学术论文', invention_patent: '授权发明专利', innovation_training: '创业创新',
   volunteer: '志愿服务累计工时',
@@ -72,21 +81,27 @@ const names = {
   certification: '能力认证',
   social_practice: '社会实践',
   research: '成果检索报告',
+  arts_sports: '文体活动',
   competition_evidence: '目录外竞赛材料'
 }
 function history() {
   router.replace({ query: { page: 'application-record' } })
 }
 async function loadEdit() {
+  typeSpec.value = null
   if (category.value === 'competition' || !route.query.editId) return
   loading.value = true
   error.value = ''
   try {
-    const row = await materialApi.getRecord(category.value, route.query.editId)
+    const [row, context] = await Promise.all([
+      materialApi.getRecord(category.value, route.query.editId),
+      materialApi.getTypes()
+    ])
     if (!row.allowed_actions?.includes('edit'))
       throw new Error('此材料当前不可编辑，请返回我的材料查看最新状态。')
     editing.value = row
     editData.value = JSON.parse(JSON.stringify(row.data))
+    typeSpec.value = (context.types || []).find((item) => item.key === category.value) || null
   } catch (e) {
     error.value = e.message
   } finally {
@@ -124,6 +139,7 @@ watch(
     category.value = categories.includes(value) ? value : 'competition'
     editing.value = null
     editData.value = {}
+    typeSpec.value = null
     error.value = ''
     notice.value = ''
     await loadEdit()

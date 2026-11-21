@@ -172,6 +172,64 @@ def competition_workbench_summary(user):
     }
 
 
+def student_noncompetition_summary(user):
+    """Count the student's own new material records; legacy linked applications stay in the legacy panel."""
+    if user.role != "student" or not user.student_id:
+        raise MaterialUseCaseError("仅学生本人可读取非竞赛材料统计", code="forbidden", status_code=403)
+    counts = dict(
+        db.session.query(MaterialRecord.status, func.count(MaterialRecord.id))
+        .filter(
+            MaterialRecord.student_id == user.student_id,
+            MaterialRecord.category != "competition",
+            MaterialRecord.application_id.is_(None),
+            MaterialRecord.status != "abandoned",
+        )
+        .group_by(MaterialRecord.status)
+        .all()
+    )
+    approved = sum(counts.get(status, 0) for status in ("verified", "scored", "verified_not_eligible"))
+    pending = counts.get("submitted", 0) + counts.get("under_review", 0)
+    needs_correction = counts.get("needs_correction", 0)
+    rejected = counts.get("rejected", 0)
+    return {
+        "status_counts": counts,
+        "pending_count": pending,
+        "approved_count": approved,
+        "needs_correction_count": needs_correction,
+        "rejected_count": rejected,
+        "submitted_count": pending + approved + needs_correction + rejected,
+    }
+
+
+def teacher_noncompetition_summary(user):
+    """Count reviewable non-competition materials in the teacher's own faculty."""
+    if user.role not in {"teacher", "admin"} or not user.faculty_id:
+        raise MaterialUseCaseError("仅本学院教师可读取非竞赛待审统计", code="forbidden", status_code=403)
+    from services.materials.ocr_schemas import MANUAL_TYPES
+    categories = tuple(MANUAL_TYPES | {"volunteer", "student_work"})
+    counts = dict(
+        db.session.query(MaterialRecord.status, func.count(MaterialRecord.id))
+        .filter(
+            MaterialRecord.faculty_id == user.faculty_id,
+            MaterialRecord.category.in_(categories),
+            MaterialRecord.application_id.is_(None),
+            MaterialRecord.status != "abandoned",
+        )
+        .group_by(MaterialRecord.status)
+        .all()
+    )
+    pending = counts.get("submitted", 0) + counts.get("under_review", 0)
+    return {
+        "status_counts": counts,
+        "pending_count": pending,
+        "needs_correction_count": counts.get("needs_correction", 0),
+        "completed_count": sum(
+            counts.get(status, 0)
+            for status in ("verified", "scored", "verified_not_eligible")
+        ),
+    }
+
+
 def competition_workflow_context(user, *, expected_digest=None):
     """Return the sole backend-authoritative context for competition UI flows."""
     actions = COMPETITION_CONTEXT_ACTIONS.get(getattr(user, "role", None))

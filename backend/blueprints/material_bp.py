@@ -29,6 +29,8 @@ from use_cases.materials import (
     edit_material,
     review_material,
     reconfirm_competition_rule,
+    student_noncompetition_summary,
+    teacher_noncompetition_summary,
     submit_material,
     validate_competition_review_command,
     withdraw_material,
@@ -127,6 +129,16 @@ def estimate_competition_route():
 @material_bp.get('/competition/workbench-summary')
 def competition_workbench():
     return jsonify(competition_workbench_summary(actor()))
+
+
+@material_bp.get('/student/summary')
+def student_summary():
+    return jsonify(student_noncompetition_summary(actor()))
+
+
+@material_bp.get('/teacher/summary')
+def teacher_summary():
+    return jsonify(teacher_noncompetition_summary(actor()))
 
 
 @material_bp.get('/competition/catalog')

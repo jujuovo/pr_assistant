@@ -58,7 +58,11 @@
           ><MaterialFacts
             :data="row.data"
             :labels="
-              row.category === 'volunteer' ? { award_date: '服务记录日期' } : {}
+              row.category === 'volunteer'
+                ? { award_date: '服务记录日期' }
+                : row.category === 'arts_sports'
+                  ? { award_date: '获得时间' }
+                  : {}
             " /><MaterialImagePreview :attachments="row.attachments || []" /><h3
             v-if="row.ocr_raw_terms"
             >OCR识别结果</h3
@@ -202,6 +206,7 @@ const categoryNames = {
   honor: '荣誉称号',
   social_practice: '社会实践',
   research: '研究成果',
+  arts_sports: '文体活动',
   competition_evidence: '其他竞赛'
 }
 const states = {

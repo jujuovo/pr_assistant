@@ -7,8 +7,8 @@
         :value="modelValue[field]"
         @change="change(field, $event.target.value)"
         ><option value="">请选择</option
-        ><option v-for="item in kinds" :key="item" :value="item">{{
-          displayValue(item)
+        ><option v-for="item in documentOptions" :key="item.value" :value="item.value">{{
+          item.label
         }}</option></select
       >
       <textarea
@@ -52,8 +52,9 @@ const suggestions = { database: ['SCI-E', 'EI Compendex', 'Scopus', 'CNKI'], req
 const props = defineProps({
   modelValue: { type: Object, default: () => ({}) },
   fields: { type: Array, default: () => [] },
-  required: { type: Array, default: () => [] }
-  ,labels: { type: Object, default: () => ({}) }
+  required: { type: Array, default: () => [] },
+  labels: { type: Object, default: () => ({}) },
+  documentTypes: { type: Array, default: () => [] }
 })
 const emit = defineEmits(['update:modelValue'])
 const roleFields = [
@@ -71,6 +72,13 @@ const kinds = [
   'research_report',
   'csp_transcript'
 ]
+const documentOptions = computed(() =>
+  (props.documentTypes.length ? props.documentTypes : kinds).map((item) =>
+    typeof item === 'string'
+      ? { value: item, label: displayValue(item) }
+      : { value: item.value, label: item.label || displayValue(item.value) }
+  )
+)
 const visible = computed(() =>
   [...new Set([...props.fields, ...Object.keys(props.modelValue)])].filter(
     (k) => k !== 'appointments' && k !== 'evidence' && !INTERNAL_FIELDS.has(k)
