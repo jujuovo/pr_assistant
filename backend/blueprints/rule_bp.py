@@ -22,14 +22,14 @@ from use_cases.rule_versions import publish_rule_version
 from services.automation import actor
 from use_cases.structured_rules import (
     StructuredRuleError, create_rule_draft, disable_rule,
-    list_uncovered_terms, preview_rule, publish_draft, serialize_rule,
+    optional_total_score_cap, list_uncovered_terms, preview_rule, publish_draft, serialize_rule,
 )
 from domain.competition_rules import CompetitionPackageError
 from use_cases.competition_rules import (
     copy_competition_package_draft, edit_competition_package_draft,
     preview_competition_package_diff, publish_competition_package_draft,
 )
-from workflow_models import CompetitionRulePackage
+from workflow_models import CompetitionRulePackage, FacultyScoringPolicy
 import sys
 
 # 设置默认编码为UTF-8
@@ -245,6 +245,7 @@ def get_rules():
             "research_type": rule.research_type,
             "score": rule.score,
             "max_score": rule.max_score,
+            "total_score_cap": rule.total_score_cap,
             "max_count": rule.max_count,
             "status": rule.status,
             "description": rule.description,
@@ -291,6 +292,7 @@ def get_rule(rule_id):
             "research_type": rule.research_type,
             "score": rule.score,
             "max_score": rule.max_score,
+            "total_score_cap": rule.total_score_cap,
             "max_count": rule.max_count,
             "status": rule.status,
             "description": rule.description,
@@ -313,6 +315,10 @@ def get_rule(rule_id):
 def create_rule():
     try:
         data = request.get_json()
+        try:
+            cap = optional_total_score_cap(data.get("total_score_cap"))
+        except StructuredRuleError as error:
+            return jsonify({"error": str(error)}), 400
         if _formal_competition_rule_protected(payload=data):
             return _legacy_competition_rejected()
         print(f"Received data for creating rule: {data}")
@@ -341,6 +347,7 @@ def create_rule():
             research_type=data.get("research_type"),
             score=data["score"],
             max_score=data.get("max_score"),
+            total_score_cap=cap,
             max_count=data.get("max_count"),
             status=data.get("status", "active"),
             description=data.get("description"),
@@ -395,6 +402,7 @@ def create_rule():
                     "research_type": new_rule.research_type,
                     "score": new_rule.score,
                     "max_score": new_rule.max_score,
+                    "total_score_cap": new_rule.total_score_cap,
                     "max_count": new_rule.max_count,
                     "status": new_rule.status,
                     "description": new_rule.description,
@@ -424,6 +432,10 @@ def update_rule(rule_id):
     try:
         rule = Rule.query.get_or_404(rule_id)
         data = request.get_json()
+        try:
+            cap = optional_total_score_cap(data.get("total_score_cap"))
+        except StructuredRuleError as error:
+            return jsonify({"error": str(error)}), 400
         if _formal_competition_rule_protected(rule=rule, payload=data):
             return _legacy_competition_rejected()
 
@@ -440,6 +452,8 @@ def update_rule(rule_id):
             rule.score = data["score"]
         if "max_score" in data:
             rule.max_score = data["max_score"]
+        if "total_score_cap" in data:
+            rule.total_score_cap = cap
         if "max_count" in data:
             rule.max_count = data["max_count"]
 
@@ -511,6 +525,7 @@ def update_rule(rule_id):
                     "research_type": rule.research_type,
                     "score": rule.score,
                     "max_score": rule.max_score,
+                    "total_score_cap": rule.total_score_cap,
                     "max_count": rule.max_count,
                     "status": rule.status,
                     "description": rule.description,
@@ -828,3 +843,43 @@ def toggle_rule_status(rule_id):
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": str(e)}), 400
+
+
+@rule_bp.route("/faculty-scoring-policies", methods=["GET", "POST"])
+@rule_bp.route("/faculty-scoring-policies/<int:policy_id>", methods=["PUT", "DELETE"])
+def faculty_scoring_policies(policy_id=None):
+    from use_cases.faculty_policies import delete_policy, policies, save_draft, serialize
+    user = actor()
+    try:
+        if request.method == "GET":
+            rows = policies(user).filter(FacultyScoringPolicy.status != "deleted").order_by(FacultyScoringPolicy.updated_at.desc(),
+                                           FacultyScoringPolicy.id.desc()).all()
+            return jsonify(items=[serialize(row) for row in rows])
+        if request.method == "DELETE":
+            delete_policy(user, policy_id)
+            return jsonify(success=True)
+        return jsonify(save_draft(user, request.get_json(), policy_id)), 201 if policy_id is None else 200
+    except StructuredRuleError as error:
+        db.session.rollback()
+        return jsonify(error=str(error)), error.status_code
+
+
+@rule_bp.get("/faculty-scoring-policies/<int:policy_id>/publication-preview")
+def preview_faculty_policy_publication(policy_id):
+    from use_cases.faculty_policy_publication import preview_supported_publication
+    try:
+        return jsonify(preview_supported_publication(actor(), policy_id))
+    except StructuredRuleError as error:
+        return jsonify(error=str(error)), error.status_code
+
+
+
+@rule_bp.post("/faculty-scoring-policies/<int:policy_id>/publish")
+def publish_faculty_scoring_policy(policy_id):
+    from use_cases.faculty_policies import serialize
+    from use_cases.faculty_policy_publication import publish_supported_policy
+    try:
+        return jsonify(serialize(publish_supported_policy(actor(), policy_id, request.get_json())))
+    except StructuredRuleError as error:
+        db.session.rollback()
+        return jsonify(error=str(error)), error.status_code

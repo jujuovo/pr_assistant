@@ -47,11 +47,15 @@
         <details class="score-policy"
           ><summary
             ><span>计分依据</span
-            ><span class="score-policy-name">{{ scoreRuleVersions(score) }}</span
+            ><span class="score-policy-name">{{ score.faculty_scoring_policy?.title ?? scoreRuleVersions(score) }}</span
             ><span class="score-policy-toggle"
               >查看公式 <span aria-hidden="true">⌄</span></span
             ></summary
-          ><p>计算公式：{{ scoreFormulaText(score.formula) }}</p></details
+          ><p v-if="score.faculty_scoring_policy">
+            学院推免总规则 · {{ score.faculty_scoring_policy.title }} · 版本编号 {{ score.faculty_scoring_policy.id }}
+          </p>
+          <p>专项规则 · {{ scoreRuleVersions(score) }}</p>
+          <p>计算公式：{{ scoreFormulaText(score.formula) }}</p></details
         >
       </template>
       <section class="score-details-panel">

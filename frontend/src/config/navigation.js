@@ -24,7 +24,6 @@ export const roleNavigation = {
       icon: 'folder-open',
       title: '推免管理',
       items: [
-        { key: 'competition-rule-packages', icon: 'boxes-stacked', title: '竞赛规则包' },
         { key: 'rule-management', icon: 'scale-balanced', title: '推免规则' },
         { key: 'graduate-file-management', icon: 'file-lines', title: '推免文件' }
       ]

@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+from dataclasses import replace
 from datetime import datetime
 
 from sqlalchemy import or_
@@ -175,11 +176,7 @@ def _active_entries(student_id, year):
     )
 
 
-def rebuild_student_snapshot(student_id, year):
-    student = Student.query.filter_by(student_id=student_id).with_for_update().first()
-    if not student:
-        raise ScoringUseCaseError("student not found")
-    entries = _active_entries(student_id, year)
+def _allocate_active_entries(entries):
     legacy_rule_ids = {entry.rule_version_id for entry in entries if entry.rule_version_id is not None}
     versions = {
         version.id: version
@@ -202,9 +199,12 @@ def rebuild_student_snapshot(student_id, year):
             raise ScoringUseCaseError("须先核对历史干部记录：" + ", ".join(legacy_sources), status_code=409)
     allocate(work_entries)
     work_ids = {entry.id for entry in work_entries}
+    specialized_ids = work_ids | {entry.id for entry in entries if entry.competition_rule_package_id is not None
+                                 or entry.category in RESEARCH_TYPES | {"innovation_training"}}
     candidates = []
+    capped_materials = []
     for entry in entries:
-        if entry.id in work_ids or entry.competition_rule_package_id is not None or entry.category in RESEARCH_TYPES | {"innovation_training"}:
+        if entry.id in specialized_ids:
             continue
         version = versions.get(entry.rule_version_id)
         if not version:
@@ -212,28 +212,59 @@ def rebuild_student_snapshot(student_id, year):
         max_count = version.snapshot.get("max_count")
         if max_count is not None:
             max_count = int(max_count)
-        candidates.append(
+        cap = version.snapshot.get("total_score_cap")
+        capped = cap is not None and entry.source_type == "material" and entry.material_record_id is not None
+        if capped and entry.candidate_score is None:
+            entry.candidate_score = entry.effective_score
+        target = capped_materials if capped else candidates
+        target.append(
             ScoreCandidate(
                 entry_id=entry.id,
                 rule_version_id=entry.rule_version_id,
                 semantic_key=f"{entry.source_type}:{entry.source_id}",
-                effective_score=entry.effective_score,
+                effective_score=(entry.candidate_score if capped and entry.candidate_score is not None else entry.effective_score),
+                total_score_cap=cap if capped else None,
                 max_count=max_count,
             )
         )
-    allocation = {item.entry_id: item for item in allocate_candidates(candidates)}
+    allocation = {item.entry_id: item for group in (candidates, capped_materials)
+                  for item in allocate_candidates(group)}
     for entry in entries:
-        if entry.id in work_ids or entry.competition_rule_package_id is not None or entry.category in RESEARCH_TYPES | {"innovation_training"}:
+        if entry.id in specialized_ids:
             continue
         choice = allocation[entry.id]
+        if (entry.source_type == "material" and entry.material_record_id is not None
+                and versions[entry.rule_version_id].snapshot.get("total_score_cap") is not None):
+            entry.effective_score = choice.allocated_score
+            entry.exclusion_basis = {"total_score_cap": versions[entry.rule_version_id].snapshot["total_score_cap"]}
         entry.included = choice.included
         entry.exclusion_reason = choice.reason
         entry.updated_at = utcnow()
+
+
+def _project_student_entries(student, year, entries):
+    from use_cases.faculty_policies import current_policy
+    policy = current_policy(student.faculty_id, year)
+    if policy:
+        entries = [entry for entry in entries if entry.source_type == "material"
+                   and entry.material_record_id is not None and entry.faculty_id == student.faculty_id]
+        competition_entries = [entry for entry in entries if entry.competition_rule_package_id is not None]
+        if competition_entries:
+            from use_cases.competition_review import allocate_competition_entries
+            allocate_competition_entries(
+                competition_entries, policy.sections["学科竞赛"]["competition_max_count"],
+                {"faculty_scoring_policy_id": policy.id},
+            )
+    _allocate_active_entries(entries)
 
     settings = FacultyScoreSettings.query.filter_by(faculty_id=student.faculty_id).first()
     weight = settings.academic_score_weight if settings else 80
     specialty_max = settings.specialty_max_score if settings else 15
     performance_max = settings.performance_max_score if settings else 5
+    if policy:
+        weight = policy.sections["学业成绩计算"]["academic_score_weight"]
+        specialty_max = policy.sections["学术专长封顶"]["specialty_max_score"]
+        performance_max = policy.sections["综合表现封顶"]["performance_max_score"]
     projection = build_score_projection(
         student.academic_score,
         [
@@ -252,6 +283,36 @@ def rebuild_student_snapshot(student_id, year):
         specialty_max=specialty_max,
         performance_max=performance_max,
     )
+    digest = projection.input_digest
+    if policy:
+        digest = hashlib.sha256(f"{policy.id}:{digest}".encode()).hexdigest()
+    innovation_history = ScoreEntry.query.with_entities(ScoreEntry.id, ScoreEntry.status).filter_by(
+        student_id=student.student_id, year=year, category="innovation_training"
+    ).order_by(ScoreEntry.id).all()
+    if innovation_history:
+        # A correction can restore exactly the earlier winning entries. Keep each
+        # adjudication trace distinct without changing the projected score.
+        digest = hashlib.sha256(json.dumps([digest, [list(row) for row in innovation_history]]).encode()).hexdigest()
+    # Allocation may return to an earlier set of winners after a limit switch or withdrawal.
+    # Keep the source fact and policy revision in the digest for these materials.
+    history = ScoreEntry.query.filter_by(student_id=student.student_id, year=year,
+                                          source_type="material").order_by(ScoreEntry.id).all()
+    allocation_history = [(item.id, item.status, item.exclusion_basis) for item in history
+                          if (item.exclusion_basis or {}).keys() & {"allocation_package_id", "total_score_cap"}]
+    if allocation_history:
+        digest = hashlib.sha256(json.dumps([digest, allocation_history], sort_keys=True).encode()).hexdigest()
+    breakdown = projection.breakdown
+    if policy:
+        breakdown += ({"faculty_scoring_policy_id": policy.id},)
+    return replace(projection, input_digest=digest, breakdown=breakdown)
+
+
+def rebuild_student_snapshot(student_id, year):
+    student = Student.query.filter_by(student_id=student_id).with_for_update().first()
+    if not student:
+        raise ScoringUseCaseError("student not found")
+    entries = _active_entries(student_id, year)
+    projection = _project_student_entries(student, year, entries)
     # Compatibility projection only; the snapshot and score facts remain authoritative.
     student.academic_specialty_total = float(projection.specialty_score)
     student.comprehensive_performance_total = float(projection.performance_score)
@@ -260,13 +321,6 @@ def rebuild_student_snapshot(student_id, year):
         student_id=student_id, year=year, status="current"
     ).order_by(StudentScoreSnapshot.version.desc()).first()
     digest = projection.input_digest
-    innovation_history = ScoreEntry.query.with_entities(ScoreEntry.id, ScoreEntry.status).filter_by(
-        student_id=student_id, year=year, category="innovation_training"
-    ).order_by(ScoreEntry.id).all()
-    if innovation_history:
-        # A correction can restore exactly the earlier winning entries. Keep each
-        # adjudication trace distinct without changing the projected score.
-        digest = hashlib.sha256(json.dumps([digest, [list(row) for row in innovation_history]]).encode()).hexdigest()
     if current and current.input_digest == digest:
         return current, False
     next_version = (current.version + 1) if current else 1
@@ -510,7 +564,7 @@ def score_verified_material(row, review_key, *, actor=None, override_score=None,
         ))
     snapshot, _created = rebuild_student_snapshot(row.student_id, row.year)
     student = Student.query.filter_by(student_id=row.student_id).one()
-    if row.application_id:
+    if version.snapshot.get("total_score_cap") is None and row.application_id:
         from models import Application
         application = db.session.get(Application, row.application_id)
         if application:
@@ -535,48 +589,10 @@ def score_verified_material(row, review_key, *, actor=None, override_score=None,
 
 def preview_student_score(student, year):
     entries = _active_entries(student.student_id, year)
-    versions = {
-        version.id: version
-        for version in RuleVersion.query.filter(
-            RuleVersion.id.in_({entry.rule_version_id for entry in entries})
-        ).all()
-    } if entries else {}
-    from domain.innovation_scoring import allocate_innovation
-    allocate_innovation([entry for entry in entries if entry.category == "innovation_training"])
-    candidates = []
-    for entry in entries:
-        version = versions.get(entry.rule_version_id)
-        if not version:
-            raise ScoringUseCaseError("score entry references a missing rule version")
-        max_count = version.snapshot.get("max_count")
-        candidates.append(
-            ScoreCandidate(
-                entry.id,
-                entry.rule_version_id,
-                f"{entry.source_type}:{entry.source_id}",
-                entry.effective_score,
-                int(max_count) if max_count is not None else None,
-            )
-        )
-    choices = {item.entry_id: item for item in allocate_candidates(candidates)}
-    settings = FacultyScoreSettings.query.filter_by(faculty_id=student.faculty_id).first()
-    return build_score_projection(
-        student.academic_score,
-        [
-            ScoreFact(
-                entry.id,
-                entry.score_group,
-                entry.effective_score,
-                entry.rule_version_id,
-                included=choices[entry.id].included,
-                status=entry.status,
-            )
-            for entry in entries
-        ],
-        academic_weight=settings.academic_score_weight if settings else 80,
-        specialty_max=settings.specialty_max_score if settings else 15,
-        performance_max=settings.performance_max_score if settings else 5,
-    )
+    with db.session.begin_nested() as preview:
+        projection = _project_student_entries(student, year, entries)
+        preview.rollback()
+    return projection
 
 
 def recalculate_score_snapshots(
@@ -814,6 +830,27 @@ def execute_score_recalculation(actor, *, scope, preview_digest, preview_expires
     return result
 
 
+def _snapshot_faculty_policy(snapshot, entries):
+    from workflow_models import FacultyScoringPolicy
+
+    policy_id = next((item["faculty_scoring_policy_id"] for item in snapshot.breakdown
+                      if "faculty_scoring_policy_id" in item), None)
+    if policy_id is None:
+        # Early snapshots recorded the allocation policy on their competition score facts.
+        included_ids = {item.get("entry_id") for item in snapshot.breakdown}
+        evidence = {(entry.exclusion_basis or {}).get("faculty_scoring_policy_id") for entry in entries
+                    if entry.id in included_ids and entry.updated_at <= snapshot.created_at}
+        evidence.discard(None)
+        if len(evidence) == 1:
+            policy_id = evidence.pop()
+    if policy_id is None:
+        return None
+    policy = FacultyScoringPolicy.query.filter_by(
+        id=policy_id, faculty_id=snapshot.faculty_id, cycle_code=snapshot.year
+    ).first()
+    return {"id": policy.id, "title": policy.title, "cycle_code": policy.cycle_code} if policy else None
+
+
 def explain_student_score(student_id, year):
     snapshot = StudentScoreSnapshot.query.filter_by(
         student_id=student_id, year=year, status="current"
@@ -852,7 +889,7 @@ def explain_student_score(student_id, year):
             entry.adjusted_score if entry else score.get("automatic_score")
         )
         override = audit.override_score if audit else score.get("override_score")
-        candidate = entry.effective_score if entry else score.get("effective_score")
+        candidate = (entry.candidate_score if entry.candidate_score is not None else entry.effective_score) if entry else score.get("effective_score")
         research_basis = {}
         if entry and (record.category in {"research_paper", "invention_patent", "innovation_training"}
                       or (record.category == "student_work" and "allocations" in (entry.exclusion_basis or {}))):
@@ -893,7 +930,7 @@ def explain_student_score(student_id, year):
             "rule_version_id": entry.rule_version_id,
             "automatic_score": str(audit.automatic_score if audit else entry.adjusted_score),
             "override_score": str(audit.override_score) if audit else None,
-            "candidate_score": str(entry.effective_score),
+            "candidate_score": str(entry.candidate_score if entry.candidate_score is not None else entry.effective_score),
             "included_score": str(entry.effective_score if entry.included else 0),
             "included": entry.included,
             "exclusion_reason": entry.exclusion_reason,
@@ -991,6 +1028,7 @@ def explain_student_score(student_id, year):
         "formula": "academic_score * academic_weight / 100 + academic + comprehensive",
         "rule_version_ids": snapshot.rule_version_ids,
         "rule_versions": rule_versions,
+        "faculty_scoring_policy": _snapshot_faculty_policy(snapshot, entries),
         "cycle_policy_version_ids": snapshot.cycle_policy_version_ids,
         "input_digest": snapshot.input_digest,
         "updated_at": snapshot.updated_at.isoformat() + "Z",

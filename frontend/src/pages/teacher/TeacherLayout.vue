@@ -111,8 +111,8 @@ onMounted(() => {
   if (authStore.role !== 'teacher') {
     toastStore.error('您没有权限访问教师端')
     router.push('/login')
-  } else {
-    // 确保数据已加载
+  } else if (currentPage.value !== 'student-summary') {
+    // 汇总页直接读取材料计分明细。
     if (applicationsStore.applications.length === 0) {
       applicationsStore.fetchApplications()
     }

@@ -79,8 +79,32 @@ def ensure_local_competition_context(*, fresh, package_file=COMPETITION_PACKAGE)
         ) from error
     _package, context = competition_workflow_context(admin)
     ensure_local_research_rules(admin, policy.cycle_code)
+    seeded_policy = ensure_faculty_policy_draft(admin, snapshot)
     db.session.commit()
+    if fresh and seeded_policy is not None:
+        from use_cases.faculty_policy_publication import preview_supported_publication, publish_supported_policy
+        preview = preview_supported_publication(admin, seeded_policy.id)
+        publish_supported_policy(admin, seeded_policy.id, preview)
     return package, created, context
+
+
+def ensure_faculty_policy_draft(admin, competition_snapshot):
+    from extensions import db
+    from workflow_models import FacultyScoringPolicy
+
+    template_file = BACKEND / 'rules' / 'informatics_2028_policy.json'
+    template = json.loads(template_file.read_text(encoding='utf-8'))
+    if competition_snapshot['cycle_code'] != template['cycle_code']:
+        return
+    existing = FacultyScoringPolicy.query.filter_by(
+        faculty_id=admin.faculty_id, cycle_code=template['cycle_code'], title=template['title']
+    ).first()
+    if existing:
+        return
+    template['sections']['学科竞赛']['rule_package'] = competition_snapshot
+    row = FacultyScoringPolicy(faculty_id=admin.faculty_id, **template)
+    db.session.add(row)
+    return row
 
 
 def ensure_local_research_rules(admin, cycle_code):
@@ -125,7 +149,8 @@ def main(database_file=None, competition_package_file=None):
     from sqlalchemy import inspect, text
     # 附带历史 SQLite 只缺少这些兼容字段；不猜测未知数据库的迁移。
     additions = {'system_settings': {'avatar_file_size_limit':'INTEGER DEFAULT 2'},
-                 'rule': {'faculty_id':'INTEGER REFERENCES faculty(id)', 'calculation_formula':'JSON'},
+                 'rule': {'faculty_id':'INTEGER REFERENCES faculty(id)', 'calculation_formula':'JSON',
+                          'total_score_cap':'NUMERIC(12, 4)'},
                  'application': {'dynamic_coefficients':'JSON'},
                  'ocr_job': {'material_record_id':'INTEGER REFERENCES material_record(id)',
                              'material_version':'INTEGER', 'attachment_id':'INTEGER REFERENCES material_attachment(id)'}}
@@ -141,6 +166,9 @@ def main(database_file=None, competition_package_file=None):
                         if name not in existing:
                             connection.execute(text(f'ALTER TABLE "{table}" ADD COLUMN "{name}" {declaration}'))
             db.create_all()
+            from workflow_models import FacultyScoringPolicy
+            for index in FacultyScoringPolicy.__table__.indexes:
+                index.create(db.engine, checkfirst=True)
             from ocr_models import OCRJob
             for index in OCRJob.__table__.indexes:
                 index.create(db.engine, checkfirst=True)

@@ -7,6 +7,7 @@ from automation_models import utcnow
 from domain.competition_scoring import (
     CompetitionAggregationCandidate, aggregate_competition_candidates,
 )
+from use_cases.faculty_policies import lock_faculty_scoring
 from extensions import db
 from material_models import MaterialEvent, MaterialRecord
 from models import Student
@@ -24,10 +25,20 @@ def _digest(row, user, command):
 
 
 def _aggregate(student_id, year, package):
+    packages = CompetitionRulePackage.query.filter_by(cycle_code=year, scope_key=package.scope_key).all()
+    current = next(item for item in packages if item.status == "current")
     entries = ScoreEntry.query.filter_by(
         student_id=student_id, year=year, category="competition", status="active"
-    ).order_by(ScoreEntry.id).all()
-    order = {item["competition_id"]: index for index, item in enumerate(package.snapshot["catalog"])}
+    ).filter(ScoreEntry.competition_rule_package_id.in_([item.id for item in packages])).order_by(ScoreEntry.id).all()
+    limit = current.snapshot["policy"]["competition_max_count"]
+    return allocate_competition_entries(entries, limit, {"allocation_package_id": current.id})
+
+
+def allocate_competition_entries(entries, limit, basis):
+    package_ids = {entry.competition_rule_package_id for entry in entries}
+    packages = CompetitionRulePackage.query.filter(CompetitionRulePackage.id.in_(package_ids)).all()
+    catalogs = {item.id: {row["competition_id"]: (index, row) for index, row in
+                          enumerate(item.snapshot["catalog"])} for item in packages}
     materials = {row.id: row for row in MaterialRecord.query.filter(
         MaterialRecord.id.in_([entry.material_record_id for entry in entries])
     ).all()} if entries else {}
@@ -35,17 +46,16 @@ def _aggregate(student_id, year, package):
     for entry in entries:
         row = materials[entry.material_record_id]
         facts = row.confirmed_terms or {}
-        catalog = next(item for item in package.snapshot["catalog"]
-                       if item["competition_id"] == facts["competition_id"])
+        order, catalog = catalogs[entry.competition_rule_package_id][facts["competition_id"]]
         candidates.append(CompetitionAggregationCandidate(
             material_id=row.id, competition_id=facts["competition_id"],
             event_family=catalog["event_family"], event_year=facts["event_year"],
             candidate_score=entry.candidate_score,
             work_key=row.competition_work_group_key or str(row.id),
             event_key=row.competition_event_group_key or str(row.id),
-            evidence_date=facts["award_date"], rule_order=order[facts["competition_id"]],
+            evidence_date=facts["award_date"], rule_order=order,
         ))
-    result = aggregate_competition_candidates(candidates)
+    result = aggregate_competition_candidates(candidates, max_count=limit)
     by_material = {item.material_id: item for item in result.items}
     for entry in entries:
         allocation = by_material[entry.material_record_id]
@@ -53,13 +63,15 @@ def _aggregate(student_id, year, package):
         entry.included = allocation.included
         entry.exclusion_reason = allocation.exclusion_reason
         entry.exclusion_stage = allocation.exclusion_reason
-        entry.exclusion_basis = {"policy": "competition-2028", "deterministic": True}
+        entry.exclusion_basis = {"policy": "competition-2028", "deterministic": True,
+                                 **basis, "max_count": limit}
         entry.updated_at = utcnow()
     return result
 
 
 def review_competition_material(user, row, payload, *, fail_at=None):
     command = validate_competition_review_command(user, row, payload)
+    lock_faculty_scoring(row.faculty_id)
     request_digest = _digest(row, user, command)
     previous = MaterialReviewCommand.query.filter_by(
         record_id=row.id, idempotency_key=command["idempotency_key"]
@@ -105,11 +117,14 @@ def review_competition_material(user, row, payload, *, fail_at=None):
         )
         db.session.add(entry); db.session.flush()
         if fail_at == "after_entry": raise RuntimeError("injected after_entry failure")
-        aggregate = _aggregate(locked.student_id, locked.year, package)
+        from use_cases.faculty_policies import current_policy
+        policy = current_policy(locked.faculty_id, locked.year)
+        if not policy:
+            _aggregate(locked.student_id, locked.year, package)
         snapshot, _ = rebuild_student_snapshot(locked.student_id, locked.year)
         stale = mark_draft_rankings_stale(student, locked.year, "competition score changed")
         scoring = {"score_entry_id": entry.id, "snapshot_id": snapshot.id,
-                   "competition_total": str(aggregate.competition_total),
+                   "competition_total": student_competition_total(locked.student_id, locked.year),
                    "stale_ranking_batch_ids": [batch.id for batch in stale]}
     else:
         scoring = None
@@ -253,3 +268,10 @@ def student_competition_feedback(user, year):
         "cycle_snapshot": ({"status": "current", "snapshot_id": snapshot.id,
             "version": snapshot.version, "comprehensive_score": str(snapshot.comprehensive_score)}
             if snapshot else {"status": "no_authoritative_snapshot"})}
+
+
+
+def student_competition_total(student_id, year):
+    entries = ScoreEntry.query.filter_by(student_id=student_id, year=year,
+        category="competition", status="active", source_type="material", included=True).all()
+    return str(sum((entry.effective_score for entry in entries), Decimal("0")).quantize(Decimal("0.0001")))

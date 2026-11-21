@@ -39,6 +39,19 @@ def _score(value):
     return float(result)
 
 
+def optional_total_score_cap(value):
+    if value is None:
+        return None
+    try:
+        amount = Decimal(str(value))
+        if (not amount.is_finite() or amount < 0 or amount >= 100000000
+                or amount != amount.quantize(Decimal("0.0001"))):
+            raise InvalidOperation
+        return amount
+    except (ValueError, InvalidOperation):
+        raise StructuredRuleError("累计上限须为非负数，整数最多八位，小数最多四位") from None
+
+
 def _terms(payload):
     source = payload.get("match_terms")
     if not isinstance(source, dict) or set(source) != set(MATCH_FIELDS):
@@ -59,7 +72,7 @@ def serialize_rule(rule):
     return {
         "id": rule.id, "name": rule.name, "faculty_id": rule.faculty_id,
         "material_category": rule.sub_type, "score": rule.score,
-        "max_score": rule.max_score, "max_count": rule.max_count,
+        "total_score_cap": rule.total_score_cap, "max_score": rule.max_score, "max_count": rule.max_count,
         "status": rule.status, "draft_version": rule.draft_version,
         "match_terms": rule.match_terms,
         "match_schema_version": rule.match_schema_version,
@@ -77,6 +90,7 @@ def create_rule_draft(user, payload):
     rule = Rule(
         name=name.strip(), type="academic", sub_type=category,
         score=_score(payload.get("score")), max_score=payload.get("max_score"),
+        total_score_cap=optional_total_score_cap(payload.get("total_score_cap")),
         max_count=payload.get("max_count"), status="draft", faculty_id=faculty_id,
         description=payload.get("description"), match_terms=_terms(payload),
         match_schema_version=NORMALIZATION_VERSION, draft_version=1,

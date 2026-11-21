@@ -59,6 +59,7 @@ class ScoreCandidate:
     semantic_key: str
     effective_score: Decimal
     max_count: int | None = None
+    total_score_cap: Decimal | None = None
 
 
 @dataclass(frozen=True)
@@ -66,6 +67,7 @@ class ScoreAllocation:
     entry_id: int
     included: bool
     reason: str | None
+    allocated_score: Decimal = Decimal(0)
 
 
 def allocate_candidates(candidates) -> tuple[ScoreAllocation, ...]:
@@ -80,6 +82,7 @@ def allocate_candidates(candidates) -> tuple[ScoreAllocation, ...]:
     )
     seen_semantics = set()
     included_by_rule = {}
+    totals = {}
     result = []
     for item in ordered:
         semantic_identity = (item.rule_version_id, item.semantic_key)
@@ -92,7 +95,14 @@ def allocate_candidates(candidates) -> tuple[ScoreAllocation, ...]:
             result.append(ScoreAllocation(item.entry_id, False, "max_count_exceeded"))
             continue
         included_by_rule[item.rule_version_id] = used + 1
-        result.append(ScoreAllocation(item.entry_id, True, None))
+        allocated = decimal(item.effective_score)
+        if item.total_score_cap is not None:
+            used_score = totals.get(item.rule_version_id, Decimal(0))
+            allocated = min(allocated, max(Decimal(0), decimal(item.total_score_cap) - used_score))
+            totals[item.rule_version_id] = used_score + allocated
+        limited = allocated < item.effective_score
+        result.append(ScoreAllocation(item.entry_id, bool(allocated) or not limited,
+                                      "rule_total_score_cap" if limited else None, allocated))
     return tuple(sorted(result, key=lambda item: item.entry_id))
 
 

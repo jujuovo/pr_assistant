@@ -157,7 +157,7 @@ class CompetitionAggregationResult:
     cap_reason: str | None
 
 
-def aggregate_competition_candidates(candidates, *, specialty_other_score=0, specialty_cap=15):
+def aggregate_competition_candidates(candidates, *, max_count=3, specialty_other_score=0, specialty_cap=15):
     """Apply every formal keep-highest stage in deterministic policy order."""
     candidates = tuple(candidates)
     by_id = {item.material_id: item for item in candidates}
@@ -200,8 +200,10 @@ def aggregate_competition_candidates(candidates, *, specialty_other_score=0, spe
         (item for item in candidates if item.material_id not in reasons),
         key=order_key,
     )
-    for item in remaining[3:]:
-        reasons[item.material_id] = "competition_top_three_limit"
+    if type(max_count) is not int or max_count < 0:
+        raise CompetitionScoringError("competition_max_count must be a nonnegative integer", code="invalid_count_limit")
+    for item in remaining[max_count:]:
+        reasons[item.material_id] = "competition_top_three_limit" if max_count == 3 else "competition_count_limit"
 
     items = tuple(
         CompetitionAggregationItem(

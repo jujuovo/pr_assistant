@@ -188,6 +188,10 @@ def validate_competition_package(snapshot):
     if missing:
         errors.append(f"missing top-level fields: {', '.join(missing)}")
 
+    policy = snapshot.get("policy")
+    limit = policy.get("competition_max_count") if isinstance(policy, dict) else None
+    if type(limit) is not int or limit < 0:
+        errors.append("competition_max_count must be a nonnegative integer")
     cycle_code = snapshot.get("cycle_code")
     if not isinstance(cycle_code, int) or not 2000 <= cycle_code <= 2100:
         errors.append("cycle_code must be between 2000 and 2100")

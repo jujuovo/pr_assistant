@@ -9,11 +9,15 @@ test('legacy rule service refuses competition but keeps generic compatibility en
   assert.match(source,/apiRequest\('\/rules', 'POST', data\)/)
 })
 
-test('admin navigation routes competition rules and ranking to controlled workbenches',()=>{
+test('admin navigation exposes competition rules within the unified rule workbench',()=>{
   const navigation=readFileSync(new URL('../src/config/navigation.js',import.meta.url),'utf8')
   const layout=readFileSync(new URL('../src/pages/admin/AdminLayout.vue',import.meta.url),'utf8')
   const legacy=readFileSync(new URL('../src/pages/admin/rules/RuleManagement.vue',import.meta.url),'utf8')
-  assert.match(navigation,/competition-rule-packages/)
+  assert.match(navigation, /key: 'rule-management'/)
+  assert.doesNotMatch(navigation, /key: 'competition-rule-packages'/)
+  assert.match(layout, /page === 'competition-rule-packages' \? 'rule-management'/)
+  assert.match(layout, /'rule-management': RuleManagement/)
+  assert.match(legacy, /<CompetitionRulePackages\s*\/>/)
   assert.match(layout,/rankings: RankingPublication/)
   assert.match(legacy,/rule\.sub_type !== 'competition'/)
 })

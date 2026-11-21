@@ -197,3 +197,34 @@ def test_execute_rolls_back_whole_scope_and_records_partial_failure(env, monkeyp
     assert StudentScoreSnapshot.query.count() == 0
     assert ScoreRecalculationCommand.query.one().status == "failed"
 
+
+
+def test_material_cap_keeps_candidates_across_review_rebuild_and_replacement(env, active_cycle):
+    from material_models import MaterialRecord
+    from models import User
+    from use_cases.rule_versions import publish_rule_version
+    from use_cases.scoring import explain_student_score, rebuild_student_snapshot, score_verified_material
+
+    actor = db.session.get(User, env[2]["admin"])
+    rule = Rule(name="累计限额测试", type="academic", sub_type="honor", score=6,
+                faculty_id=actor.faculty_id, max_count=2, total_score_cap=8, status="active")
+    db.session.add(rule)
+    version, _ = publish_rule_version(rule, published_by=actor, cycle_code=active_cycle.cycle_code)
+    for value in (4, 5, 6):
+        row = MaterialRecord(student_id="S1", faculty_id=actor.faculty_id, category="honor",
+                             year=active_cycle.cycle_code, data={}, analysis={}, status="scored",
+                             rule_version_id=version.id, cycle_policy_version_id=active_cycle.id)
+        db.session.add(row)
+        db.session.flush()
+        score_verified_material(row, str(value), actor=actor, override_score=value, override_reason="测试核验")
+    entries = ScoreEntry.query.order_by(ScoreEntry.id).all()
+    assert [entry.candidate_score for entry in entries] == [4, 5, 6]
+    assert [entry.effective_score for entry in entries] == [0, 2, 6]
+    snapshot, created = rebuild_student_snapshot("S1", active_cycle.cycle_code)
+    assert not created and snapshot.specialty_raw_score == 8
+    details = explain_student_score("S1", active_cycle.cycle_code)["entries"]
+    assert sum(Decimal(item["included_score"]) for item in details) == 8
+    entries[-1].status, entries[-1].included = "invalidated", False
+    snapshot, _ = rebuild_student_snapshot("S1", active_cycle.cycle_code)
+    assert [entry.effective_score for entry in entries[:2]] == [3, 5]
+    assert snapshot.specialty_raw_score == 8

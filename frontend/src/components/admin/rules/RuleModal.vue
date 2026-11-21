@@ -107,7 +107,7 @@
                   <div class="form-row">
                     <!-- 最大分数限制（可选） -->
                     <div class="form-group">
-                      <label class="form-label">最高分数</label>
+                      <label class="form-label">单项分数上限</label>
                       <input
                         type="number"
                         class="form-control"
@@ -118,6 +118,12 @@
                       />
                     </div>
 
+                    <div class="form-group">
+                      <label class="form-label">本规则累计上限
+                        <input type="number" class="form-control" v-model.number="ruleForm.total_score_cap"
+                          min="0" step="0.0001" placeholder="留空表示无限制" />
+                      </label>
+                    </div>
                     <!-- 最大项目数量限制（可选） -->
                     <div class="form-group">
                       <label class="form-label">最多项目数</label>
@@ -303,6 +309,7 @@ const ruleForm = reactive({
   sub_type: '',
   research_type: '',
   max_score: null,
+  total_score_cap: null,
   max_count: null,
   faculty_id: '',
   score: 0,
@@ -578,6 +585,7 @@ watch(
         sub_type: '',
         research_type: '',
         max_score: null,
+        total_score_cap: null,
         max_count: null,
         faculty_id: adminFacultyId || '',
         score: 0,

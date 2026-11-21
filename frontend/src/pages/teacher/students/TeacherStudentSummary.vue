@@ -123,7 +123,7 @@
       </table>
 
       <p class="summary-footnote">
-        该页面不允许编辑材料、规则、候选分或计入分。计分结果以教师审核通过时的规则包版本为准。
+        该页面不允许编辑材料、规则、候选分或计入分。候选分按原规则版本保留，限项按本周期当前规则统一重算。
         <template v-if="hiddenNote"> {{ hiddenNote }}</template>
       </p>
     </template>
@@ -165,6 +165,7 @@ const hiddenNote = computed(() => {
 })
 
 function exclusionText(item) {
+  if (['competition_count_limit', 'competition_top_three_limit'].includes(item.exclusion_reason)) return '超出竞赛计入项目数上限'
   if (item.exclusion_reason) return item.exclusion_reason
   if (item.status === 'needs_correction') return '审核退回，待学生补正'
   if (item.included === false) return '未计入'

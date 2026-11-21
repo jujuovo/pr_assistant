@@ -99,3 +99,10 @@ def test_specialty_cap_is_explained_without_destroying_raw_details():
     assert result.specialty_effective_total == Decimal("15.0000")
     assert result.cap_reason == "academic_specialty_cap"
     assert sum(item.candidate_score for item in result.items) == Decimal("18.0000")
+
+
+@pytest.mark.parametrize("limit", [2, 4])
+def test_package_count_limit_selects_highest_candidates(limit):
+    values = [candidate(i, i) for i in range(1, 5)]
+    result = aggregate_competition_candidates(values, max_count=limit)
+    assert [item.material_id for item in result.items if item.included] == list(range(5 - limit, 5))

@@ -19,6 +19,13 @@ def test_prepare_new_database_and_preserve_existing_data(tmp_path):
         assert result.returncode == 0, result.stdout + result.stderr
         with sqlite3.connect(database) as connection:
             assert connection.execute('select count(*) from user').fetchone()[0] == 3
+            seeded = connection.execute(
+                "select status, sections from faculty_scoring_policy where cycle_code = 2028"
+            ).fetchall()
+            assert len(seeded) == 1 and seeded[0][0] == 'published'
+            sections = json.loads(seeded[0][1])
+            assert sections['学业成绩计算']['academic_score_weight'] == 80
+            assert len(sections['学科竞赛']['rule_package']['catalog']) == 28
             assert connection.execute('select count(*) from rule').fetchone()[0] == 5
             assert connection.execute('select count(*) from rule_version').fetchone()[0] == 5
             assert connection.execute('select count(*) from recommendation_cycle_policy where active_marker = 1').fetchone()[0] == 1
