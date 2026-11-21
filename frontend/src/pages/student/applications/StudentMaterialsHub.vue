@@ -15,8 +15,8 @@
       <label
         >筛选状态<select v-model="filter"
           ><option value="">全部</option
-          ><option v-for="(label, key) in states" :key="key" :value="key">{{
-            label
+          ><option v-for="option in statusFilters" :key="option.value" :value="option.value">{{
+            option.label
           }}</option></select
         ></label
       >
@@ -225,9 +225,26 @@ const states = {
   rule_available: '待确认规则',
   abandoned: '已放弃'
 }
+// Group backend statuses for navigation only; cards retain their exact state.
+const statusFilters = [
+  { value: 'ready_to_submit', label: '待提交', states: ['draft', 'ready_to_submit'] },
+  { value: 'ocr_processing', label: '识别中', states: ['ocr_queued', 'ocr_running'] },
+  { value: 'pending_review', label: '待审核', states: ['submitted', 'under_review', 'pending_review'] },
+  {
+    value: 'approved', label: '已通过',
+    states: ['scored', 'verified', 'approved', 'verified_not_eligible', 'approved_ineligible']
+  },
+  {
+    value: 'action_required', label: '需处理',
+    states: ['ocr_failed', 'needs_correction', 'rule_reconfirmation_required', 'rule_unmatched', 'rule_available']
+  },
+  { value: 'rejected', label: '已驳回', states: ['rejected'] },
+  { value: 'abandoned', label: '已放弃', states: ['abandoned'] }
+]
+const selectedStates = computed(() => statusFilters.find((option) => option.value === filter.value)?.states)
 const filtered = computed(() =>
   records.value
-    .filter((r) => !filter.value || (r.workflow_state || r.status) === filter.value)
+    .filter((r) => !filter.value || selectedStates.value?.includes(r.workflow_state || r.status))
     .sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)))
 )
 const hasMore = computed(() => Object.values(cursors.value).some(Boolean))

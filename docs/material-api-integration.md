@@ -35,7 +35,7 @@ record = await materialApi.review('language', record.id, record.version, 'verifi
 
 附件 URL 供链接使用，证书图片 URL 供 img 使用，不走 JSON 解析。权限仍由服务端 Session 校验。上传使用重复 files 字段，不手动设置 Content-Type。
 
-错误提供 error.status、error.payload、可选 error.code。401 停止轮询并登录，409 获取最新状态后确认，501/recognition_not_implemented 表示五类 OCR 尚未实现。REQUEST_TIMEOUT 只表示本地等待超时，需查询状态，不能自动重发写请求；主动取消保持 AbortError。
+错误提供 error.status、error.payload、可选 error.code。401 停止轮询并登录，409 获取最新状态后确认，501/recognition_not_implemented 表示当前类别未适配或未提供附件识别参数，不能据此断言所有类别都没有OCR。REQUEST_TIMEOUT 只表示本地等待超时，需查询状态，不能自动重发写请求；主动取消保持 AbortError。
 
 五类业务页面尚未接入，本次是请求层实现。蓝桥杯新流程使用 certificateApi.createPreview(files) 上传并在提交前识别，CertificatePreview 展示可编辑申报表；confirmPreview(id, data) 保存草稿或提交同一申请。学生修改值直接作为申报值，OCR报告与原件独立保留。教师公共详情组件同时展示三者。旧申请结果保留。后端契约见 material-interfaces.md 与 certificate-ocr.md。
 
@@ -49,3 +49,6 @@ npm run build
 ```
 
 测试使用模拟 HTTP 响应，验证实际请求格式及异常行为；不代表真实数据库、OCR 或 Windows 联调已通过。
+
+
+类别计分能力、OCR可用与实际页面接入是不同概念；当前口径见[current-material-capabilities.md](current-material-capabilities.md)。auto_bonus_enabled表示教师核验后可按规则计分；各材料日期时间戳返回带Z的UTC，纯业务日期保留YYYY-MM-DD。

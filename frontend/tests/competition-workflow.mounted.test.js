@@ -279,6 +279,66 @@ describe('single upload submission', () => {
 })
 
 describe('persistent material history', () => {
+  it('offers eight concise filters and retains specific status badges', async () => {
+    state.api.listRecords.mockImplementation(async (category) => ({
+      records: category === 'competition' ? [structuredClone(row)] : []
+    }))
+    const w = render(History)
+    await flushPromises()
+    const labels = w.findAll('select option').map((option) => option.text())
+    expect(labels).toEqual(['全部', '待提交', '识别中', '待审核', '已通过', '需处理', '已驳回', '已放弃'])
+    expect(new Set(labels).size).toBe(labels.length)
+    expect(w.get('.badge').text()).toBe('OCR队列中')
+  })
+  it.each([
+    ['ready_to_submit', ['draft', 'ready_to_submit']],
+    ['ocr_processing', ['ocr_queued', 'ocr_running']],
+    ['pending_review', ['submitted', 'under_review', 'pending_review']],
+    ['approved', ['scored', 'verified', 'approved', 'verified_not_eligible', 'approved_ineligible']],
+    ['action_required', ['ocr_failed', 'needs_correction', 'rule_reconfirmation_required', 'rule_unmatched', 'rule_available']],
+    ['rejected', ['rejected']],
+    ['abandoned', ['abandoned']]
+  ])('groups %s across categories without changing permissions or states', async (filter, states) => {
+    const records = states.map((status, index) => ({
+      id: index + 100, category: 'social_practice', status, year: 2028,
+      // Exercise both workflow projections and raw status-only responses.
+      ...(index % 2 ? { workflow_state: status } : {}),
+      data: { project_name: '材料-' + status }, allowed_actions: [], attachments: []
+    }))
+    state.api.listRecords.mockImplementation(async (category) => ({
+      records: category === 'social_practice' ? records : [{
+        ...structuredClone(row), workflow_state: 'future_unknown_state', allowed_actions: []
+      }]
+    }))
+    const w = render(History)
+    await flushPromises()
+    const calls = state.api.listRecords.mock.calls.length
+    await w.get('select').setValue(filter)
+    expect(w.findAll('.history-card h2').map((heading) => heading.text()))
+      .toEqual(states.map((status) => '材料-' + status))
+    expect(button(w, '正式提交审核')).toBeUndefined()
+    expect(state.api.listRecords).toHaveBeenCalledTimes(calls)
+    await w.get('select').setValue('')
+    expect(w.findAll('.history-card')).toHaveLength(states.length + 1)
+  })
+  it('keeps the recognition filter active when queued work completes', async () => {
+    vi.useFakeTimers()
+    state.api.listRecords.mockImplementation(async (category) => ({
+      records: category === 'competition' ? [structuredClone(row)] : []
+    }))
+    const w = render(History)
+    await flushPromises()
+    await w.get('select').setValue('ocr_processing')
+    expect(w.findAll('.history-card')).toHaveLength(1)
+    await vi.advanceTimersByTimeAsync(5000)
+    await flushPromises()
+    expect(w.get('select').element.value).toBe('ocr_processing')
+    expect(w.findAll('.history-card')).toHaveLength(0)
+    expect(w.text()).toContain('暂无符合条件')
+    await w.get('select').setValue('ready_to_submit')
+    expect(w.findAll('.history-card')).toHaveLength(1)
+    expect(w.get('.badge').text()).toBe('待提交')
+  })
   it('shows queued history, no creation form, and resumes completed status after reopening', async () => {
     state.api.listRecords.mockImplementation(async (c) => ({
       records: c === 'competition' ? [structuredClone(row)] : []
@@ -394,7 +454,7 @@ describe('persistent material history', () => {
     await flushPromises()
     expect(w.text()).toContain('已通过')
     expect(button(w, '正式提交审核')).toBeUndefined()
-    await w.get('select').setValue('draft')
+    await w.get('select').setValue('ready_to_submit')
     expect(w.text()).toContain('暂无符合条件')
   })
   it('loads additional pages without losing earlier materials', async () => {

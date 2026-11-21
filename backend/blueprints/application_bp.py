@@ -27,6 +27,8 @@ from flask import abort
 from certificate_models import CertificateAssessment
 from services.certificates.service import (authorize_application, validate_selection, enqueue,
                                             selection_present, selection_json)
+from services.legacy_application_policy import (application_actor, bind_student_identity,
+    authorize_write, validate_edit, protect_deletion)
 from services.automation import actor
 from services.materials.service import has_linked_material, scope_application_query
 from blueprints.score_bp import update_student_statistics
@@ -53,6 +55,8 @@ MIGRATED_MATERIAL_ROUTES = {
                         "route": "/api/materials/social_practice/records"},
     "research_paper": {"label": "科研论文", "code": "research_paper_material_route_required",
                        "route": "/api/materials/research_paper/records"},
+    "invention_patent": {"label": "授权发明专利", "code": "invention_patent_material_route_required",
+                         "route": "/api/materials/invention_patent/records"},
     "innovation_training": {"label": "创新创业训练",
                             "code": "innovation_training_material_route_required",
                             "route": "/api/materials/innovation_training/records"},
@@ -61,6 +65,40 @@ MIGRATED_MATERIAL_ROUTES = {
     "arts_sports": {"label": "文体活动", "code": "arts_sports_material_route_required",
                     "route": "/api/materials/arts_sports/records"},
 }
+
+
+def migrated_material_response(data, application=None):
+    candidates = [data.get(key) for key in ("application_type", "sub_type")]
+    rule_id = data.get("rule_id", application.rule_id if application is not None else None)
+    rule_ids = [rule_id]
+    if application is not None and application.rule_id not in rule_ids:
+        rule_ids.append(application.rule_id)
+    for rule_id in rule_ids:
+        if rule_id in (None, ""):
+            continue
+        try:
+            rule_id = int(rule_id)
+        except (ValueError, TypeError):
+            abort(400, description="规则编号无效")
+        rule = db.session.get(Rule, rule_id)
+        if rule is None:
+            abort(400, description="规则不存在")
+        faculty_id = data.get("faculty_id", application.faculty_id if application is not None else None)
+        if rule.faculty_id is not None and rule.faculty_id != faculty_id:
+            abort(403, description="不能使用其他学院的规则")
+        if rule:
+            candidates.append(rule.sub_type)
+            if rule.sub_type == "research":
+                candidates.append({"thesis": "research_paper", "patent": "invention_patent"}.get(rule.research_type))
+            elif rule.sub_type == "innovation":
+                candidates.append("innovation_training")
+    if application is not None:
+        candidates.append(application.application_type)
+    route = next((MIGRATED_MATERIAL_ROUTES[str(key).strip()] for key in candidates
+                  if str(key).strip() in MIGRATED_MATERIAL_ROUTES), None)
+    if route:
+        return jsonify({"error": "该类材料必须使用新材料申报入口："+route["label"],
+                        "code": route["code"], "route": route["route"]}), 409
 
 
 def _compatibility_meta(application, rule=None):
@@ -414,6 +452,7 @@ def get_application(id):
 # 创建申请
 @application_bp.route("/applications", methods=["POST"])
 def create_application():
+    user = application_actor()
     try:
         # 解析申请数据
         if "application" in request.form:
@@ -421,6 +460,8 @@ def create_application():
         else:
             data = request.get_json()
 
+        if not isinstance(data, dict):
+            abort(400, description="申请内容必须是对象")
         # 字段名转换：将前端的驼峰式命名转换为后端的下划线命名
         field_mapping = {
             "studentId": "student_id",
@@ -458,36 +499,10 @@ def create_application():
 
         # 使用转换后的数据
         data = transformed_data
-        authoritative = {"final_score", "review_comment", "reviewed_at", "reviewed_by"}
-        if authoritative.intersection(data) or data.get("status") in ("approved", "rejected"):
-            abort(409, description="审核状态和最终分数只能通过统一审核入口修改")
-        if data.get("rule_id") is not None:
-            submitted_rule = db.session.get(Rule, data["rule_id"])
-            if submitted_rule is not None and submitted_rule.sub_type in {'volunteer','volunteer_credit','volunteer_honor'}:
-                from use_cases.cycles import current_cycle_policy
-                policy = current_cycle_policy(required=False)
-                if policy and policy.cycle_code >= 2028:
-                    abort(409, description='志愿工时请使用累计工时材料入口，不能通过旧申请计分')
-            if submitted_rule is not None and submitted_rule.sub_type == "competition":
-                return jsonify({
-                    "error": "学业竞赛必须使用新材料申报入口",
-                    "code": "competition_material_route_required",
-                    "route": "/api/materials/competition/records",
-                }), 409
-
-        # 已迁到 MaterialRecord 链路的类别不允许再新建旧 Application。
-        # 只按 rule_id 判断会留漏洞：不带 rule_id 的请求能绕过守卫，
-        # 于是同一份材料在新旧两套表各存一份，审核与计分都出现双源。
-        migrated_route = MIGRATED_MATERIAL_ROUTES.get(
-            str(data.get("application_type") or data.get("sub_type") or "").strip()
-        )
-        if migrated_route is not None:
-            return jsonify({
-                "error": f"该类材料必须使用新材料申报入口：{migrated_route['label']}",
-                "code": migrated_route["code"],
-                "route": migrated_route["route"],
-            }), 409
-
+        bind_student_identity(data, user)
+        blocked = migrated_material_response(data)
+        if blocked is not None:
+            return blocked
         # 验证项目名称长度
         if "project_name" in data and (len(data["project_name"]) < 2 or len(data["project_name"]) > 50):
             return jsonify({"error": "项目名称长度必须在2-50个字符之间"}), 400
@@ -737,12 +752,14 @@ def create_application():
 # 更新申请
 @application_bp.route("/applications/<int:id>", methods=["PUT"])
 def update_application(id):
+    user = application_actor()
     from automation_models import AutomationBatch
     from flask import abort
-    if AutomationBatch.query.filter_by(application_id=id).first():
-        abort(409, description="自动化申请只允许通过专用明细审核接口更新，不能修改状态或最终分数")
     try:
         application = Application.query.filter_by(id=id).with_for_update().first_or_404()
+        authorize_write(application, user, action="edit")
+        if AutomationBatch.query.filter_by(application_id=id).first():
+            abort(409, description="自动化申请只允许通过专用审核接口更新")
 
         # 解析申请数据
         if "application" in request.form:
@@ -750,6 +767,8 @@ def update_application(id):
         else:
             data = request.get_json()
 
+        if not isinstance(data, dict):
+            abort(400, description="申请内容必须是对象")
         # 字段名转换：将前端的驼峰式命名转换为后端的下划线命名
         field_mapping = {
             "studentId": "student_id",
@@ -786,6 +805,10 @@ def update_application(id):
 
         # 使用转换后的数据
         data = transformed_data
+        validate_edit(data, application)
+        blocked = migrated_material_response(data, application)
+        if blocked is not None:
+            return blocked
 
         # 验证项目名称长度
         if "project_name" in data and (len(data["project_name"]) < 2 or len(data["project_name"]) > 50):
@@ -1020,6 +1043,9 @@ def update_application(id):
 # 审核申请
 @application_bp.route("/applications/<int:id>/review", methods=["POST"])
 def review_application(id):
+    reviewer = application_actor()
+    application = Application.query.filter_by(id=id).with_for_update().first_or_404()
+    authorize_write(application, reviewer, action="review")
     from automation_models import AutomationBatch
     from services.automation import review_batch
     automation = AutomationBatch.query.filter_by(application_id=id).first()
@@ -1030,10 +1056,6 @@ def review_application(id):
         except HTTPException as error:
             db.session.rollback()
             return jsonify({"error": error.description}), error.code
-    application = Application.query.get_or_404(id)
-    reviewer = actor()
-    if reviewer.role not in ("teacher", "admin") or reviewer.faculty_id != application.faculty_id:
-        abort(403, description="没有该申请的审核权限")
     legacy_rule = db.session.get(Rule, application.rule_id) if application.rule_id else None
     if (application.cycle_code and application.cycle_code >= 2028 and legacy_rule
             and legacy_rule.sub_type in {'volunteer','volunteer_credit','volunteer_honor'}):
@@ -1044,9 +1066,11 @@ def review_application(id):
         authorize_application(application, reviewer=True)
     if certificate and certificate.claims.get("preview_flow") and application.status == "draft":
         abort(409, description="学生尚未确认提交，不可审核识别草稿")
-    data = request.get_json()
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or data.get("status") not in {"approved", "rejected", "needs_correction"}:
+        abort(400, description="审核结果必须为通过、驳回或待补正")
 
-    if isinstance(data, dict) and "finalScore" in data:
+    if "finalScore" in data:
         current_app.logger.warning(
             "legacy_final_score_request application_id=%s actor_id=%s has_reason=%s",
             application.id, reviewer.id, bool(data.get("overrideReason")),
@@ -1167,43 +1191,35 @@ def review_application(id):
 # 删除申请
 @application_bp.route("/applications/<int:id>", methods=["DELETE"])
 def delete_application(id):
-    from automation_models import AutomationBatch
-    from flask import abort
-    if AutomationBatch.query.filter_by(application_id=id).first():
-        abort(409, description="自动化申请需通过审核驳回/撤销认定，不能删除去重和审计记录")
-    application = Application.query.get_or_404(id)
-
-    if CertificateAssessment.query.filter_by(application_id=id).first() or has_linked_material(id):
-        authorize_application(application)
-
-    from material_models import MaterialRecord
-    if MaterialRecord.query.filter_by(application_id=id).first():
-        abort(409, description="申请关联材料核验记录，不能直接删除；请保留核验依据")
-
+    user = application_actor()
+    application = Application.query.filter_by(id=id).with_for_update().first_or_404()
+    authorize_write(application, user, action="delete")
+    protect_deletion(application)
     # 获取学生ID，用于后续更新统计数据
     student_id = application.student_id
 
-    # 删除相关物理文件
-    if application.files:
-        for file in application.files:
-            try:
-                # 从文件路径中提取文件名
-                if "path" in file and file["path"]:
-                    # 获取文件名（从URL中提取）
-                    filename = os.path.basename(file["path"])
-                    # 构建完整的文件路径
-                    file_path = os.path.join(
-                        current_app.config["FILE_FOLDER"], filename
-                    )
-                    # 检查文件是否存在并删除
-                    if os.path.exists(file_path):
-                        os.remove(file_path)
-            except Exception as e:
-                # 记录错误但不中断删除流程
-                print(f"删除文件失败: {str(e)}")
+    # Capture only canonical paths owned by this application. Keep files if commit fails.
+    from pathlib import Path
+    root = Path(current_app.config["FILE_FOLDER"]).resolve()
+    paths = []
+    for item in application.files or []:
+        name = item.get("name")
+        if isinstance(name, str) and Path(name).name == name and item.get("path") == f"/uploads/files/{name}":
+            candidate = (root / name).resolve()
+            if candidate.parent == root:
+                paths.append(candidate)
 
     db.session.delete(application)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        abort(409, description="申请仍有关联数据，删除未完成，原件已保留")
+    for path in paths:
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            current_app.logger.warning("旧申请已删除，但原件清理失败")
 
     # 更新学生的统计数据
     update_student_statistics(student_id)

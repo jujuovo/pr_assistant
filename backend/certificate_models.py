@@ -21,5 +21,7 @@ class CertificateAssessment(db.Model):
     attempts = db.Column(db.Integer, nullable=False, default=0)
     version = db.Column(db.Integer, nullable=False, default=1)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
-    application = db.relationship("Application", backref=db.backref("certificate_assessment", uselist=False, cascade="all, delete-orphan"))
+    # Let the database reject parent deletion; ORM cascades would erase evidence first.
+    application = db.relationship("Application", backref=db.backref(
+        "certificate_assessment", uselist=False, passive_deletes="all"))
     __table_args__ = (db.Index("ix_certificate_queue", "status", "lease_until"),)

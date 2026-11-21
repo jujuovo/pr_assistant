@@ -6,6 +6,7 @@ from flask import abort, current_app, session
 from extensions import db
 from models import Application, Student, User
 from material_models import MaterialRecord, MaterialEvent, MaterialSource
+from services.time_format import utc_timestamp
 from automation_models import utcnow
 from services.automation import actor
 from .schemas import TYPES, integer, normalize, analyze, text, source_url, object_keys
@@ -117,7 +118,7 @@ def _last_review(row):
         'decision': REVIEW_EVENT_DECISIONS[event.action],
         'comment': (event.details or {}).get('comment'),
         'actor': {'id': actor.id, 'name': actor.name, 'role': actor.role} if actor else None,
-        'at': (event.created_at.isoformat() + 'Z') if event.created_at else None,
+        'at': utc_timestamp(event.created_at),
     }
 
 
@@ -181,7 +182,7 @@ def view(row):
             'recognition_status':(projection.get('volunteer_ocr') or {}).get('status') or queued_job.get('status') or ('confirmed' if links else ('not_requested' if row.category in OCR_CATEGORIES else 'not_implemented')),
             'ocr_links':links, 'bonus_result':bonus_result,
             'manual_only':is_manual(row),
-            'created_at':row.created_at.isoformat()+'Z', 'updated_at':row.updated_at.isoformat()+'Z',
+            'created_at':utc_timestamp(row.created_at), 'updated_at':utc_timestamp(row.updated_at),
             'attachments':[{'id':f.id,'filename':f.filename,'size':f.size,'sha256':f.sha256,
                             'url':f'/api/materials/{row.category}/records/{row.id}/attachments/{f.id}'} for f in row.attachments]}
 

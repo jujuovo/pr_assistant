@@ -8,6 +8,7 @@ from pathlib import Path
 import uuid
 from sqlalchemy import func, or_
 
+from services.time_format import utc_timestamp
 from automation_models import utcnow
 from domain.materials import (
     ActorScope,
@@ -86,7 +87,7 @@ def _latest_review_summaries(rows):
             "decision": REVIEW_ACTION_DECISIONS[event.action],
             "comment": (event.details or {}).get("comment"),
             "actor": actors.get(event.actor_id),
-            "at": (event.created_at.isoformat() + "Z") if event.created_at else None,
+            "at": utc_timestamp(event.created_at),
         }
     return latest
 
@@ -129,7 +130,7 @@ def competition_workbench_summary(user):
             "id": row.id, "student_id": row.student_id, "status": row.status,
             "version": row.version, "project_name": (row.data or {}).get("project_name"),
             "competition_name": (row.data or {}).get("competition_name"),
-            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+            "updated_at": utc_timestamp(row.updated_at),
             "review": reviews.get(row.id),
             "supersedes_record_id": row.supersedes_record_id,
             "superseded_by_record_id": superseded_by.get(row.id),
@@ -505,7 +506,7 @@ def _material_history(row):
         "action": event.action,
         "comment": (event.details or {}).get("comment"),
         "actor": actors.get(event.actor_id),
-        "created_at": (event.created_at.isoformat() + "Z") if event.created_at else None,
+        "created_at": utc_timestamp(event.created_at),
     } for event in events]
 
 

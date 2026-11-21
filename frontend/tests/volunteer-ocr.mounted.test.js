@@ -174,7 +174,8 @@ test('retry invokes volunteer OCR instead of a competition endpoint', async () =
 test('teacher sees priority appeal before ordinary material and may approve without comment', async () => {
   const appeal = {
     ...base,
-    status: 'submitted', allowed_actions: ['review'],
+    status: 'submitted',
+    allowed_actions: ['review'],
     workflow_state: 'pending_review',
     priority_review: true,
     appeal: { reason: '请重点核对图片中的202小时' }
@@ -200,6 +201,9 @@ test('volunteer upload stays manual input with one upload and an explicit backgr
   expect(w.text()).not.toContain('不使用识别')
   await button(w, '填写志愿服务材料').trigger('click')
   await flushPromises()
+  expect(w.findAll('input[type=date]')).toHaveLength(1)
+  expect(w.findAll('.volunteer-fields')).toHaveLength(1)
+  expect(w.find('.fields-editor').exists()).toBe(false)
   const labels = w.findAll('label')
   await labels
     .find((l) => l.text().startsWith('本次工时（小时）'))

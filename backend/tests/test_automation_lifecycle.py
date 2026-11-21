@@ -110,6 +110,7 @@ def deletion_env(env, tmp_path):
                "facultyId": student.faculty_id, "departmentId": student.department_id,
                "majorId": student.major_id, "applicationType": "comprehensive",
                "projectName": "人工申请", "selfScore": 1}
+    login(client, users["student"])
     result = client.post("/api/applications", data={"application": json.dumps(payload),
                          "files": (io.BytesIO(image_bytes()), "legacy.png")})
     assert result.status_code == 201, result.data
