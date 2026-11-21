@@ -35,6 +35,24 @@ def volunteer_env(env):
     return env
 
 
+def mark_ocr_matched(record_id):
+    """模拟 OCR 比对通过（matched），并解除"无可用图片"导致的同步打回。
+
+    新链路要求志愿材料先通过 OCR 比对或提交申诉才允许 submit；
+    本套用例关心的是审核通过后的工时累计与计分，与识别过程无关，
+    因此直接把比对结果置为 matched，而不是伪造一张能被模型识别的截图。
+    """
+    from material_models import MaterialRecord
+    from services.volunteer_ocr import input_digest
+    row = db.session.get(MaterialRecord, record_id)
+    meta = {"status": "matched", "material_version": row.version,
+            "input_digest": input_digest(row), "jobs": [], "reasons": [],
+            "comparisons": [], "auto_returned": False}
+    row.status = "draft"
+    row.analysis = {**(row.analysis or {}), "volunteer_ocr": meta}
+    db.session.commit()
+
+
 def submit_report(env,hours='220',as_of='2028-08-01'):
     client=env[1]
     login(client,env[2]['student'])
@@ -43,6 +61,7 @@ def submit_report(env,hours='220',as_of='2028-08-01'):
         'files':(io.BytesIO(b'%PDF-1.4 test report'),'report.pdf')})
     assert response.status_code==201,response.json
     row=response.json
+    mark_ocr_matched(row['id'])
     path=f"/api/materials/volunteer/records/{row['id']}"
     response=client.post(path+'/submit',json={'version':row['version']})
     assert response.status_code==200,response.json
@@ -86,6 +105,7 @@ def test_individual_reduced_hours_are_halved_in_aggregate(volunteer_env):
         'year':'2028', 'data':json.dumps({'reduced_hours':'6','award_date':'2028-08-02'}),
         'files':(io.BytesIO(b'%PDF-1.4 proof'),'proof.pdf')})
     assert response.status_code==201,response.json
+    mark_ocr_matched(response.json['id'])
     path=f"/api/materials/volunteer/records/{response.json['id']}"
     submitted=env[1].post(path+'/submit',json={'version':response.json['version']})
     assert submitted.status_code==200,submitted.json

@@ -1,6 +1,12 @@
+import os
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+# 测试环境默认关闭 SQLite 外键：多处用例刻意构造孤儿数据来验证容错路径
+# （例如「报告坏学生时不能声称完成」）。生产与本地开发默认开启，见 extensions.py。
+# 需要用外键跑整套测试时：$env:SQLITE_FOREIGN_KEYS='1'; pytest
+os.environ.setdefault("SQLITE_FOREIGN_KEYS", "0")
 
 import pytest
 from datetime import date

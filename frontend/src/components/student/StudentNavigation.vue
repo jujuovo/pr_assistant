@@ -17,11 +17,7 @@
       >
         <path :d="sidebarCollapsed ? 'M9 6l6 6-6 6' : 'M15 6l-6 6 6 6'" /></svg
       ><span class="collapse-label">收起侧栏</span></button
-    ><button
-      class="student-identity od-row"
-      :class="{ selected: activePage === 'home' }"
-      :aria-current="activePage === 'home' ? 'page' : undefined"
-      @click="go('home')"
+    ><button class="student-identity od-row" @click="go('home')"
       ><img
         v-if="auth.userAvatar && !avatarFailed"
         :src="auth.userAvatar"
@@ -31,7 +27,8 @@
         @error="avatarFailed = true"
       /><span v-else class="identity-fallback" aria-hidden="true">演</span
       ><span class="od-field"
-        ><strong>{{ auth.userName || '同学' }}</strong><span class="identity-role">学生</span></span
+        ><strong>{{ auth.userName || '同学' }}</strong
+        ><span class="identity-role">学生</span></span
       ></button
     ><button class="nav-mobile-toggle" :aria-expanded="mobileOpen" @click="mobileOpen = !mobileOpen"
       >{{ mobileOpen ? '收起导航' : '展开导航' }} · {{ currentLabel }}</button
@@ -39,7 +36,9 @@
       id="student-side-navigation"
       :class="{ 'nav-mobile-open': mobileOpen }"
       aria-label="学生导航"
-      ><button type="button" class="student-direct-item"
+      ><button
+        type="button"
+        class="student-direct-item"
         :class="{ selected: activePage === 'home' }"
         :aria-current="activePage === 'home' ? 'page' : undefined"
         @click="go('home')"
@@ -96,8 +95,8 @@ const groups = [
     icon: 'file-lines',
     items: [
       { key: 'regulations', title: '保研条例', icon: 'book-open' },
-      { key: 'statistics', title: '加分统计', icon: 'chart-column' }
-      ,{ key: 'rankings', title: '我的排名', icon: 'ranking-star' }
+      { key: 'statistics', title: '加分统计', icon: 'chart-column' },
+      { key: 'rankings', title: '我的排名', icon: 'ranking-star' }
     ]
   },
   {

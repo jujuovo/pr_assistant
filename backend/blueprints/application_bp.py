@@ -21,6 +21,7 @@ import os
 import traceback
 import uuid
 from extensions import db
+from sqlalchemy.exc import IntegrityError
 from werkzeug.exceptions import HTTPException
 from flask import abort
 from certificate_models import CertificateAssessment
@@ -34,6 +35,32 @@ from workflow_models import MaterialReviewCommand
 
 # 创建蓝图实例
 application_bp = Blueprint("application", __name__, url_prefix="/api")
+
+# 已经迁到 MaterialRecord 链路的材料类别。这些类别只能走新材料申报入口：
+# 再从旧 /api/applications 写一遍，等于同一份材料在新旧两套表各存一条，
+# 审核记录、计分和汇总都会出现双源，而且无法回溯哪一条是权威的。
+# 表结构与 docs/legacy-application-exit.md 对齐；新增迁移类别时两处一起改。
+MIGRATED_MATERIAL_ROUTES = {
+    "competition": {"label": "学业竞赛", "code": "competition_material_route_required",
+                    "route": "/api/materials/competition/records"},
+    "volunteer": {"label": "志愿服务工时", "code": "volunteer_material_route_required",
+                  "route": "/api/materials/volunteer/records"},
+    "volunteer_credit": {"label": "志愿信用工时", "code": "volunteer_material_route_required",
+                         "route": "/api/materials/volunteer/records"},
+    "volunteer_honor": {"label": "志愿荣誉工时", "code": "volunteer_material_route_required",
+                        "route": "/api/materials/volunteer/records"},
+    "social_practice": {"label": "社会实践", "code": "social_practice_material_route_required",
+                        "route": "/api/materials/social_practice/records"},
+    "research_paper": {"label": "科研论文", "code": "research_paper_material_route_required",
+                       "route": "/api/materials/research_paper/records"},
+    "innovation_training": {"label": "创新创业训练",
+                            "code": "innovation_training_material_route_required",
+                            "route": "/api/materials/innovation_training/records"},
+    "student_work": {"label": "学生工作", "code": "student_work_material_route_required",
+                     "route": "/api/materials/student_work/records"},
+    "arts_sports": {"label": "文体活动", "code": "arts_sports_material_route_required",
+                    "route": "/api/materials/arts_sports/records"},
+}
 
 
 def _compatibility_meta(application, rule=None):
@@ -448,6 +475,19 @@ def create_application():
                     "route": "/api/materials/competition/records",
                 }), 409
 
+        # 已迁到 MaterialRecord 链路的类别不允许再新建旧 Application。
+        # 只按 rule_id 判断会留漏洞：不带 rule_id 的请求能绕过守卫，
+        # 于是同一份材料在新旧两套表各存一份，审核与计分都出现双源。
+        migrated_route = MIGRATED_MATERIAL_ROUTES.get(
+            str(data.get("application_type") or data.get("sub_type") or "").strip()
+        )
+        if migrated_route is not None:
+            return jsonify({
+                "error": f"该类材料必须使用新材料申报入口：{migrated_route['label']}",
+                "code": migrated_route["code"],
+                "route": migrated_route["route"],
+            }), 409
+
         # 验证项目名称长度
         if "project_name" in data and (len(data["project_name"]) < 2 or len(data["project_name"]) > 50):
             return jsonify({"error": "项目名称长度必须在2-50个字符之间"}), 400
@@ -458,7 +498,6 @@ def create_application():
             user = actor()
             if user.role != "student" or user.student_id != data.get("student_id") or user.faculty_id != data.get("faculty_id"):
                 abort(403, description="只能为本人提交证书材料")
-            from models import Student
             owner = Student.query.filter_by(student_id=user.student_id).one()
             data.update(student_name=owner.student_name, department_id=owner.department_id, major_id=owner.major_id)
             if data.get("status", "pending") not in ("draft", "pending"):
@@ -576,6 +615,24 @@ def create_application():
         if data.get("award_date"):
             award_date_value = datetime.fromisoformat(data["award_date"]).date()
 
+        # 缺字段时必须在写库前给出 400，否则会撞外键抛出未捕获异常变成 500，
+        # 客户端只能看到"服务器内部错误"，无法判断自己少传了什么。
+        required_fields = (
+            ("student_id", "学生学号"), ("faculty_id", "学院"), ("department_id", "系"),
+            ("major_id", "专业"), ("application_type", "申请类别"), ("project_name", "项目名称"),
+        )
+        missing_fields = [label for field, label in required_fields if data.get(field) in (None, "")]
+        if missing_fields:
+            return jsonify({"error": "缺少必填字段：" + "、".join(missing_fields),
+                            "code": "application_fields_required"}), 400
+        owner = Student.query.filter_by(student_id=data["student_id"]).first()
+        if owner is None:
+            return jsonify({"error": f"学生不存在：{data['student_id']}",
+                            "code": "student_not_found"}), 400
+        data.setdefault("student_name", owner.student_name)
+        if not data.get("student_name"):
+            data["student_name"] = owner.student_name
+
         new_application = Application(
             student_id=data.get("student_id"),
             student_name=data.get("student_name"),
@@ -599,10 +656,20 @@ def create_application():
             pin_application_cycle(new_application)
 
         db.session.add(new_application)
-        db.session.flush()
+        try:
+            db.session.flush()
+        except IntegrityError:
+            db.session.rollback()
+            return jsonify({"error": "申请数据与后端记录不一致，请检查学生、学院、系与专业",
+                            "code": "invalid_reference"}), 400
         if certificate_selection:
             enqueue(new_application, *certificate_selection)
-        db.session.commit()
+        try:
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            return jsonify({"error": "申请数据与后端记录不一致，请检查学生、学院、系与专业",
+                            "code": "invalid_reference"}), 400
 
         # 构建完整的响应数据
         app_data = {
