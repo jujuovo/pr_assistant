@@ -1,11 +1,11 @@
 <template>
   <section class="manual-draft"
     ><button type="button" class="btn btn-outline" @click="open">{{
-      category === 'volunteer' ? '填写志愿服务材料' : '不使用识别，直接人工填写'
+      category === 'volunteer' ? '填写志愿服务材料' : '人工填写材料'
     }}</button>
     <form v-if="visible && spec" @submit.prevent="save"
-      ><h3>人工填写材料</h3
-      ><p>{{
+      ><h3 v-if="category === 'volunteer'">人工填写材料</h3
+      ><p v-if="category === 'volunteer'">{{
         category === 'volunteer'
           ? '请手填本次工时、工时类别和服务记录日期。信用时数、荣誉时数截图按普通志愿服务核对：信用填写签退当天日期，荣誉填写录入当天日期。后台比对三项，一致后可提交教师审核；有差异可申诉。'
           : '此通道仅供人工核验，不运行 OCR 或计算加分。'
@@ -39,7 +39,8 @@
         ><p class="date-guidance"
           >信用时数同时核对签到、签退时间，跨日按签退日期；荣誉时数按录入日期。不同日期请分次申报。</p
         > </div
-      ><MaterialFieldsEditor
+      ><PolicyMaterialFields v-if="['research_paper', 'invention_patent', 'innovation_training'].includes(category)" v-model="data" :category="category" />
+        <MaterialFieldsEditor
         v-else
         v-model="data"
         :fields="fields"
@@ -62,6 +63,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import materialApi from '@/services/materialApi.js'
+import PolicyMaterialFields from '@/components/common/PolicyMaterialFields.vue'
 import MaterialFieldsEditor from '@/components/common/MaterialFieldsEditor.vue'
 import MaterialImagePreview from '@/components/common/MaterialImagePreview.vue'
 const props = defineProps({ category: { type: String, required: true } }),
@@ -107,7 +109,7 @@ async function open() {
   try {
     const context = await materialApi.getTypes()
     spec.value = context.types.find((t) => t.key === props.category)
-    if (props.category === 'volunteer') {
+    if (['research_paper', 'invention_patent', 'innovation_training', 'student_work','volunteer'].includes(props.category)) {
       if (!context.cycle_code || context.cycle_code < 2028)
         throw new Error('请先由管理员启用2028届或之后的推免周期。')
       year.value = context.cycle_code

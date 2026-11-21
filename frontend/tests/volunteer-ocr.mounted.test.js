@@ -174,7 +174,7 @@ test('retry invokes volunteer OCR instead of a competition endpoint', async () =
 test('teacher sees priority appeal before ordinary material and may approve without comment', async () => {
   const appeal = {
     ...base,
-    status: 'submitted',
+    status: 'submitted', allowed_actions: ['review'],
     workflow_state: 'pending_review',
     priority_review: true,
     appeal: { reason: '请重点核对图片中的202小时' }

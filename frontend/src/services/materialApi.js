@@ -9,7 +9,8 @@ export const MATERIAL_CATEGORIES = Object.freeze([
   'certification',
   'social_practice',
   'research',
-  'competition_evidence',
+  'research_paper', 'invention_patent', 'innovation_training',
+    'competition_evidence',
   'volunteer'
 ])
 const base = '/api/materials'
@@ -151,10 +152,10 @@ export const materialApi = {
     }),
   withdraw: (category, id, version) => versionAction('withdraw', category, id, version),
   check: (category, id, version) => versionAction('check', category, id, version),
-  review: (category, id, version, decision, comment) =>
+  review: (category, id, version, decision, comment, facts = {}) =>
     requestJson(`${recordPath(category, id)}/review`, {
       method: 'POST',
-      data: { version: positiveInteger(version), decision, comment }
+      data: { version: positiveInteger(version), decision, comment, ...facts }
     }),
   reviewCompetition: (id, version, decision, comment, idempotencyKey, ocrConfirmed) => {
     if (!['approve', 'return'].includes(decision)) throw new TypeError('竞赛审核只能通过或退回')

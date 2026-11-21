@@ -44,7 +44,8 @@ def test_student_score_contract_explains_totals_rules_and_exclusions(env):
     data = response.json
     assert data["base"] == {"academic_score": "80.0000", "academic_weight": "80.0000"}
     assert data["categories"]["academic"] == {
-        "raw_score": "5.0000", "effective_score": "5.0000"
+        "raw_score": "5.0000", "effective_score": "5.0000",
+        "note": "最终实际计分受本组上限影响。",
     }
     assert data["comprehensive_score"] == "69.0000"
     assert data["rule_version_ids"]
@@ -57,7 +58,7 @@ def test_student_score_contract_explains_totals_rules_and_exclusions(env):
         "id", "project_source", "verification_status", "scoring_status",
         "cycle_code", "cycle_policy_version_id", "rule_version_id",
         "automatic_score", "override_score", "candidate_score",
-        "included_score", "included", "exclusion_reason", "allowed_actions",
+        "included_score", "item_bonus", "included", "exclusion_reason", "allowed_actions",
         "updated_at", "rule_label",
     }
     assert data["entries"][0]["project_source"] == {

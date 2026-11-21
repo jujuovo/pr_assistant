@@ -5,6 +5,7 @@ import io
 import json
 from pathlib import Path
 import uuid
+from domain.student_work_scoring import POLICY_VERSION as WORK_POLICY
 from flask import Blueprint, abort, current_app, jsonify, request, send_file
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
@@ -12,7 +13,7 @@ from werkzeug.exceptions import HTTPException
 from extensions import db
 from material_models import CompetitionOcrJob, MaterialRecord, MaterialAttachment, MaterialSource
 from services.automation import actor
-from services.materials.schemas import (TYPES, type_view, normalize, analyze, integer, text, object_keys)
+from services.materials.schemas import (RESEARCH_TYPES, TYPES, type_view, normalize, analyze, integer, text, object_keys)
 from services.materials.service import (body, record_at, category_exists, authorize, view,
                                        version_change, event, stored_path, check, import_sources)
 from use_cases.materials import (
@@ -175,7 +176,7 @@ def competition_catalog_item(competition_id):
 def create_manual_with_files(category,user):
     from services.materials.ocr_schemas import MANUAL_TYPES
     from services.materials.attachments import prepare_uploads
-    if category not in MANUAL_TYPES | {'student_work','competition','volunteer'}:
+    if category not in MANUAL_TYPES | RESEARCH_TYPES | {'innovation_training', 'student_work','competition','volunteer'}:
         raise ValueError('该类别请使用正式材料申报接口')
     object_keys(request.form,{'year','data'},{'year','data'})
     try:
@@ -188,7 +189,7 @@ def create_manual_with_files(category,user):
     volunteer_dirs=[]
     try:
         row=create_material(user,category,{'year':integer(int(request.form['year']),'year',2000,2100),
-                                         'data':payload,**({'manual_only':True} if category not in {'competition','volunteer'} else {})})
+                                         'data':payload,**({'manual_only':True} if category not in RESEARCH_TYPES | {'innovation_training', 'competition','volunteer'} else {})})
         row,created=add_attachments(user,row,row.version,files,stored_path('placeholder').parent)
         if category=='competition':
             from services.competition_ocr.bridge import enqueue_created_material
@@ -256,7 +257,9 @@ def records(category):
         from services.materials.ocr_schemas import MANUAL_TYPES
         # 已审核态必须包含竞赛：竞赛材料审核后是 needs_correction/scored，
         # 旧写法只放行人工材料类别，导致教师永远查不到竞赛审核记录。
-        reviewed_categories = MANUAL_TYPES | {'student_work', 'volunteer', 'competition'}
+        reviewed_categories = MANUAL_TYPES | RESEARCH_TYPES | {
+            'innovation_training', 'student_work', 'volunteer', 'competition',
+        }
         statuses = ('verified','rejected','needs_correction','scored','verified_not_eligible') if request.args.get('reviewed') == '1' and category in reviewed_categories else ('submitted','under_review')
         query=query.filter_by(faculty_id=user.faculty_id).filter(MaterialRecord.status.in_(statuses))
         from services.materials.ocr_schemas import MANUAL_TYPES
@@ -310,6 +313,8 @@ def submit(category,record_id):
     if category == 'volunteer':
         from use_cases.volunteer_materials import submit_volunteer
         submit_volunteer(user,row,payload['version'])
+    elif row.normalization_version == WORK_POLICY:
+        submit_material(user,row,payload["version"])
     elif is_manual(row):
         submit_manual(user,row,payload['version'])
     else:
@@ -418,6 +423,26 @@ def review(category,record_id):
     row=record_at(category,record_id,allow_teacher_processed=True)
     user=actor()
     payload=body()
+    if category == "student_work" and row.normalization_version == WORK_POLICY:
+        from domain.student_work_scoring import candidate
+        from services.materials.schemas import normalize_student_work
+        from use_cases.research_review import review_policy_material
+        result, replayed = review_policy_material(user, row, payload, WORK_POLICY, normalize_student_work, candidate, None)
+        db.session.commit()
+        return jsonify({**result, "replayed": replayed})
+    if category == "innovation_training":
+        from domain.innovation_scoring import POLICY_VERSION, candidate
+        from services.materials.schemas import normalize_innovation
+        from use_cases.research_review import review_policy_material
+        result, replayed = review_policy_material(user, row, payload, POLICY_VERSION,
+                                                  normalize_innovation, candidate, "project_key")
+        db.session.commit()
+        return jsonify({**result, "replayed": replayed})
+    if category in RESEARCH_TYPES:
+        from use_cases.research_review import review_research
+        result, replayed = review_research(user, row, payload)
+        db.session.commit()
+        return jsonify({**result, "replayed": replayed})
     if is_manual(row):
         object_keys(payload, {'version','decision','comment'}, {'version','decision'})
         review_manual(user,row,payload)

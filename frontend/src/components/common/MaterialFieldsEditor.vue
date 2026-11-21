@@ -20,11 +20,13 @@
       ></textarea>
       <input
         v-else
+        :list="suggestions[field] ? listId + field : undefined"
         :type="isDate(field) ? 'date' : 'text'"
         :value="modelValue[field] ?? ''"
         @input="change(field, $event.target.value)"
         :required="required.includes(field)"
       />
+      <datalist v-if="suggestions[field]" :id="listId + field"><option v-for="value in suggestions[field]" :key="value" :value="value" /></datalist>
     </label>
     <fieldset v-for="(role, index) in modelValue.appointments || []" :key="index"
       ><legend>任职记录 {{ index + 1 }}</legend
@@ -38,13 +40,15 @@
   ></div>
 </template>
 <script setup>
-import { computed } from 'vue'
+import { computed, useId } from 'vue'
 import {
   ARRAY_FIELDS,
   fieldLabel,
   displayValue,
   INTERNAL_FIELDS
 } from '@/services/materialFields.js'
+const listId = useId()
+const suggestions = { database: ['SCI-E', 'EI Compendex', 'Scopus', 'CNKI'], requester_school: ['厦门大学'] }
 const props = defineProps({
   modelValue: { type: Object, default: () => ({}) },
   fields: { type: Array, default: () => [] },

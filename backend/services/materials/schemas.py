@@ -21,6 +21,24 @@ TYPES = {
               'non_ocr': ['称号/级别/颁发单位标准化', '学校荣誉名册对照', '人工核验记录']},
 }
 
+RESEARCH_COMMON = {"title", "work_key", "first_institution", "authors", "student_author", "mentor"}
+PAPER_FIELDS = {"venue", "proof_date", "published", "indexed", "article_type", "cofirst_authors",
+                "ccf_grade", "ccf_version", "ccf_entry", "directory_basis", "verified_family",
+                "if_year", "impact_factor"}
+RESEARCH_TYPES = {"research_paper", "invention_patent"}
+for key, label, fields in (
+    ("research_paper", "科研论文", PAPER_FIELDS),
+    ("invention_patent", "发明专利", {"authorized_national_invention", "certificate_date"}),
+):
+    TYPES[key] = {"name": label, "fields": sorted(RESEARCH_COMMON | fields),
+                  "required": sorted(RESEARCH_COMMON - {"mentor"}), "non_ocr": ["教师核验原件及作者顺序"]}
+
+PROJECT_FIELDS = {"project_name", "project_number", "level", "role", "completed", "proof_type", "completion_date"}
+TYPES["innovation_training"] = {
+    "name": "创新创业训练", "fields": sorted(PROJECT_FIELDS),
+    "required": ["project_name", "level", "role", "completed"],
+    "non_ocr": ["人工核验教务处证明或创新网结题截图及项目关联依据"],
+}
 TYPES.update(NEW_TYPES)
 TYPES['volunteer'] = {
     'name': '志愿服务工时',
@@ -96,7 +114,74 @@ def object_keys(data, allowed, required=()):
         raise ValueError('缺少字段：' + ', '.join(sorted(missing)))
 
 
+def normalize_research(category, data, *, verified=False):
+    spec = TYPES[category]
+    required = set(spec["required"])
+    if category == "research_paper":
+        required.update({"venue", "proof_date", "published", "indexed", "article_type", "cofirst_authors"})
+    else:
+        required.add("authorized_national_invention")
+        if isinstance(data, dict) and data.get("authorized_national_invention") is True:
+            required.add("certificate_date")
+    object_keys(data, spec["fields"], required)
+    result = {}
+    for key, value in data.items():
+        if key in {"authors", "cofirst_authors"}:
+            if not isinstance(value, list) or len(value) > 1000:
+                raise ValueError(f"{key}应为作者列表")
+            result[key] = [text(item, key) for item in value]
+            if len(result[key]) != len(set(result[key])):
+                raise ValueError("作者标识必须唯一")
+        elif key in {"published", "indexed", "authorized_national_invention"}:
+            if type(value) is not bool:
+                raise ValueError(f"{key}必须为布尔值")
+            result[key] = value
+        elif key in {"certificate_date", "proof_date"}:
+            result[key] = day(value, key)
+        elif key == "impact_factor":
+            result[key] = numeric(value, key)
+        elif key == "if_year":
+            result[key] = integer(value, key, 1900, 2100)
+        else:
+            result[key] = text(value, key)
+    authors = result["authors"]
+    if result["student_author"] not in authors or result.get("mentor", result["student_author"]) not in authors:
+        raise ValueError("申报人和已指定导师必须列在署名顺序中")
+    if not set(result.get("cofirst_authors", ())).issubset(authors):
+        raise ValueError("共同第一作者必须属于署名列表")
+    if "ccf_grade" in result:
+        if result["ccf_grade"] not in ("A", "B", "C") or not result.get("directory_basis"):
+            raise ValueError("请提供CCF等级及目录依据")
+        if verified and not (result.get("ccf_version") and result.get("ccf_entry")):
+            raise ValueError("请核定CCF目录版本和条目")
+    if result.get("verified_family") == "CELL" and not {"impact_factor", "if_year"} <= result.keys():
+        raise ValueError("请提供CELL子刊影响因子及年份")
+    return result
+
+
+def normalize_innovation(category, data, *, verified=False):
+    from domain.innovation_scoring import SCORES
+    required = set(TYPES[category]["required"])
+    identity = {"project_key", "identity_basis"} if verified else set()
+    object_keys(data, PROJECT_FIELDS | identity, required | identity)
+    if type(data["completed"]) is not bool:
+        raise ValueError("请确认项目是否结题")
+    result = {key: text(value, key) for key, value in data.items() if key != "completed"}
+    result["completed"] = data["completed"]
+    if result["level"] not in SCORES or result["role"] not in SCORES[result["level"]]:
+        raise ValueError("立项级别或角色无效")
+    if result["completed"] and result.get("proof_type") not in {"academic_affairs", "innovation_portal"}:
+        raise ValueError("请提供教务处证明或创新网结题截图")
+    if result["completed"] or "completion_date" in result:
+        result["completion_date"] = day(result.get("completion_date"), "结项时间")
+    return result
+
+
 def normalize(category, data):
+    if category == "innovation_training":
+        return normalize_innovation(category, data)
+    if category in RESEARCH_TYPES:
+        return normalize_research(category, data)
     if category not in TYPES:
         raise ValueError('不支持的材料类别')
     spec = TYPES[category]
@@ -146,12 +231,12 @@ def normalize(category, data):
             raise ValueError('appointments必须包含1至100条任职记录')
         normalized = []
         for role in appointments:
-            object_keys(role, APPOINTMENT_FIELDS, APPOINTMENT_FIELDS)
+            object_keys(role, APPOINTMENT_FIELDS, APPOINTMENT_FIELDS - {"assessment_result"})
             start = day(role['start_date'],'任职开始日期')
             end = day(role['end_date'],'任职结束日期') if role['end_date'] is not None else None
             if end and end < start:
                 raise ValueError('任职结束日期不能早于开始日期')
-            normalized.append({k:text(role[k],k) for k in APPOINTMENT_FIELDS - {'start_date','end_date'}} | {'start_date':start,'end_date':end})
+            normalized.append({k:text(role.get(k, ""), k, required=k != "assessment_result") for k in APPOINTMENT_FIELDS - {'start_date','end_date'}} | {'start_date':start,'end_date':end})
         result['appointments'] = sorted(normalized, key=lambda r:(r['start_date'],r['organization'],r['position']))
     normalize_extra(category, data, result, spec, text, numeric)
     if category == 'competition' and result.get('project_key','manual') not in COMPETITION_PROJECTS:
@@ -219,3 +304,35 @@ def type_view():
                       'auto_bonus_enabled':key in {'competition','volunteer'}, 'manual_only':key in MANUAL_TYPES})
     return {'cycle_code':policy.cycle_code if policy else None, 'types':types, 'course_fields':sorted(COURSE_FIELDS), 'appointment_fields':sorted(APPOINTMENT_FIELDS),
             'note':'识别建议经学生确认保存；正式竞赛教师核验后按固定规则计分，目录外材料仅人工核验。'}
+
+
+def normalize_student_work(category, data, *, verified=False):
+    from domain.student_work_scoring import COEFFICIENT, TENURE
+
+    object_keys(data, {"assessments"}, {"assessments"})
+    rows = data["assessments"]
+    if not isinstance(rows, list) or not rows:
+        raise ValueError("须逐项提供任职学年考核与核验依据")
+    fields = {"appointment_index", "academic_year", "mapped_position", "mapping_basis", "scope",
+              "tenure", "tenure_basis", "assessment_score", "assessor_role", "assessment_source", "proof_date"}
+    result = []
+    seen = set()
+    for item in rows:
+        object_keys(item, fields, fields)
+        row = {key: text(item[key], key) for key in fields - {"appointment_index", "assessment_score", "academic_year"}}
+        row["appointment_index"] = integer(item["appointment_index"], "任职记录序号", 0, 99)
+        row["academic_year"] = integer(item["academic_year"], "任职学年起始年份", 1900, 2100)
+        row["assessment_score"] = numeric(item["assessment_score"], "核定考核分", high=Decimal(100))
+        row["proof_date"] = day(row["proof_date"], "证明落款日期")
+        if row["mapped_position"] not in COEFFICIENT or row["tenure"] not in TENURE:
+            raise ValueError("须核验条例对应岗位及任期档位")
+        if row["scope"] not in {"college", "university"} or row["assessor_role"] not in {"辅导员", "指导老师"}:
+            raise ValueError("须核验组织和评分人身份")
+        if row["scope"] == "university" and row["assessor_role"] != "指导老师":
+            raise ValueError("校级组织须由该组织指导老师评分")
+        identity = row["appointment_index"], row["academic_year"]
+        if identity in seen:
+            raise ValueError("同一任职学年考核重复")
+        seen.add(identity)
+        result.append(row)
+    return {"assessments": result}

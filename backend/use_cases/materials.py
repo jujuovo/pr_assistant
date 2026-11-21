@@ -21,8 +21,9 @@ from domain.materials import (
 )
 from extensions import db
 from material_models import MaterialAttachment, MaterialEvent, MaterialRecord
-from models import Application, Student
-from services.materials.schemas import analyze, integer, normalize, object_keys
+from domain.student_work_scoring import POLICY_VERSION as WORK_POLICY
+from models import Application, Faculty, Student
+from services.materials.schemas import RESEARCH_TYPES, analyze, integer, normalize, object_keys
 from workflow_models import CompetitionRulePackage, MaterialReviewCommand
 from workflow_models import RuleVersion
 from models import Rule
@@ -560,7 +561,15 @@ def create_material(user, category, payload):
     owner = Student.query.filter_by(student_id=user.student_id).first()
     if not owner or not owner.faculty_id or owner.faculty_id != user.faculty_id:
         raise MaterialUseCaseError("学生账号未正确关联学院")
+    work_policy = (category == "student_work" and integer(payload["year"], "year", 2000, 2100) >= 2028
+                   and db.session.get(Faculty, owner.faculty_id).name == "信息学院")
+    if work_policy:
+        manual_only = False
+        if payload.get("application_id") is not None:
+            raise MaterialUseCaseError("干部任职使用独立材料申报")
     application_id = payload.get("application_id")
+    if category in RESEARCH_TYPES | {"innovation_training"} and application_id is not None:
+        raise MaterialUseCaseError("科研成果使用独立材料申报")
     competition_package = None
     if category == "competition":
         if application_id is not None:
@@ -610,6 +619,8 @@ def create_material(user, category, payload):
         status="draft",
         competition_rule_package_id=(competition_package.id if competition_package else None),
     )
+    if work_policy:
+        row.normalization_version = WORK_POLICY
     if manual_only:
         row.analysis = {**row.analysis, "manual_only":True}
     db.session.add(row)
@@ -661,6 +672,13 @@ def submit_material(user, row, version):
     from services.materials.originals import verify_ocr_originals
     verify_ocr_originals(row)
     policy = current_cycle_policy(required=True)
+    if row.category in RESEARCH_TYPES | {"innovation_training"} or row.normalization_version == WORK_POLICY:
+        from domain.research_scoring import POLICY_VERSION
+        if not row.attachments or policy.cycle_code < 2028 or row.year != policy.cycle_code:
+            raise MaterialUseCaseError("需要提交证明并选择适用的2028届或以后周期")
+        if row.category == "innovation_training":
+            from domain.innovation_scoring import POLICY_VERSION
+        row.normalization_version = WORK_POLICY if row.category == "student_work" else POLICY_VERSION
     if row.category != "competition":
         from use_cases.scoring import match_published_rule
         legacy_match = match_published_rule(row, cycle_code=policy.cycle_code)
@@ -852,6 +870,15 @@ def create_correction_version(user, row, version, confirmed_terms):
             "该退回材料已经创建补正版本，请继续处理现有补正稿",
             code="correction_already_exists", status_code=409,
         )
+    if row.category in RESEARCH_TYPES | {"innovation_training"} or row.normalization_version == WORK_POLICY:
+        if row.status not in {"needs_correction", "verified_not_eligible", "scored"}:
+            raise MaterialUseCaseError("当前材料不能补正", status_code=409)
+        _cas_change(row, version, (row.status,), {})
+        corrected = create_material(user, row.category, {"year": row.year, "data": confirmed_terms})
+        corrected.supersedes_record_id = row.id
+        corrected.correction_sequence = (row.correction_sequence or 0) + 1
+        _event(corrected, user, "correction_version_created", {"supersedes_record_id": row.id})
+        return corrected
     if row.category == "competition":
         if row.status != "needs_correction":
             raise MaterialUseCaseError(
