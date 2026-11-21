@@ -20,7 +20,7 @@
             ><div
               ><span>候选分</span><strong>{{ row.candidateScore ?? '—' }}</strong></div
             ><div
-              ><span>计入分</span><strong>{{ row.includedScore ?? '0' }}</strong></div
+              ><span>逐项加分</span><strong>{{ row.includedScore ?? '0' }}</strong></div
             ><div
               ><span>计入状态</span
               ><b>{{ row.included ? '已计入' : row.reason || '未计入' }}</b></div

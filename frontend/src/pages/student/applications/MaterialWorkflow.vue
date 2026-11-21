@@ -1,9 +1,10 @@
 <template>
   <section class="page-content material-submission"
     ><h1>提交{{ names[category] || '证明材料' }}</h1>
+    <label v-if="!route.query.editId && ['research_paper','invention_patent'].includes(category)">材料类型<select :value="category" @change="router.replace({query:{page:'materials', category:$event.target.value}})"><option value="research_paper">论文</option><option value="invention_patent">授权发明专利</option></select></label>
     <CompetitionWorkflow v-if="category === 'competition'" />
     <template v-else
-      ><p>{{
+      ><p v-if="category === 'volunteer'">{{
         category === 'volunteer'
           ? '上传本次工时证明后，系统在后台比对工时、工时类别和服务记录日期。信用、荣誉截图均按普通志愿服务，分别采用签退日期、录入日期。一致后可正式提交教师审核；不一致或无法识别会打回，支持申诉转人工审核。'
           : '按原件手动填写，本通道由教师人工核验，不自动计分。'
@@ -12,11 +13,12 @@
       ><p v-if="error" role="alert">{{ error }} <button @click="loadEdit">重试</button></p>
       <form v-if="editing" @submit.prevent="saveEdit"
         ><h2>修改材料 #{{ editing.id }}</h2
-        ><MaterialFieldsEditor
+        ><PolicyMaterialFields v-if="['research_paper', 'invention_patent', 'innovation_training'].includes(category)" v-model="editData" :category="category" />
+        <MaterialFieldsEditor
+          v-else
           v-model="editData"
           :labels="category === 'volunteer' ? { award_date: '服务记录日期' } : {}"
-        /><MaterialImagePreview :attachments="editing.attachments || []" /><p
-          >原件已保留，无须重复上传。</p
+        /><MaterialImagePreview :attachments="editing.attachments || []" /><p v-if="editing.attachments?.length">原件已保留。</p><label v-else>请上传本版本的证明原件<input type="file" multiple required @change="files = Array.from($event.target.files)" /></label
         ><button class="btn btn-primary" :disabled="busy">{{
           busy ? '保存中…' : '保存修改'
         }}</button></form
@@ -33,12 +35,15 @@ import { useRoute, useRouter } from 'vue-router'
 import materialApi from '@/services/materialApi.js'
 import CompetitionWorkflow from './CompetitionWorkflow.vue'
 import ManualMaterialDraft from '@/components/student/ManualMaterialDraft.vue'
+import PolicyMaterialFields from '@/components/common/PolicyMaterialFields.vue'
 import MaterialFieldsEditor from '@/components/common/MaterialFieldsEditor.vue'
 import MaterialImagePreview from '@/components/common/MaterialImagePreview.vue'
+const files=ref([])
 const route = useRoute(),
   router = useRouter(),
   categories = [
     'competition',
+    'research_paper', 'invention_patent', 'innovation_training',
     'competition_evidence',
     'certification',
     'social_practice',
@@ -57,6 +62,7 @@ const category = ref(
   editing = ref(null),
   editData = ref({})
 const names = {
+  research_paper: '学术论文', invention_patent: '授权发明专利', innovation_training: '创业创新',
   volunteer: '志愿服务累计工时',
   academic: '学业成绩',
   language: '外语能力',
@@ -97,6 +103,8 @@ async function saveEdit() {
       editing.value.version,
       editData.value
     )
+    editing.value = updated
+    if(files.value.length) editing.value = await materialApi.uploadAttachments(category.value,updated.id,updated.version,files.value)
     if (category.value === 'volunteer')
       await materialApi.startVolunteerOcr(updated.id, updated.version)
     history()
@@ -121,7 +129,10 @@ watch(
     await loadEdit()
   }
 )
-onMounted(loadEdit)
+onMounted(() => {
+  if(route.query.category==='research' && !route.query.editId) return router.replace({query:{page:'application-categories'}})
+  return loadEdit()
+})
 </script>
 <style scoped>
 .material-submission {

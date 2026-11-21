@@ -46,6 +46,7 @@
           >
         </p>
         <OcrAssessment v-if="row.category === 'competition'" :advice="row.ocr_assessment" />
+        <p v-else-if="row.bonus_result">候选分 {{row.bonus_result.candidate_score}} · 同类取舍后 {{row.bonus_result.included_score}} 分。{{row.bonus_result.reason}} 分组封顶结果见加分统计。</p>
         <p v-else-if="row.manual_only">此项通过人工通道核验，不自动计分。</p
         ><p v-else>根据该类别的现行规则审核计分。</p>
         <p v-if="row.category === 'volunteer' && row.analysis?.submitted_hours">
@@ -65,6 +66,9 @@
             v-if="row.ocr_raw_terms && row.category !== 'volunteer'"
             :data="row.ocr_raw_terms?.report?.fields || row.ocr_raw_terms?.fields || {}"
         /></details>
+        <p v-if="row.rule_version_id">规则版本 #{{row.rule_version_id}} · {{row.normalization_version}}</p>
+        <button v-if="['needs_correction','rejected','scored','verified_not_eligible'].includes(row.status)" @click="showOpinion(row)">查看审核意见</button>
+        <p v-for="event in opinions[row.id]" :key="event.id">{{event.details?.comment}}</p>
         <VolunteerOcrAssessment
           :assessment="row.volunteer_ocr"
           :appeal="row.appeal"
@@ -190,6 +194,7 @@ const router = useRouter(),
 const appealOpen = ref(null),
   appealReasons = ref({})
 const categoryNames = {
+  research_paper: '学术论文', invention_patent: '授权发明专利', innovation_training: '创业创新',
   volunteer: '志愿服务累计工时',
   academic: '学业成绩',
   language: '外语能力',
@@ -200,7 +205,7 @@ const categoryNames = {
   competition_evidence: '其他竞赛'
 }
 const states = {
-  draft: '草稿',
+  submitted:'待核验', scored:'已认定', verified_not_eligible:'已核验·不计分', draft: '草稿',
   ocr_queued: 'OCR队列中',
   ocr_running: 'OCR识别中',
   ready_to_submit: '待提交',
@@ -264,6 +269,13 @@ async function loadMore() {
   } finally {
     loading.value = false
   }
+}
+const opinions=ref({})
+async function showOpinion(row){
+ try{
+   const result=await materialApi.getEvents(row.category,row.id)
+   opinions.value[row.id]=result.events.filter(event=>event.action==='reviewed')
+ }catch(e){error.value=e.message}
 }
 function canSubmit(row) {
   return (
@@ -330,6 +342,11 @@ async function appeal(row) {
 async function correct(row) {
   busy.value = true
   try {
+    if(row.category !== 'competition'){
+      const correction = await materialApi.createCorrection(row.category,row.id,row.version,row.data)
+      edit(correction)
+      return
+    }
     const entry = await materialApi.getCompetitionCatalogItem(row.data.competition_id)
     const correction = await materialApi.createCorrection(
       'competition',

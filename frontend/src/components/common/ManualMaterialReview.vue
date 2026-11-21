@@ -5,7 +5,7 @@
       ><p>{{
         category === 'volunteer'
           ? '请核对本次工时证明、服务记录日期、服务对象认可，以及大型赛会和支教工时分类。通过后计入该学生本周期累计工时，并按学院办法计分。'
-          : '原件、OCR识别和学生申报值分别展示；本通道核验不生成加分。'
+          : '原件、OCR识别和学生申报值分别展示；按原件核定申报事实。政策材料通过后由系统计算得分。'
       }}</p></header
     >
     <label
@@ -39,9 +39,16 @@
         ><summary>核对原始识别</summary><MaterialFacts :data="row.ocr_raw_terms?.fields || {}"
       /></details>
       <MaterialImagePreview :attachments="row.attachments || []" />
-      <template v-if="!history && row.status === 'submitted'"
+      <PolicyMaterialFields v-if="!history && policy(row) && row.category !== 'student_work' && row.allowed_actions?.includes('review')" v-model="facts[row.id]" :category="row.category" review />
+      <template v-if="!history && policy(row) && row.category === 'student_work' && row.allowed_actions?.includes('review')">
+        <fieldset v-for="(a,i) in facts[row.id].assessments" :key="i"><legend>核定任职 {{a.appointment_index+1}}</legend>
+        <label v-for="(label,key) in assessmentLabels" :key="key">{{label}}
+        <select v-if="options[key]" v-model="a[key]"><option v-for="[v,l] in options[key]" :key="v" :value="v">{{l}}</option></select>
+        <input v-else v-model="a[key]" :type="key==='proof_date'?'date':['academic_year','assessment_score'].includes(key)?'number':'text'" /></label>
+        <button type="button" @click="facts[row.id].assessments.push({appointment_index:a.appointment_index})">为此任职增加学年</button></fieldset></template>
+      <template v-if="!history && row.allowed_actions?.includes('review')"
         ><label :for="'comment-' + row.id"
-          >核验意见（通过时选填；退回或不通过时必填）<textarea
+          >核验意见<textarea
             :id="'comment-' + row.id"
             v-model="comments[row.id]"
             maxlength="2000"
@@ -69,6 +76,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import materialApi from '@/services/materialApi.js'
+import PolicyMaterialFields from './PolicyMaterialFields.vue'
 import MaterialFacts from './MaterialFacts.vue'
 import MaterialImagePreview from './MaterialImagePreview.vue'
 import VolunteerOcrAssessment from './VolunteerOcrAssessment.vue'
@@ -78,7 +86,7 @@ const kinds = [
   ['competition_evidence', '目录外竞赛'],
   ['certification', '认证成绩'],
   ['social_practice', '社会实践'],
-  ['research', '成果检索报告'],
+  ['research', '成果检索报告'], ['research_paper','论文'], ['invention_patent','授权发明专利'], ['innovation_training','大创'],
   ['student_work', '学生工作']
 ]
 const decisions = [
@@ -94,18 +102,26 @@ const category = ref('social_practice'),
   comments = ref({}),
   notice = ref(''),
   audit = ref({})
+const facts=ref({})
+const assessmentLabels={academic_year:'任职学年起始年份',mapped_position:'条例岗位全称',mapping_basis:'岗位对应依据',scope:'组织范围',tenure:'任期档位',tenure_basis:'任期依据',assessment_score:'考核分',assessor_role:'考核人身份',assessment_source:'考核来源',proof_date:'证明落款日期'}
+const options={scope:[['college','院级'],['university','校级']],tenure:[['below_semester','不足一学期'],['semester','满一学期不足一学年'],['full_year','满一学年']],assessor_role:[['辅导员','辅导员'],['指导老师','指导老师']]}
+function policy(row){return ['research_paper','invention_patent','innovation_training'].includes(row.category) || row.normalization_version==='info-student-work-2025-02'}
 async function load() {
+  const requestedCategory=category.value
+  rows.value=[]
   loading.value = true
   error.value = ''
   try {
     const result = await materialApi.listRecords(category.value, {
       reviewed: props.history ? '1' : '0'
     })
+    for(const row of result.records.filter(policy)) facts.value[row.id]=row.category==='student_work'?{assessments:row.data.appointments.map((_,appointment_index)=>({appointment_index}))}:JSON.parse(JSON.stringify(row.data))
+    if(category.value !== requestedCategory) return
     rows.value = result.records
       .sort((a, b) => Number(!!b.priority_review) - Number(!!a.priority_review))
       .filter(
         (row) =>
-          (row.manual_only || row.category === 'volunteer') &&
+          (policy(row) || row.manual_only || row.category === 'volunteer') &&
           (props.history
             ? [
                 'verified',
@@ -114,7 +130,7 @@ async function load() {
                 'scored',
                 'verified_not_eligible'
               ].includes(row.status)
-            : row.status === 'submitted')
+            : ['submitted','under_review'].includes(row.status))
       )
   } catch (e) {
     error.value = e.message
@@ -123,7 +139,7 @@ async function load() {
   }
 }
 async function review(row, decision) {
-  if (decision !== 'verified' && !comments.value[row.id]?.trim()) {
+  if ((policy(row) || decision !== 'verified') && !comments.value[row.id]?.trim()) {
     error.value = '请先填写具体的核验意见。'
     document.getElementById('comment-' + row.id)?.focus()
     return
@@ -136,7 +152,8 @@ async function review(row, decision) {
       row.id,
       row.version,
       decision,
-      comments.value[row.id] || ''
+      comments.value[row.id] || '',
+      ...(policy(row) ? [{idempotency_key: crypto.randomUUID(), ...(decision==='verified'?{verified_facts:facts.value[row.id]}:{})}] : [])
     )
     notice.value = '核验结果已保存。'
     await load()

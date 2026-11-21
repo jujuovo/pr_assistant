@@ -19,11 +19,21 @@ def test_prepare_new_database_and_preserve_existing_data(tmp_path):
         assert result.returncode == 0, result.stdout + result.stderr
         with sqlite3.connect(database) as connection:
             assert connection.execute('select count(*) from user').fetchone()[0] == 3
-            assert connection.execute('select count(*) from rule').fetchone()[0] == 1
-            assert connection.execute('select count(*) from rule_version').fetchone()[0] == 1
+            assert connection.execute('select count(*) from rule').fetchone()[0] == 5
+            assert connection.execute('select count(*) from rule_version').fetchone()[0] == 5
             assert connection.execute('select count(*) from recommendation_cycle_policy where active_marker = 1').fetchone()[0] == 1
             assert connection.execute('select cycle_code from recommendation_cycle_policy where active_marker = 1').fetchone()[0] == 2028
-            assert connection.execute("select json_extract(snapshot, '$.cycle_code') from rule_version").fetchone()[0] == 2026
+            assert connection.execute("select json_extract(snapshot, '$.cycle_code') from rule_version where json_extract(snapshot, '$.cycle_code') = 2026").fetchone()[0] == 2026
+            research = connection.execute("""select json_extract(snapshot, '$.research_type') from rule_version
+                where json_extract(snapshot, '$.cycle_code') = 2028 and status = 'published'
+                and json_extract(snapshot, '$.calculation_formula.policy_id') = 'information-college-research-2025-02'
+                order by 1""").fetchall()
+            assert research == [('patent',), ('thesis',)]
+            assert connection.execute("""select count(*) from rule_version where status = 'published'
+                and json_extract(snapshot, '$.cycle_code') = 2028
+                and json_extract(snapshot, '$.sub_type') = 'innovation'
+                and json_extract(snapshot, '$.calculation_formula.policy_id') = 'info-innovation-2025-02'
+                """).fetchone()[0] == 1
             package = connection.execute(
                 "select cycle_code, scope_key, status, digest, "
                 "json_array_length(snapshot, '$.catalog'), "

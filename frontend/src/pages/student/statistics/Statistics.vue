@@ -32,13 +32,14 @@
             ><div
               ><dt>学业基础分</dt><dd>{{ score.base.academic_score }}</dd></div
             ><div
-              ><dt>学术专长计入分</dt><dd>{{ score.categories.academic.effective_score }}</dd></div
+              ><dt>学术专长最终实际计分</dt><dd>{{ score.categories.academic.effective_score }}</dd></div
             ><div
-              ><dt>综合表现计入分</dt
+              ><dt>综合表现最终实际计分</dt
               ><dd>{{ score.categories.comprehensive.effective_score }}</dd></div
             ></dl
           >
         </section>
+        <small v-if="score.categories.academic.note" class="score-cap-note">{{ score.categories.academic.note }}</small>
         <div class="score-metadata"
           ><span>计分结果：第{{ score.snapshot_version }}版</span
           ><span>更新时间（北京时间）：{{ formatScoreTime(score.updated_at) }}</span></div
@@ -57,18 +58,20 @@
         <div class="score-details-heading"
           ><h2>加分明细</h2><span>共 {{ rows.length }} 项材料</span></div
         >
+        <section v-for="group in groups" :key="group.key" class="score-group">
+          <h3>{{ group.label }} · 实际加分 {{ score.categories[group.key]?.effective_score ?? '—' }} 分</h3>
         <div class="score-table-container"
           ><table class="application-table"
             ><thead
               ><tr
                 ><th scope="col">材料</th><th scope="col">材料状态</th><th scope="col">计分规则</th
                 ><th scope="col" class="numeric-cell">候选分</th
-                ><th scope="col" class="numeric-cell">计入分</th
+                ><th scope="col" class="numeric-cell">逐项加分</th
                 ><th scope="col">计入状态／排除原因</th><th scope="col">更新时间</th
                 ><th scope="col">操作</th></tr
               ></thead
             ><tbody>
-              <tr v-for="row in rows" :key="row.id"
+              <tr v-for="row in group.rows" :key="row.id"
                 ><td class="material-title">{{ row.title }}</td
                 ><td>{{ statusText(row) }}</td
                 ><td class="rule-cell">{{ row.ruleLabel }}</td
@@ -110,6 +113,8 @@
             </tbody></table
           ></div
         >
+        </section>
+        <p v-if="!rows.length">暂无计分明细</p>
       </section>
     </template>
     <ScoreSourceDetail
@@ -143,6 +148,11 @@ const auth = useAuthStore(),
 const studentId = computed(() => auth.user?.studentId || auth.user?.student_id)
 const score = computed(() => workflow.score),
   rows = computed(() => scoreRows(score.value))
+const groups = computed(() => [
+  { key: 'academic', label: '学术专长' },
+  { key: 'comprehensive', label: '综合表现' }
+].map(group => ({ ...group, rows: rows.value.filter(row => row.group === group.key) }))
+  .filter(group => group.rows.length))
 const statusText = (row) => scoreStatusText(row.scoringStatus || row.verificationStatus)
 let detailTrigger = null
 function openDetails(row, event) {

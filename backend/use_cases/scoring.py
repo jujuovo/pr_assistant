@@ -187,9 +187,24 @@ def rebuild_student_snapshot(student_id, year):
             RuleVersion.id.in_(legacy_rule_ids)
         ).all()
     } if legacy_rule_ids else {}
+    from services.materials.schemas import RESEARCH_TYPES
+    from use_cases.research_review import allocate_research
+    allocate_research([entry for entry in entries if entry.category in RESEARCH_TYPES])
+    from domain.innovation_scoring import allocate_innovation
+    allocate_innovation([entry for entry in entries if entry.category == "innovation_training"])
+    from domain.student_work_scoring import POLICY_VERSION as WORK_POLICY, allocate
+    work_entries = [entry for entry in entries if entry.category == "student_work"
+                    and (entry.exclusion_basis or {}).get("policy") == WORK_POLICY]
+    if work_entries:
+        legacy_sources = [str(entry.source_id) for entry in entries if entry.category == "student_work"
+                          and (entry.exclusion_basis or {}).get("policy") != WORK_POLICY]
+        if legacy_sources:
+            raise ScoringUseCaseError("须先核对历史干部记录：" + ", ".join(legacy_sources), status_code=409)
+    allocate(work_entries)
+    work_ids = {entry.id for entry in work_entries}
     candidates = []
     for entry in entries:
-        if entry.competition_rule_package_id is not None:
+        if entry.id in work_ids or entry.competition_rule_package_id is not None or entry.category in RESEARCH_TYPES | {"innovation_training"}:
             continue
         version = versions.get(entry.rule_version_id)
         if not version:
@@ -208,7 +223,7 @@ def rebuild_student_snapshot(student_id, year):
         )
     allocation = {item.entry_id: item for item in allocate_candidates(candidates)}
     for entry in entries:
-        if entry.competition_rule_package_id is not None:
+        if entry.id in work_ids or entry.competition_rule_package_id is not None or entry.category in RESEARCH_TYPES | {"innovation_training"}:
             continue
         choice = allocation[entry.id]
         entry.included = choice.included
@@ -244,7 +259,15 @@ def rebuild_student_snapshot(student_id, year):
     current = StudentScoreSnapshot.query.filter_by(
         student_id=student_id, year=year, status="current"
     ).order_by(StudentScoreSnapshot.version.desc()).first()
-    if current and current.input_digest == projection.input_digest:
+    digest = projection.input_digest
+    innovation_history = ScoreEntry.query.with_entities(ScoreEntry.id, ScoreEntry.status).filter_by(
+        student_id=student_id, year=year, category="innovation_training"
+    ).order_by(ScoreEntry.id).all()
+    if innovation_history:
+        # A correction can restore exactly the earlier winning entries. Keep each
+        # adjudication trace distinct without changing the projected score.
+        digest = hashlib.sha256(json.dumps([digest, [list(row) for row in innovation_history]]).encode()).hexdigest()
+    if current and current.input_digest == digest:
         return current, False
     next_version = (current.version + 1) if current else 1
     if current:
@@ -263,7 +286,7 @@ def rebuild_student_snapshot(student_id, year):
         performance_raw_score=projection.performance_raw_score,
         performance_score=projection.performance_score,
         comprehensive_score=projection.comprehensive_score,
-        input_digest=projection.input_digest,
+        input_digest=digest,
         rule_version_ids=list(projection.rule_version_ids),
         breakdown=list(projection.breakdown),
     )
@@ -304,15 +327,41 @@ def match_published_rule(row, cycle_code=None):
         )
         .all()
     )
-    candidates = [
-        pair
-        for pair in candidates
-        if pair[0].snapshot.get("cycle_code") == (cycle_code or row.year)
-        and pair[0].snapshot.get("sub_type") == row.category
-        and pair[1].sub_type == row.category
-        and pair[0].snapshot.get("faculty_id") in (None, row.faculty_id)
-        and pair[1].faculty_id in (None, row.faculty_id)
-    ]
+    from services.materials.schemas import RESEARCH_TYPES
+    from domain.student_work_scoring import POLICY_VERSION as WORK_POLICY
+    if row.category == "student_work" and row.normalization_version == WORK_POLICY:
+        candidates = [(v, r) for v, r in candidates if v.snapshot.get("cycle_code") == cycle_code
+                      and v.snapshot.get("faculty_id") == r.faculty_id == row.faculty_id
+                      and v.snapshot.get("sub_type") == r.sub_type == "student_work"
+                      and v.snapshot.get("calculation_formula") == {"policy_id": WORK_POLICY}]
+    elif row.category == "innovation_training":
+        from domain.innovation_scoring import POLICY_VERSION
+        candidates = [(v, r) for v, r in candidates
+                      if v.snapshot.get("cycle_code") == cycle_code
+                      and v.snapshot.get("faculty_id") == r.faculty_id == row.faculty_id
+                      and v.snapshot.get("sub_type") == r.sub_type == "innovation"
+                      and v.snapshot.get("calculation_formula") == {"policy_id": POLICY_VERSION}]
+    elif row.category in RESEARCH_TYPES:
+        from domain.research_scoring import POLICY_VERSION
+        kind = {"research_paper": "thesis", "invention_patent": "patent"}[row.category]
+        candidates = [(v, r) for v, r in candidates if
+                      v.snapshot.get("cycle_code") == cycle_code and
+                      v.snapshot.get("sub_type") == "research" and
+                      v.snapshot.get("research_type") == kind and
+                      v.snapshot.get("calculation_formula") == {"policy_id": POLICY_VERSION} and
+                      v.snapshot.get("faculty_id") == row.faculty_id and
+                      r.faculty_id == row.faculty_id and r.sub_type == "research" and r.research_type == kind]
+    else:
+        candidates = [
+            pair
+            for pair in candidates
+            if pair[0].snapshot.get("cycle_code") == (cycle_code or row.year)
+            and pair[0].snapshot.get("calculation_formula") != {"policy_id": WORK_POLICY}
+            and pair[0].snapshot.get("sub_type") == row.category
+            and pair[1].sub_type == row.category
+            and pair[0].snapshot.get("faculty_id") in (None, row.faculty_id)
+            and pair[1].faculty_id in (None, row.faculty_id)
+        ]
     if not candidates:
         return {"status": "no_match", "reason": "no_applicable_published_rule"}
     latest_by_rule = {}
@@ -492,6 +541,8 @@ def preview_student_score(student, year):
             RuleVersion.id.in_({entry.rule_version_id for entry in entries})
         ).all()
     } if entries else {}
+    from domain.innovation_scoring import allocate_innovation
+    allocate_innovation([entry for entry in entries if entry.category == "innovation_training"])
     candidates = []
     for entry in entries:
         version = versions.get(entry.rule_version_id)
@@ -802,7 +853,13 @@ def explain_student_score(student_id, year):
         )
         override = audit.override_score if audit else score.get("override_score")
         candidate = entry.effective_score if entry else score.get("effective_score")
+        research_basis = {}
+        if entry and (record.category in {"research_paper", "invention_patent", "innovation_training"}
+                      or (record.category == "student_work" and "allocations" in (entry.exclusion_basis or {}))):
+            candidate = entry.candidate_score
+            research_basis = {"recognition_basis": entry.exclusion_basis, "verified_facts": record.confirmed_terms}
         explained_entries.append({
+            **research_basis,
             "id": entry.id if entry else None,
             "project_source": {"type": "material", "id": str(record_id),
                                "category": record.category},
@@ -885,6 +942,8 @@ def explain_student_score(student_id, year):
                                 else ["confirm_submit", "edit", "view"]),
             "updated_at": record.updated_at.isoformat() + "Z",
         })
+    for item in explained_entries:
+        item["item_bonus"] = item["included_score"]
     from use_cases.score_labels import decorate_score_entries
     rule_versions=decorate_score_entries(explained_entries,entries,student_id,snapshot.rule_version_ids if snapshot else [])
     if snapshot is None:
@@ -918,10 +977,12 @@ def explain_student_score(student_id, year):
         },
         "categories": {
             "academic": {
+                "note": "最终实际计分受本组上限影响。",
                 "raw_score": str(snapshot.specialty_raw_score),
                 "effective_score": str(snapshot.specialty_score),
             },
             "comprehensive": {
+                "note": "最终实际计分受本组上限影响。",
                 "raw_score": str(snapshot.performance_raw_score),
                 "effective_score": str(snapshot.performance_score),
             },

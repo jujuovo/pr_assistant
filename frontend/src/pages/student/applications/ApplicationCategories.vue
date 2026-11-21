@@ -55,9 +55,10 @@ const categories = [
     background: '#e9f7ef'
   },
   {
-    key: 'academic-innovation',
-    title: '学术创新',
-    description: '提交成果检索证明，查看教师核验结果',
+    key: 'innovation-training', title: '创业创新', description: '已结题的创新创业训练项目', icon: 'lightbulb', color: '#d97706', background: '#fff5df'
+  },
+  {
+    key: 'academic-paper', title: '学术论文', description: '论文及授权发明专利',
     icon: 'lightbulb',
     color: '#d97706',
     background: '#fff5df'
