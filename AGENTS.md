@@ -2,6 +2,12 @@
 
 These rules apply to every Codex/OpenSpec task in this repository.
 
+## Authoritative scoring policy (user decision, 2026-11-19)
+
+- All new scoring rules must follow `docs/policies/xmu-informatics-2025-02.pdf` (2025年2月修订，信院〔2025〕3号，自2028届实施). Source SHA-256: `48a8e4de880b6239aa0090c5b76e2358a3e577731cc2d98fd19e6c28e5dc43c4`.
+- Read the relevant clause, table, limits and cross-category aggregation before changing a formula. Do not infer scoring from OCR output, old demo rules or configurable rates.
+- During this delivery sprint, prioritize implementation and concise reproducible tests. The user performs real-browser frontend acceptance; hand off at most ten concrete checks and do not mark those checks passed on their behalf.
+
 ## Restore context before acting
 
 - Read `docs/WORKFLOW-RECOVERY.md` before proposing, updating, applying, syncing, or archiving an OpenSpec change.

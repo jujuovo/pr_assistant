@@ -177,7 +177,7 @@ def test_stale_version_is_rejected(env):
     assert db.session.get(MaterialRecord, row["id"]).version == row["version"]
 
 
-def test_student_summary_counts_new_material_but_not_competition_or_legacy_links(env):
+def test_student_summary_counts_all_current_materials_but_not_legacy_links(env):
     row = create(env).json
     row = submit(env, row).json
     review(env, row, "verified")
@@ -213,8 +213,8 @@ def test_student_summary_counts_new_material_but_not_competition_or_legacy_links
     )
     db.session.commit()
     summary = env[1].get("/api/materials/student/summary")
-    assert summary.json["approved_count"] == 1
-    assert summary.json["submitted_count"] == 1
+    assert summary.json["approved_count"] == 2
+    assert summary.json["submitted_count"] == 2
 
 
 def test_student_summary_is_student_only(env):

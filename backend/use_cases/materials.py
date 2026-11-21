@@ -172,17 +172,22 @@ def competition_workbench_summary(user):
     }
 
 
-def student_noncompetition_summary(user):
-    """Count the student's own new material records; legacy linked applications stay in the legacy panel."""
+def student_material_summary(user):
+    """Count the student's current MaterialRecord workflow across every category."""
     if user.role != "student" or not user.student_id:
-        raise MaterialUseCaseError("仅学生本人可读取非竞赛材料统计", code="forbidden", status_code=403)
+        raise MaterialUseCaseError("仅学生本人可读取材料统计", code="forbidden", status_code=403)
+    successor_source_ids = db.session.query(MaterialRecord.supersedes_record_id).filter(
+        MaterialRecord.student_id == user.student_id,
+        MaterialRecord.supersedes_record_id.isnot(None),
+        MaterialRecord.status != "abandoned",
+    )
     counts = dict(
         db.session.query(MaterialRecord.status, func.count(MaterialRecord.id))
         .filter(
             MaterialRecord.student_id == user.student_id,
-            MaterialRecord.category != "competition",
             MaterialRecord.application_id.is_(None),
             MaterialRecord.status != "abandoned",
+            ~MaterialRecord.id.in_(successor_source_ids),
         )
         .group_by(MaterialRecord.status)
         .all()

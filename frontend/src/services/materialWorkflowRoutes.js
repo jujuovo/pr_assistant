@@ -15,5 +15,5 @@ export function submissionQuery(key) {
   const category = materialCategoryRoutes[key]
   if (category) return { page: 'materials', category }
   if (key === 'academic-performance') return { page: 'academic-performance' }
-  return { page: 'application-form', categoryKey: key }
+  return { page: 'application-categories' }
 }

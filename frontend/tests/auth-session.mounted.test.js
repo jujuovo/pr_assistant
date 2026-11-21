@@ -23,6 +23,21 @@ beforeEach(() => {
 })
 
 describe('auth bootstrap recovery', () => {
+  it('restores a real account named student after reload', async () => {
+    localStorage.setItem('user', JSON.stringify({ ...savedStudent, username: 'student' }))
+    state.api.sessionCheck.mockResolvedValueOnce({ logged_in: true })
+    state.api.getCurrentUser.mockRejectedValueOnce(new Error('temporary outage'))
+    const auth = useAuthStore()
+    await auth.initialize()
+    expect(auth.isAuthenticated).toBe(true)
+    expect(auth.role).toBe('student')
+  })
+
+  it('recovers from invalid local storage without aborting app startup', async () => {
+    localStorage.setItem('user', '{invalid')
+    await expect(useAuthStore().initialize()).resolves.toBeUndefined()
+    expect(localStorage.getItem('user')).toBeNull()
+  })
   it('preserves the local role when session check is unreachable', async () => {
     state.api.sessionCheck.mockRejectedValueOnce(
       Object.assign(new TypeError('Failed to fetch'), {

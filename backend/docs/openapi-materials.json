@@ -471,13 +471,13 @@
                   }
                 },
                 "volunteer": {
-                  "summary": "志愿服务本次工时",
+                  "summary": "2028届志愿累计工时报表（需另传附件后提交）",
                   "value": {
                     "year": 2028,
                     "data": {
-                      "regular_hours": "202",
+                      "regular_hours": "220",
                       "reduced_hours": "0",
-                      "award_date": "2026-05-08"
+                      "award_date": "2028-08-01"
                     }
                   }
                 }
@@ -1543,18 +1543,6 @@
         "operationId": "recognizeMaterial",
         "summary": "对已上传附件按项目启动OCR，返回异步任务；识别后须调用确认接口",
         "responses": {
-          "501": {
-            "description": "未适配该类别或未提供识别参数"
-          },
-          "401": {
-            "description": "未登录"
-          },
-          "403": {
-            "description": "无权访问"
-          },
-          "404": {
-            "description": "材料不存在"
-          },
           "202": {
             "description": "已入队；按result_url轮询mapping，再向/api/ocr/jobs/{id}/confirm-material提交学生确认字段",
             "content": {
@@ -1569,8 +1557,20 @@
           "400": {
             "description": "参数、文件或字段无效"
           },
+          "401": {
+            "description": "未登录"
+          },
+          "403": {
+            "description": "无权访问"
+          },
+          "404": {
+            "description": "材料不存在"
+          },
           "409": {
             "description": "原件变化或材料已提交、版本变化"
+          },
+          "501": {
+            "description": "未适配该类别或未提供识别参数"
           }
         },
         "requestBody": {
@@ -1825,6 +1825,9 @@
       "post": {
         "summary": "本学院管理员导入不可覆盖的来源快照",
         "responses": {
+          "200": {
+            "description": "相同内容重复导入，不创建新记录"
+          },
           "201": {
             "description": "成功",
             "content": {
@@ -1884,9 +1887,6 @@
                 }
               }
             }
-          },
-          "200": {
-            "description": "相同内容重复导入，不创建新记录"
           }
         },
         "requestBody": {
@@ -2169,7 +2169,7 @@
     },
     "/api/materials/student/summary": {
       "get": {
-        "summary": "学生本人的非竞赛新材料统计",
+        "summary": "学生本人的全部统一材料状态统计",
         "responses": {
           "200": {
             "description": "非竞赛新材料状态统计",

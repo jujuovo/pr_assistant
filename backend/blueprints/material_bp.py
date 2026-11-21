@@ -29,7 +29,7 @@ from use_cases.materials import (
     edit_material,
     review_material,
     reconfirm_competition_rule,
-    student_noncompetition_summary,
+    student_material_summary,
     teacher_noncompetition_summary,
     submit_material,
     validate_competition_review_command,
@@ -133,7 +133,7 @@ def competition_workbench():
 
 @material_bp.get('/student/summary')
 def student_summary():
-    return jsonify(student_noncompetition_summary(actor()))
+    return jsonify(student_material_summary(actor()))
 
 
 @material_bp.get('/teacher/summary')

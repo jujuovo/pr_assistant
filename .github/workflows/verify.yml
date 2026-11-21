@@ -33,5 +33,9 @@ jobs:
       - run: python -B backend/tools/prepare_local.py
       - run: python -B -m pytest backend/tests -q -p no:cacheprovider
       - run: npm ci --prefix frontend
-      - run: node --test frontend/tests/material-api.test.mjs
+      - run: node --test frontend/tests/*.test.mjs
+      - run: python -B backend/tools/export_api_routes.py
+      - run: npm --prefix frontend run test:mounted
+        env:
+          API_ROUTE_MANIFEST: ../backend/outputs/integration-api-routes.json
       - run: npm --prefix frontend run build

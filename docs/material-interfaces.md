@@ -27,7 +27,7 @@
 | 方法 | 路径（在上述前缀下） | 用途 |
 |---|---|---|
 | GET | /types | 获取五类字段、非OCR能力及尚未启用的识别状态 |
-| GET | /student/summary | 学生本人非竞赛新材料状态统计（主页使用，只读聚合） |
+| GET | /student/summary | 学生本人全部 MaterialRecord 状态统计（主页使用，只读聚合；不读取旧 Application） |
 | GET | /teacher/summary | 教师本学院非竞赛新材料待审统计（教师主页使用，只读聚合） |
 | GET / POST | /{category}/records | 本人/同院材料列表；学生创建结构化材料草稿 |
 | GET / PATCH | /{category}/records/{id} | 查询或修改本人草稿/待补充材料 |

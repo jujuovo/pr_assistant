@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const state = vi.hoisted(() => ({
   api: {
     getCompetitionWorkbenchSummary: vi.fn(),
+    getStudentMaterialSummary: vi.fn(),
     getCompetitionReviewContext: vi.fn(),
     getTeacherCompetitionSummary: vi.fn(),
     getTeacherMaterialSummary: vi.fn(),
@@ -48,6 +49,13 @@ beforeEach(() => {
       { id: 2, student_id: 'student001', status: 'scored', version: 5, project_name: '已通过作品' }
     ]
   })
+  state.api.getStudentMaterialSummary.mockResolvedValue({
+    approved_count: 0,
+    pending_count: 1,
+    needs_correction_count: 0,
+    rejected_count: 0,
+    submitted_count: 1
+  })
   state.api.getCompetitionReviewContext.mockResolvedValue({
     record_id: 1,
     material_version: 3,
@@ -72,7 +80,7 @@ beforeEach(() => {
 })
 
 describe('authoritative competition workbench projection', () => {
-  it('shows student competition counts separately from legacy Application data', async () => {
+  it('shows one unified MaterialRecord summary on the student home', async () => {
     const wrapper = mount(StudentHome, {
       global: {
         stubs: {
@@ -85,18 +93,18 @@ describe('authoritative competition workbench projection', () => {
       }
     })
     await flushPromises()
-    const panel = wrapper.get('[aria-label="竞赛新链路进度"]')
-    expect(panel.text()).toContain('1份')
-    expect(panel.text()).toContain('MaterialRecord 权威状态')
+    const panel = wrapper.get('[aria-label="材料审核进度"]')
+    expect(panel.text()).toContain('已提交 1 份材料')
+    expect(wrapper.find('[aria-label="竞赛新链路进度"]').exists()).toBe(false)
   })
 
-  it('includes competition corrections in the main student action card and routes to materials', async () => {
-    state.api.getCompetitionWorkbenchSummary.mockResolvedValueOnce({
-      cycle_code: 2028,
+  it('includes material corrections in the main student action card and routes to history', async () => {
+    state.api.getStudentMaterialSummary.mockResolvedValueOnce({
+      approved_count: 0,
       pending_count: 0,
       needs_correction_count: 1,
-      completed_count: 0,
-      items: []
+      rejected_count: 0,
+      submitted_count: 1
     })
     const wrapper = mount(StudentHome, {
       global: {
@@ -112,7 +120,7 @@ describe('authoritative competition workbench projection', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('1 份待修改')
     await wrapper.get('.workbench-primary').trigger('click')
-    expect(wrapper.emitted('navigate').at(-1)).toEqual(['materials'])
+    expect(wrapper.emitted('navigate').at(-1)).toEqual(['application-record'])
   })
 
   it('shows teacher competition pending count separately from compatibility applications', async () => {
@@ -138,25 +146,25 @@ describe('authoritative competition workbench projection', () => {
   })
 
   it('renders student summary loading and actionable error states', async () => {
-    state.api.getCompetitionWorkbenchSummary.mockReturnValueOnce(new Promise(() => {}))
+    state.api.getStudentMaterialSummary.mockReturnValueOnce(new Promise(() => {}))
     const loading = mount(StudentHome, {
       global: {
         stubs: { WelcomeHeader: true, WorkbenchAction: true, ApplicationPeriodPanel: true }
       }
     })
-    expect(loading.get('[aria-label="竞赛新链路进度"] [role="status"]').text()).toContain(
-      '正在读取'
+    expect(loading.get('[aria-label="材料审核进度"] [role="status"]').text()).toContain(
+      '正在加载'
     )
     loading.unmount()
 
-    state.api.getCompetitionWorkbenchSummary.mockRejectedValueOnce(new Error('竞赛摘要服务不可用'))
+    state.api.getStudentMaterialSummary.mockRejectedValueOnce(new Error('材料摘要服务不可用'))
     const failed = mount(StudentHome, {
       global: {
         stubs: { WelcomeHeader: true, WorkbenchAction: true, ApplicationPeriodPanel: true }
       }
     })
     await flushPromises()
-    expect(failed.get('[aria-label="竞赛新链路进度"] [role="alert"]').text()).toContain(
+    expect(failed.get('[aria-label="材料审核进度"] [role="alert"]').text()).toContain(
       '服务不可用'
     )
   })
