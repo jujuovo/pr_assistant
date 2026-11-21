@@ -96,3 +96,4 @@ else/
 backend/private-ocr/
 backend/samples/
 backend/outputs/
+deploy/models/

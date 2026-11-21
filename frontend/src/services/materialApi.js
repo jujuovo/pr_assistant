@@ -9,8 +9,11 @@ export const MATERIAL_CATEGORIES = Object.freeze([
   'certification',
   'social_practice',
   'research',
-  'research_paper', 'invention_patent', 'innovation_training',
-    'competition_evidence',
+  'research_paper',
+  'invention_patent',
+  'innovation_training',
+  'competition_evidence',
+  'arts_sports',
   'volunteer'
 ])
 const base = '/api/materials'
@@ -42,6 +45,8 @@ export const materialApi = {
   },
   getCompetitionWorkbenchSummary: (signal) =>
     requestJson(`${base}/competition/workbench-summary`, { signal }),
+  getStudentMaterialSummary: (signal) => requestJson(`${base}/student/summary`, { signal }),
+  getTeacherMaterialSummary: (signal) => requestJson(`${base}/teacher/summary`, { signal }),
   getCompetitionPackage: (signal) => requestJson(`${base}/competition/rules/current`, { signal }),
   searchCompetitionCatalog: (q = '', signal) =>
     requestJson(`${base}/competition/catalog?q=${encodeURIComponent(q)}`, { signal }),

@@ -20,6 +20,18 @@ test('competition and volunteer selections use the shared material workflow', ()
   assert.match(layout, /submissionQuery\(category.key\)/)
 })
 
+test('other scored categories route to their MaterialRecord workflows', () => {
+  assert.deepEqual(submissionQuery('social-practice'), { page: 'materials', category: 'social_practice' })
+  assert.deepEqual(submissionQuery('academic-innovation'), { page: 'application-categories' })
+  assert.deepEqual(submissionQuery('academic-paper'), { page: 'materials', category: 'research_paper' })
+  assert.deepEqual(submissionQuery('innovation-training'), { page: 'materials', category: 'innovation_training' })
+  assert.deepEqual(submissionQuery('social-work'), { page: 'materials', category: 'student_work' })
+  assert.deepEqual(submissionQuery('arts-sports'), { page: 'materials', category: 'arts_sports' })
+  assert.deepEqual(submissionQuery('unknown-category'), { page: 'application-categories' })
+  const categories = read('../src/pages/student/applications/ApplicationCategories.vue')
+  assert.match(categories, /key: 'competition'/)
+})
+
 test('my materials renders history without a submission form or autofill wizard', () => {
   const source = read('../src/pages/student/applications/StudentMaterialsHub.vue')
   assert.match(source, /<ApplicationHistory/)

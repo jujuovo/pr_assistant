@@ -12,6 +12,8 @@ def is_manual(row):
 
 def submit_manual(user, row, version):
     _authorize_transition(user, row, "submit", "submitted")
+    if row.category == "arts_sports" and not row.attachments:
+        raise MaterialUseCaseError("文体活动材料至少需要一个证明原件", code="material_attachment_required")
     from services.materials.originals import verify_ocr_originals
     verify_ocr_originals(row)
     _cas_change(row, version, ("draft",), {"status": "submitted"})

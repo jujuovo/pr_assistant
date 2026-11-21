@@ -123,7 +123,12 @@ export function displayValue(value) {
       platform_screenshot: '平台截图',
       team_list: '团队名单',
       research_report: '成果检索报告',
-      csp_transcript: 'CSP成绩单'
+      csp_transcript: 'CSP成绩单',
+      arts_competition: '文体竞赛',
+      performance: '表演展示',
+      arts_honor: '文体表彰',
+      dorm_honor: '文明宿舍表彰',
+      fitness_test: '体质健康测试'
     }[value] || String(value)
   )
 }

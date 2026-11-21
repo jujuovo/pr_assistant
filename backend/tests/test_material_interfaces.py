@@ -29,6 +29,8 @@ SAMPLES={
          'end_date':'2026-01-20','assessment_result':'合格'}]},
     'honor':{'honor_name':'优秀学生干部','honor_level':'校级','issuer':'学校',
              'award_date':'2026-06-01','certificate_no':'HONOR-001'},
+    'arts_sports':{'document_type':'arts_competition','project_name':'校运会田径比赛',
+                   'award_date':'2026-05-01'},
 }
 
 

@@ -5,7 +5,14 @@ STRING_ARRAYS = {"participants", "advisers", "members", "teams"}
 NUMBER_ARRAYS = {"task_scores"}
 ARRAY_FIELDS = STRING_ARRAYS | NUMBER_ARRAYS
 COMPETITION_PROJECTS = ("manual", "lanqiao", "computer-design", "software-design", "challenge-cup")
-MANUAL_TYPES = {"competition_evidence", "certification", "social_practice", "research"}
+MANUAL_TYPES = {"competition_evidence", "certification", "social_practice", "research", "arts_sports"}
+ARTS_SPORTS_TYPES = {
+    "arts_competition": "文体竞赛",
+    "performance": "表演展示",
+    "arts_honor": "文体表彰",
+    "dorm_honor": "文明宿舍表彰",
+    "fitness_test": "体质健康测试",
+}
 NEW_TYPES = {
     "competition_evidence": {
         "name": "目录外竞赛材料", "fields": ["competition_name", "organizer", "competition_level", "award_level",
@@ -60,3 +67,9 @@ def normalize_extra(category, data, result, spec, text, numeric):
                 raise ValueError(f"社会实践缺少字段：{key}")
     if category == "research" and result["document_type"] != "research_report":
         raise ValueError("成果证明类型无效")
+    if category == "arts_sports":
+        if result.get("document_type") not in ARTS_SPORTS_TYPES:
+            raise ValueError("文体活动提交项无效")
+        project_name = result.get("project_name") or ""
+        if not 2 <= len(project_name) <= 30:
+            raise ValueError("项目名称必须为2-30个字符")

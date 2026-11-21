@@ -318,5 +318,5 @@ def test_openapi_new_category_examples_validate_against_business_schema(env):
     login(env[1], env[2]["student"])
     spec = env[1].get('/api/materials/openapi.json').json
     examples = spec['paths']['/api/materials/{category}/records']['post']['requestBody']['content']['application/json']['examples']
-    for category in ('certification', 'social_practice', 'research'):
+    for category in ('certification', 'social_practice', 'research', 'arts_sports'):
         assert normalize(category, examples[category]['value']['data'])

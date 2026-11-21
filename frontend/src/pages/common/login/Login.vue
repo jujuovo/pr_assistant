@@ -900,7 +900,7 @@ const handleLogin = async () => {
       admin: '/admin'
     }
 
-    router.push(routeMap[authStore.role])
+    await router.replace(routeMap[authStore.role])
   } catch (error) {
     console.error('登录错误:', error)
     toastStore.error(error.message || '登录失败，请稍后重试')
