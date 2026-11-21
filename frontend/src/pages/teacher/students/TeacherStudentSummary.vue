@@ -83,6 +83,7 @@
             <th>候选分</th>
             <th>计入分</th>
             <th>排除原因</th>
+            <th>其他事实</th>
             <th>原件</th>
           </tr>
         </thead>
@@ -106,6 +107,7 @@
               {{ item.effective_score ?? '—' }}
             </td>
             <td>{{ exclusionText(item) }}</td>
+            <td>{{ otherFactsText(item) }}</td>
             <td>
               <a
                 v-if="item.attachments && item.attachments.length"
@@ -168,6 +170,30 @@ function exclusionText(item) {
   if (item.included === false) return '未计入'
   if (item.status === 'scored') return '—'
   return '待审核'
+}
+
+// 表格列已覆盖主要事实，这里补齐 key_facts 里其余权威事实：
+// 核对 CSP、团队赛、分组赛道这类材料时，教师需要看到开关字段而不是被省略。
+const FACT_LABELS = {
+  participation_mode: '参赛方式',
+  team_size: '团队人数',
+  personal_rank: '本人排序',
+  event_format: '赛制',
+  group: '组别',
+  track: '赛道',
+  csp_percentile: 'CSP 百分位'
+}
+const FACT_VALUE_LABELS = { individual: '个人', team: '团队' }
+
+function otherFactsText(item) {
+  const facts = item.key_facts || {}
+  const parts = []
+  for (const [key, label] of Object.entries(FACT_LABELS)) {
+    const raw = facts[key]
+    if (raw === undefined || raw === null || raw === '') continue
+    parts.push(`${label}：${FACT_VALUE_LABELS[raw] || raw}`)
+  }
+  return parts.length ? parts.join('；') : '—'
 }
 
 async function loadCycleContext() {

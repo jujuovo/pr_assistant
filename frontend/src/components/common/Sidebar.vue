@@ -21,12 +21,7 @@
       <span class="collapse-label">收起侧栏</span>
     </button>
 
-    <button
-      class="student-identity od-row"
-      :class="{ selected: activePage === 'home' }"
-      :aria-current="activePage === 'home' ? 'page' : undefined"
-      @click="handlePageChange('home')"
-    >
+    <button class="student-identity od-row" @click="handlePageChange('home')">
       <img
         v-if="userAvatar && !avatarFailed"
         :src="userAvatar"

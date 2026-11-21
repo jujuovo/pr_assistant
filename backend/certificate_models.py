@@ -6,7 +6,9 @@ from automation_models import utcnow
 class CertificateAssessment(db.Model):
     __tablename__ = "certificate_assessment"
     id = db.Column(db.Integer, primary_key=True)
-    application_id = db.Column(db.Integer, db.ForeignKey("application.id", ondelete="CASCADE"), nullable=False, unique=True)
+    # 证书评估是审核依据，不能被旧申请的删除静默带走：
+    # CASCADE 会让"删一条 application"顺手清掉评估记录且不留痕，故改为 RESTRICT。
+    application_id = db.Column(db.Integer, db.ForeignKey("application.id", ondelete="RESTRICT"), nullable=False, unique=True)
     project_key = db.Column(db.String(64), nullable=False)
     status = db.Column(db.String(32), nullable=False, default="queued")
     claims = db.Column(db.JSON, nullable=False)
