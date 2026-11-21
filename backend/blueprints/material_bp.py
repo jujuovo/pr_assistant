@@ -10,6 +10,7 @@ from flask import Blueprint, abort, current_app, jsonify, request, send_file
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from werkzeug.exceptions import HTTPException
+from services.time_format import utc_timestamp
 from extensions import db
 from material_models import CompetitionOcrJob, MaterialRecord, MaterialAttachment, MaterialSource
 from services.automation import actor
@@ -532,7 +533,7 @@ def competition_ocr_cancel_route(record_id, job_id):
 @material_bp.get('/<category>/records/<int:record_id>/events')
 def events(category,record_id):
     row=record_at(category,record_id)
-    return jsonify({'events':[{'id':e.id,'actor_id':e.actor_id,'action':e.action,'details':e.details,'created_at':e.created_at.isoformat()+'Z'} for e in row.events]})
+    return jsonify({'events':[{'id':e.id,'actor_id':e.actor_id,'action':e.action,'details':e.details,'created_at':utc_timestamp(e.created_at)} for e in row.events]})
 
 
 @material_bp.post('/<category>/records/<int:record_id>/withdraw')
@@ -606,7 +607,7 @@ def source_detail(source_id):
     return jsonify({'id':row.id,'category':row.category,'student_id':row.student_id,'year':row.year,
                     'external_id':row.external_id,'revision':row.revision,'source_name':row.source_name,
                     'source_url':row.source_url,'data':row.data,'digest':row.digest,
-                    'imported_by':row.imported_by,'created_at':row.created_at.isoformat()+'Z'})
+                    'imported_by':row.imported_by,'created_at':utc_timestamp(row.created_at)})
 
 
 @material_bp.post('/academic/parse-csv')

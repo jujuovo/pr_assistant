@@ -1,5 +1,7 @@
 # 五类材料接口与非OCR处理
 
+> 本文保留初版五类接口的设计背景，开头的“不实现自动加分”和旧竞赛字段不是当前全部能力。当前正式计分、OCR接入和兼容边界见[current-material-capabilities.md](current-material-capabilities.md)；已发布接口以OpenAPI及GET /api/materials/types为准。
+
 本阶段仅增加后端接口和无需OCR的处理，不新增前端页面，不实现自动加分，不连接外部学校平台。不修改 `Student` 中的学业/外语成绩、综合成绩或 `Application` 的状态及分数。原有蓝桥杯识别与志愿材料功能保留。
 
 ## 五类数据

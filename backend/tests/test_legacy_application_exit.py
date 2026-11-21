@@ -68,3 +68,14 @@ def test_certificate_assessment_fk_is_restrict_not_cascade():
 
     fk = next(iter(CertificateAssessment.__table__.c.application_id.foreign_keys))
     assert fk.ondelete == "RESTRICT"
+
+
+@pytest.mark.parametrize("field", ["applicationType", "application_type", "sub_type"])
+def test_invention_patent_requires_new_material_route_without_rule_id(env, field):
+    _, client, ids = env
+    login(client, ids["student"])
+    response = post_application(client, ids, **{field: "invention_patent"})
+    assert response.status_code == 409
+    assert response.json["code"] == "invention_patent_material_route_required"
+    assert response.json["route"] == "/api/materials/invention_patent/records"
+    assert Application.query.count() == 0

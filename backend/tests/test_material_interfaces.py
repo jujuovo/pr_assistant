@@ -218,6 +218,8 @@ def test_application_link_projects_authoritative_score_and_prevents_delete(env):
     assert env[1].post(endpoint(row,'review'),json={'version':2,'decision':'verified','comment':'人工核验'}).status_code==200
     db.session.refresh(application)
     assert application.self_score==3 and application.final_score==1 and application.status=='approved'
+    assert env[1].delete(f'/api/applications/{application.id}').status_code==403
+    login(env[1],env[2]['student'])
     assert env[1].delete(f'/api/applications/{application.id}').status_code==409
 
 
@@ -230,7 +232,7 @@ def test_auth_schema_student_import_and_input_score_forbidden(env):
         'certification', 'social_practice', 'research', 'competition_evidence', 'volunteer',
         'research_paper', 'invention_patent', 'innovation_training',
     }
-    assert all(t['auto_bonus_enabled']==(t['key'] in {'competition','volunteer'}) for t in types.json['types'])
+    assert all(t['auto_bonus_enabled']==(t['key'] in {'competition','volunteer','research_paper','invention_patent','innovation_training','student_work'}) for t in types.json['types'])
     assert env[1].post('/api/materials/sources/import',json=source_payload()).status_code==403
     assert env[1].post('/api/materials/honor/records',json={'year':2026,'data':SAMPLES['honor'],'final_score':6}).status_code==400
     assert env[1].post('/api/materials/honor/records',json=[]).status_code==400

@@ -39,8 +39,12 @@
         ><p class="date-guidance"
           >信用时数同时核对签到、签退时间，跨日按签退日期；荣誉时数按录入日期。不同日期请分次申报。</p
         > </div
-      ><PolicyMaterialFields v-if="['research_paper', 'invention_patent', 'innovation_training'].includes(category)" v-model="data" :category="category" />
-        <MaterialFieldsEditor
+      ><PolicyMaterialFields
+        v-else-if="['research_paper', 'invention_patent', 'innovation_training'].includes(category)"
+        v-model="data"
+        :category="category"
+      />
+      <MaterialFieldsEditor
         v-else
         v-model="data"
         :fields="fields"
@@ -116,7 +120,15 @@ async function open() {
   try {
     const context = await materialApi.getTypes()
     spec.value = context.types.find((t) => t.key === props.category)
-    if (['research_paper', 'invention_patent', 'innovation_training', 'student_work','volunteer'].includes(props.category)) {
+    if (
+      [
+        'research_paper',
+        'invention_patent',
+        'innovation_training',
+        'student_work',
+        'volunteer'
+      ].includes(props.category)
+    ) {
       if (!context.cycle_code || context.cycle_code < 2028)
         throw new Error('请先由管理员启用2028届或之后的推免周期。')
       year.value = context.cycle_code

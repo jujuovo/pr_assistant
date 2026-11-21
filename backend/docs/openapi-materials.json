@@ -3,7 +3,7 @@
   "info": {
     "title": "pr_assistant 材料核验接口",
     "version": "2.0.0",
-    "description": "正式竞赛使用材料记录与固定规则包，教师核验后计分；目录外及其他OCR材料可人工核验，识别不直接认定真实性。"
+    "description": "材料能力与操作权限以后端为准；auto_bonus_enabled表示类别支持教师核验后按规则计分，不代表免审核或已接OCR。OCR能力由recognition_status独立标示；材料时间戳为UTC ISO字符串，纯日期仍为YYYY-MM-DD。"
   },
   "x-authority-contract": {
     "source_of_truth": "backend",

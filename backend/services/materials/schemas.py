@@ -58,6 +58,9 @@ TYPES['competition']['fields'].extend([
     'project_name', 'participants', 'advisers', 'school', 'edition', 'track', 'group', 'region', 'stage_as_printed'])
 TYPES['student_work']['fields'].extend(['subject_name', 'start_month_as_printed', 'end_month_as_printed'])
 OCR_CATEGORIES = {'competition', 'student_work', 'volunteer', *NEW_TYPES}
+# Category capability, not a promise that every record qualifies or bypasses review.
+RULE_SCORING_CATEGORIES = {'competition', 'volunteer', 'research_paper',
+                           'invention_patent', 'innovation_training', 'student_work'}
 
 COURSE_FIELDS = {'course_code', 'course_name', 'credits', 'score', 'full_score', 'included'}
 APPOINTMENT_FIELDS = {'organization', 'position', 'position_level', 'start_date', 'end_date', 'assessment_result'}
@@ -308,9 +311,9 @@ def type_view():
                         required=['competition_id','project_name','award_date','level','award','event_year','participation_mode'],
                         field_schema_url='/api/materials/competition/context')
         types.append({'key':key, **spec, 'recognition_status':'available' if key in OCR_CATEGORIES else 'not_implemented',
-                      'auto_bonus_enabled':key in {'competition','volunteer'}, 'manual_only':key in MANUAL_TYPES})
+                      'auto_bonus_enabled':key in RULE_SCORING_CATEGORIES, 'manual_only':key in MANUAL_TYPES})
     return {'cycle_code':policy.cycle_code if policy else None, 'types':types, 'course_fields':sorted(COURSE_FIELDS), 'appointment_fields':sorted(APPOINTMENT_FIELDS),
-            'note':'识别建议经学生确认保存；正式竞赛教师核验后按固定规则计分，目录外材料仅人工核验。'}
+            'note':'auto_bonus_enabled表示该类别支持教师核验后按规则计分，不代表免审核；OCR能力由recognition_status单独标示，目录外材料仅人工核验。'}
 
 
 def normalize_student_work(category, data, *, verified=False):
