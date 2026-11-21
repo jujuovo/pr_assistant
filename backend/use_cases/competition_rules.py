@@ -372,8 +372,16 @@ def switch_competition_package(actor, new_snapshot, *, scope_key="global", fail_
             entry.invalidated_at = entry.updated_at = utcnow()
         affected_students.add((row.student_id, row.year))
     if fail_at == "after_invalidation": raise RuntimeError("injected after_invalidation failure")
+    if old.snapshot["policy"]["competition_max_count"] != new.snapshot["policy"]["competition_max_count"]:
+        affected_students.update(db.session.query(ScoreEntry.student_id, ScoreEntry.year)
+            .join(CompetitionRulePackage, ScoreEntry.competition_rule_package_id == CompetitionRulePackage.id)
+            .filter(CompetitionRulePackage.scope_key == scope_key, ScoreEntry.year == new.cycle_code,
+                    ScoreEntry.category == "competition", ScoreEntry.status == "active").distinct().all())
+    from use_cases.competition_review import _aggregate
     snapshots, stale_ids = [], []
     for student_id, year in sorted(affected_students):
+        Student.query.filter_by(student_id=student_id).with_for_update().one()
+        _aggregate(student_id, year, new)
         snapshot, _ = rebuild_student_snapshot(student_id, year)
         snapshots.append(snapshot.id)
         student = Student.query.filter_by(student_id=student_id).one()

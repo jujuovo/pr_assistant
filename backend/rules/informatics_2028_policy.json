@@ -1,0 +1,20 @@
+{
+  "title": "信息学院 2028 届推免计分办法（2025 年 2 月修订）",
+  "cycle_code": 2028,
+  "sections": {
+    "条例依据": {"document": "信院（2025）3号", "issued_on": "2025-02-24", "evidence_deadline": "2028-08-31"},
+    "学业成绩计算": {"academic_score_weight": 80, "retake_pass_score": 60},
+    "学术专长封顶": {"specialty_max_score": 15, "approved_special_talent_score": 15},
+    "综合表现封顶": {"performance_max_score": 5},
+    "科研成果": {"paper_scores": {"A": 10, "B": 6, "C": 1}, "paper_category_c_max_count": 2, "invention_patent_score": 2},
+    "学科竞赛": {"competition_max_count": 3, "external_competition_max_count": 1},
+    "创新创业训练": {"max_score": 2, "scores": {"national": [1, 0.3], "provincial": [0.5, 0.2], "university": [0.1, 0.05]}},
+    "国际组织实习": {"max_score": 1, "full_year": 1, "over_one_semester": 0.5},
+    "参军服役": {"max_score": 2, "one_year": 1, "two_years": 2},
+    "志愿工时": {"max_score": 1, "threshold_hours": 200, "step_hours": 2, "score_per_step": 0.05, "reduced_hours_ratio": 0.5},
+    "志愿表彰": {"max_score": 1, "levels": ["national", "provincial", "university"], "scores": {"individual": [1, 0.5, 0.25], "leader": [1, 0.5, 0.25], "member": [0.5, 0.25, 0.1]}},
+    "荣誉称号": {"max_score": 2, "scores": {"national": 2, "provincial": 1, "university": 0.2}, "collective_ratio": 0.5},
+    "社会工作": {"max_score": 2, "role_coefficients": [2, 1.5, 1, 0.75, 0.5]},
+    "体育比赛": {"national_champion_team_score": 5, "national_team_scores": [5, 3.5, 2, 1], "international_team_scores": [8, 6.5, 5, 3.5]}
+  }
+}

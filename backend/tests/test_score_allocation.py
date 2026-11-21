@@ -43,3 +43,11 @@ def test_count_limits_are_independent_per_rule_version():
     assert result[2] == (False, "max_count_exceeded")
     assert result[3] == (True, None)
 
+
+
+def test_rule_total_cap_partially_counts_last_selected_material():
+    items = [ScoreCandidate(i, 1, str(i), Decimal(score), max_count=2, total_score_cap=Decimal(8))
+             for i, score in enumerate([4, 5, 6], 1)]
+    allocation = allocate_candidates(items)
+    assert [item.allocated_score for item in allocation] == [0, 2, 6]
+    assert [item.reason for item in allocation] == ["max_count_exceeded", "rule_total_score_cap", None]

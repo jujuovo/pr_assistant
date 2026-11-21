@@ -1,5 +1,15 @@
 <template>
   <div class="page-content">
+    <FacultyPolicyDrafts>
+      <template #competition>
+    <details class="card">
+      <summary>学业竞赛现行配置</summary>
+      <CompetitionRulePackages />
+    </details>
+      </template>
+      <template #ordinary>
+    <details class="card">
+      <summary>综合表现及专项现行配置</summary>
     <div class="page-title">
       <span>规则管理</span>
       <div class="page-title-actions">
@@ -121,7 +131,8 @@
               <th>类型</th>
               <th>子类型</th>
               <th>基础分值</th>
-              <th>最大分数</th>
+              <th>单项分数上限</th>
+              <th>本规则累计上限</th>
               <th>最大数量</th>
               <th>状态</th>
               <th>创建时间</th>
@@ -138,7 +149,8 @@
               <td>{{ getTypeText(rule.type) }}</td>
               <td>{{ getSubTypeText(rule.sub_type) }}</td>
               <td>{{ rule.score }}</td>
-              <td>{{ rule.max_score || '-' }}</td>
+              <td>{{ rule.max_score ?? '-' }}</td>
+              <td>{{ rule.total_score_cap ?? '-' }}</td>
               <td>{{ rule.max_count || '-' }}</td>
 
               <td>
@@ -181,7 +193,7 @@
               </td>
             </tr>
             <tr v-if="paginatedRules.length === 0">
-              <td colspan="10" class="no-data">暂无规则数据</td>
+              <td colspan="11" class="no-data">暂无规则数据</td>
             </tr>
           </tbody>
         </table>
@@ -213,6 +225,9 @@
       @close="closeModal"
       @save="saveRule"
     />
+    </details>
+      </template>
+    </FacultyPolicyDrafts>
   </div>
 </template>
 
@@ -221,6 +236,8 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import api from '@/services/api.js'
 import { useToastStore } from '@/stores/toast.js'
 import { useAuthStore } from '@/stores/auth.js'
+import CompetitionRulePackages from './CompetitionRulePackages.vue'
+import FacultyPolicyDrafts from './FacultyPolicyDrafts.vue'
 import RuleModal from '@/components/admin/rules/RuleModal.vue'
 import StructuredRuleForm from '@/components/admin/rules/StructuredRuleForm.vue'
 import structuredRuleApi from '@/services/structuredRuleApi.js'
@@ -390,6 +407,7 @@ async function saveRule(formData) {
       ...ruleFormData,
       // 将空字符串转换为null
       max_score: ruleFormData.max_score === '' ? null : ruleFormData.max_score,
+      total_score_cap: ruleFormData.total_score_cap === '' ? null : ruleFormData.total_score_cap,
       max_count: ruleFormData.max_count === '' ? null : ruleFormData.max_count,
       faculty_id: ruleFormData.faculty_id === '' ? null : ruleFormData.faculty_id,
       research_type: ruleFormData.research_type === '' ? null : ruleFormData.research_type

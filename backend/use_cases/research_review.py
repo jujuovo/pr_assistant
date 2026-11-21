@@ -4,6 +4,7 @@ import json
 
 from automation_models import utcnow
 from domain.research_scoring import POLICY_VERSION, candidate
+from use_cases.faculty_policies import lock_faculty_scoring
 from extensions import db
 from material_models import MaterialRecord
 from models import Student
@@ -50,6 +51,7 @@ def review_policy_material(user, row, payload, policy_version, normalize_facts, 
     if decision not in ("verified", "rejected", "needs_correction"):
         raise ValueError("核验结论无效")
     digest = hashlib.sha256(json.dumps([row.id, user.id, payload], sort_keys=True).encode()).hexdigest()
+    lock_faculty_scoring(row.faculty_id)
     student = Student.query.filter_by(student_id=row.student_id).with_for_update().one()
     previous = MaterialReviewCommand.query.filter_by(record_id=row.id, idempotency_key=key).first()
     if previous:

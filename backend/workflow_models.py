@@ -678,3 +678,24 @@ def _reject_ranking_entry_mutation(_mapper, _connection, _target):
 event.listen(RankingEntry, "before_update", _reject_ranking_entry_mutation)
 event.listen(RankingEntry, "before_delete", _reject_ranking_entry_mutation)
 
+
+
+class FacultyScoringPolicy(db.Model):
+    __tablename__ = "faculty_scoring_policy"
+    id = db.Column(db.Integer, primary_key=True)
+    faculty_id = db.Column(db.Integer, db.ForeignKey("faculty.id"), nullable=False)
+    cycle_code = db.Column(db.Integer, nullable=False)
+    title = db.Column(db.String(120), nullable=False)
+    status = db.Column(db.String(16), nullable=False, default="draft")
+    revision = db.Column(db.Integer, nullable=False, default=1)
+    source_id = db.Column(db.Integer, db.ForeignKey("faculty_scoring_policy.id"))
+    sections = db.Column(db.JSON, nullable=False)
+    updated_at = db.Column(db.DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+    __table_args__ = (
+        db.Index(
+            "uq_faculty_scoring_policy_current", "faculty_id", "cycle_code", unique=True,
+            sqlite_where=db.text("status = 'published'"),
+            postgresql_where=db.text("status = 'published'"),
+        ),
+    )

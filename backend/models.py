@@ -293,6 +293,7 @@ class Rule(db.Model):
     max_score = db.Column(
         db.Float, nullable=True
     )  # 最大分数限制（如创新创业训练最多加2分）
+    total_score_cap = db.Column(db.Numeric(12, 4), nullable=True)
     max_count = db.Column(
         db.Integer, nullable=True
     )  # 最大项目数量限制（如学业竞赛不超过3项）

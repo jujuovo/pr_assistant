@@ -79,6 +79,7 @@ def rule_snapshot(rule, *, cycle_code=None):
         "research_type": rule.research_type,
         "score": _number(rule.score),
         "max_score": _number(rule.max_score),
+        **({"total_score_cap": _number(rule.total_score_cap)} if rule.total_score_cap is not None else {}),
         "max_count": rule.max_count,
         "description": rule.description,
         "faculty_id": rule.faculty_id,

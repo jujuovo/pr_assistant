@@ -1197,6 +1197,8 @@ def review_material(user, row, version, decision, comment, idempotency_key,
 
     # Authorize before loading policy details so unauthorized actors learn nothing.
     _authorize_transition(user, row, "review", decision)
+    from use_cases.faculty_policies import lock_faculty_scoring
+    lock_faculty_scoring(row.faculty_id)
     if row.category == 'volunteer' and decision == 'verified':
         from services.volunteer_ocr import assert_gate
         assert_gate(row)

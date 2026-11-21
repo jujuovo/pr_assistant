@@ -41,7 +41,6 @@ import Sidebar from '@/components/common/Sidebar.vue'
 import UserManagement from '@/pages/admin/users/UserManagement.vue'
 import ApplicationManagement from '@/pages/admin/applications/ApplicationManagement.vue'
 import RuleManagement from '@/pages/admin/rules/RuleManagement.vue'
-import CompetitionRulePackages from '@/pages/admin/rules/CompetitionRulePackages.vue'
 import StatisticsReport from '@/pages/common/statistics/StatisticsReport.vue'
 import SystemSettings from '@/pages/admin/settings/SystemSettings.vue'
 import Profile from '@/pages/common/profile/Profile.vue'
@@ -57,7 +56,11 @@ const authStore = useAuthStore()
 const toastStore = useToastStore()
 
 // 当前活动页面
-const currentPage = ref(route.query.page || 'home')
+function resolvePage(page) {
+  return page === 'competition-rule-packages' ? 'rule-management' : page || 'home'
+}
+
+const currentPage = ref(resolvePage(route.query.page))
 
 // 页面组件映射
 const pageComponents = {
@@ -65,7 +68,6 @@ const pageComponents = {
   'score-management': ScoreManagement,
   'data-management': ApplicationManagement,
   'rule-management': RuleManagement,
-  'competition-rule-packages': CompetitionRulePackages,
   'faculty-management': FacultyManagement,
   'statistics-report': StatisticsReport,
   'system-settings': SystemSettings,
@@ -98,7 +100,7 @@ const switchPage = (page) => {
   currentPage.value = page
   router.push({ query: { ...route.query, page } })
 }
-watch(() => route.query.page, page => { if (page) currentPage.value = page })
+watch(() => route.query.page, page => { currentPage.value = resolvePage(page) })
 
 // 切换到个人信息页面
 const goToProfile = () => {

@@ -49,3 +49,50 @@ def test_switch_failure_rolls_back_package_material_score_and_snapshot(env, fail
     assert db.session.get(MaterialRecord, row_id).status == "scored"
     assert ScoreEntry.query.one().status == "active"
     assert MaterialEvent.query.filter_by(action="competition_rule_invalidated").count() == 0
+
+
+def test_count_only_switch_reallocates_already_scored_material(env):
+    admin, snapshot, old, row, teacher = _baseline(env)
+    review_competition_material(teacher, row, {"version": row.version, "decision": "approve",
+        "comment": "一致", "idempotency_key": "count-only"})
+    changed = copy.deepcopy(snapshot)
+    changed["policy"]["competition_max_count"] = 0
+    result = switch_competition_package(admin, changed)
+    entry = ScoreEntry.query.one()
+    assert row.status == "scored" and entry.competition_rule_package_id == old.id
+    assert entry.candidate_score > 0 and entry.effective_score == 0 and not entry.included
+    assert result["snapshot_ids"]
+    assert StudentScoreSnapshot.query.filter_by(status="superseded").count() == 1
+
+
+def test_faculty_policy_reallocates_competition_and_preserves_candidate(env):
+    from use_cases.competition_review import teacher_competition_summary
+    from use_cases.faculty_policies import save_draft
+    from use_cases.faculty_policy_publication import (
+        preview_publication, publish_policy, rebuild_policy_snapshots,
+    )
+
+    admin, _snapshot, package, row, teacher = _baseline(env)
+    review_competition_material(teacher, row, {"version": row.version, "decision": "approve",
+        "comment": "一致", "idempotency_key": "faculty-limit"})
+    before = ScoreEntry.query.one().candidate_score
+    draft = save_draft(admin, {
+        "title": "学院限项测试", "cycle_code": row.year,
+        "sections": {
+            "学业成绩计算": {"academic_score_weight": 80},
+            "学术专长封顶": {"specialty_max_score": 15},
+            "综合表现封顶": {"performance_max_score": 5},
+            "学科竞赛": {"competition_max_count": 0},
+        },
+    })
+    preview = preview_publication(admin, draft["id"])
+    publish_policy(admin, draft["id"], preview["digest"], apply_scoring=rebuild_policy_snapshots)
+
+    entry = ScoreEntry.query.one()
+    assert entry.candidate_score == before
+    assert entry.competition_rule_package_id == package.id
+    assert entry.effective_score == 0
+    assert not entry.included
+    summary = teacher_competition_summary(teacher, row.student_id, row.year)
+    assert summary["aggregate"]["total_effective_score"] == "0.0000"
+    assert StudentScoreSnapshot.query.filter_by(status="superseded").count() == 1

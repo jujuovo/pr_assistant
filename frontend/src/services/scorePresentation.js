@@ -158,7 +158,9 @@ export function scoreRows(dto) {
       candidateScore: entry.candidate_score ?? entry.automatic_score,
       includedScore: entry.item_bonus ?? entry.included_score,
       included: entry.included,
-      reason: entry.exclusion_reason,
+      reason: ['competition_count_limit', 'competition_top_three_limit'].includes(entry.exclusion_reason)
+        ? '超出竞赛计入项目数上限'
+        : entry.exclusion_reason,
       updatedAt: entry.updated_at,
       allowedActions: entry.allowed_actions || []
     }
