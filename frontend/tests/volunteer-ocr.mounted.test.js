@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
     review: vi.fn(),
     getEvents: vi.fn()
   },
-  router: { replace: vi.fn() },
+  router: { replace: vi.fn(), push: vi.fn() },
   route: { query: { page: 'materials', category: 'volunteer' } }
 }))
 vi.mock('vue-router', () => ({ useRouter: () => mocks.router, useRoute: () => mocks.route }))
