@@ -4,7 +4,6 @@
 """
 
 import random
-import os
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 # 验证码字符集
@@ -16,33 +15,6 @@ DEFAULT_HEIGHT = 60  # 增加高度
 DEFAULT_LENGTH = 4
 DEFAULT_BG_COLOR = (255, 255, 255)
 DEFAULT_FONT_SIZE = 40  # 调整字体大小
-
-# 尝试使用系统字体
-def get_system_font(font_size=DEFAULT_FONT_SIZE):
-    """尝试获取系统字体，如果失败则使用默认字体"""
-    # 常见系统字体路径
-    font_paths = [
-        # Windows
-        "C:/Windows/Fonts/arial.ttf",
-        "C:/Windows/Fonts/times.ttf",
-        # macOS
-        "/Library/Fonts/Arial.ttf",
-        "/System/Library/Fonts/Times.ttf",
-        # Linux
-        "/usr/share/fonts/truetype/freefont/FreeMono.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-    ]
-    
-    for font_path in font_paths:
-        if os.path.exists(font_path):
-            try:
-                return ImageFont.truetype(font_path, font_size)
-            except:
-                continue
-    
-    # 如果都失败，使用默认字体（但会很小）
-    print("警告：未找到系统字体，使用默认小字体")
-    return ImageFont.load_default()
 
 def generate_captcha(length=DEFAULT_LENGTH, width=DEFAULT_WIDTH, height=DEFAULT_HEIGHT,
                     font_size=DEFAULT_FONT_SIZE, bg_color=DEFAULT_BG_COLOR):
@@ -67,7 +39,7 @@ def generate_captcha(length=DEFAULT_LENGTH, width=DEFAULT_WIDTH, height=DEFAULT_
     captcha_text = ''.join(random.choices(CHARS, k=length))
     
     # 获取字体
-    font = get_system_font(font_size)
+    font = ImageFont.load_default(size=font_size)
     
     # 简单计算字符位置 - 每个字符平均分配空间
     char_width = width // length
@@ -78,9 +50,11 @@ def generate_captcha(length=DEFAULT_LENGTH, width=DEFAULT_WIDTH, height=DEFAULT_
         char_color = (random.randint(0, 100), random.randint(0, 100), random.randint(0, 100))
         
         # 计算字符位置 - 居中显示
-        x = i * char_width + (char_width - font_size) // 3
-        y = (height - font_size) // 3 + random.randint(-5, 5)  # 轻微随机偏移
-        
+        left, top, right, bottom = draw.textbbox((0, 0), char, font=font)
+        x = i * char_width + (char_width - (right - left)) // 2 - left
+        margin = height - (bottom - top)
+        y = max(0, min(margin, margin // 2 + random.randint(-5, 5))) - top
+
         draw.text((x, y), char, font=font, fill=char_color)
     
     # 添加干扰线
