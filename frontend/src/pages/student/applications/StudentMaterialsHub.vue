@@ -38,6 +38,13 @@
             }}</h2></div
           ><small>{{ row.year }} 年 · 材料 #{{ row.id }}</small></header
         >
+        <p v-if="row.last_review" class="review-banner" role="note">
+          <strong>{{ row.last_review.decision === 'return' ? '教师已退回' : '教师已通过' }}</strong>
+          <span>：{{ row.last_review.comment || '未填写具体意见' }}</span>
+          <small v-if="row.last_review.actor"
+            >（{{ row.last_review.actor.name }} · {{ formatScoreTime(row.last_review.at) }}）</small
+          >
+        </p>
         <OcrAssessment v-if="row.category === 'competition'" :advice="row.ocr_assessment" />
         <p v-else-if="row.bonus_result">候选分 {{row.bonus_result.candidate_score}} · 同类取舍后 {{row.bonus_result.included_score}} 分。{{row.bonus_result.reason}} 分组封顶结果见加分统计。</p>
         <p v-else-if="row.manual_only">此项通过人工通道核验，不自动计分。</p
@@ -167,6 +174,7 @@
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import materialApi, { MATERIAL_CATEGORIES } from '@/services/materialApi.js'
+import { formatScoreTime } from '@/services/scorePresentation.js'
 import MaterialFacts from '@/components/common/MaterialFacts.vue'
 import MaterialImagePreview from '@/components/common/MaterialImagePreview.vue'
 import OcrAssessment from '@/components/common/OcrAssessment.vue'
@@ -281,6 +289,13 @@ function edit(row) {
 }
 async function command(row, action) {
   if (busy.value) return
+  if (action === 'abandon') {
+    // 放弃是不可逆动作：先讲清楚后果，避免误点把材料处理路径断掉。
+    const message = row.supersedes_record_id
+      ? '放弃这份补正稿后，原本被退回的材料会重新变为可补正。确定放弃吗？'
+      : '放弃后该材料不再参与审核与计分，且无法恢复。确定放弃吗？'
+    if (!window.confirm(message)) return
+  }
   busy.value = true
   try {
     await materialApi[action](row.category, row.id, row.version)
@@ -393,6 +408,17 @@ onBeforeUnmount(() => {
 })
 </script>
 <style scoped>
+.review-banner {
+  margin: 0.5rem 0;
+  padding: 0.6rem 0.9rem;
+  border-left: 3px solid #d97706;
+  border-radius: 0.35rem;
+  background: rgba(217, 119, 6, 0.08);
+  font-size: 0.9rem;
+}
+.review-banner small {
+  opacity: 0.75;
+}
 .appeal-form {
   display: flex;
   gap: 12px;

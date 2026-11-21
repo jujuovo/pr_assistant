@@ -135,9 +135,27 @@ def teacher_competition_summary(user, student_id, year):
     student = Student.query.filter_by(student_id=student_id).first()
     if student is None or student.faculty_id != user.faculty_id:
         raise MaterialUseCaseError("无权查看该学生竞赛汇总", code="forbidden", status_code=403)
-    rows = MaterialRecord.query.filter_by(
+    base = MaterialRecord.query.filter_by(
         student_id=student_id, faculty_id=user.faculty_id, year=year, category="competition"
+    )
+    # 明细只给教师看学生真正申报过的材料：草稿还没提交，放弃的更不该算进汇总，
+    # 否则教师看到的"材料总数"里会混进学生自己删掉的东西。
+    hidden_rows = base.filter(
+        MaterialRecord.status.in_(("draft", "abandoned"))
+    ).all()
+    hidden = {}
+    for row in hidden_rows:
+        hidden[row.status] = hidden.get(row.status, 0) + 1
+    rows = base.filter(
+        ~MaterialRecord.status.in_(("draft", "abandoned"))
     ).order_by(MaterialRecord.id).all()
+    superseded_by = {}
+    if rows:
+        for successor in MaterialRecord.query.filter(
+            MaterialRecord.supersedes_record_id.in_([row.id for row in rows]),
+            MaterialRecord.status != "abandoned",
+        ).order_by(MaterialRecord.id).all():
+            superseded_by[successor.supersedes_record_id] = successor.id
     entries = {entry.material_record_id: entry for entry in ScoreEntry.query.filter(
         ScoreEntry.material_record_id.in_([row.id for row in rows]), ScoreEntry.status == "active"
     ).all()} if rows else {}
@@ -152,6 +170,11 @@ def teacher_competition_summary(user, student_id, year):
             "record_id": row.id, "material_version": row.version,
             "project_name": facts.get("project_name"),
             "competition_id": facts.get("competition_id"),
+            "level": facts.get("level"), "award": facts.get("award"),
+            "award_date": facts.get("award_date"), "event_year": facts.get("event_year"),
+            "participation_mode": facts.get("participation_mode"),
+            "supersedes_record_id": row.supersedes_record_id,
+            "superseded_by_record_id": superseded_by.get(row.id),
             "key_facts": facts, "status": row.status,
             "candidate_score": str(entry.candidate_score) if entry else (row.analysis or {}).get("candidate_score"),
             "effective_score": str(entry.effective_score) if entry else None,
@@ -163,7 +186,39 @@ def teacher_competition_summary(user, student_id, year):
             "allowed_actions": actions,
         })
     return {"student_id": student_id, "year": year, "items": items,
+            "aggregate": _summary_aggregate(rows, entries, year, hidden),
             "capabilities": {"editable": False, "mergeable": False, "score_override": False}}
+
+
+def _summary_aggregate(rows, entries, year, hidden=None):
+    """把逐条明细压成可供教师判断的合计；只做汇总，不重算也不改写任何分数。"""
+    from collections import Counter
+
+    hidden = hidden or {}
+    status_counts = Counter(row.status for row in rows)
+    active = [entry for entry in entries.values() if entry.included]
+    excluded = [entry for entry in entries.values() if entry.included is False]
+    zero = Decimal("0")
+
+    def total(values):
+        return str(sum((Decimal(value) for value in values), zero).quantize(Decimal("0.0001")))
+
+    return {
+        "cycle_code": year,
+        "record_count": len(rows),
+        "status_counts": dict(status_counts),
+        # 未计入明细的两类单独计数，教师才能把总数算平
+        "draft_count": hidden.get("draft", 0),
+        "abandoned_count": hidden.get("abandoned", 0),
+        "pending_count": sum(status_counts.get(status, 0) for status in
+                             ("draft", "submitted", "under_review")),
+        "included_count": len(active),
+        "excluded_count": len(excluded),
+        # 候选分统计所有已出分项，计入分只统计被采纳项；
+        # 两者相等说明没有被规则排除的材料，不等才有排除发生。
+        "total_candidate_score": total(entry.candidate_score for entry in entries.values()),
+        "total_effective_score": total(entry.effective_score for entry in active),
+    }
 
 
 def student_competition_feedback(user, year):

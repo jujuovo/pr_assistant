@@ -40,6 +40,53 @@ const STATUS_NAMES = Object.freeze({
   invalidated: '已失效'
 })
 export const scoreStatusText = (value) => STATUS_NAMES[value] || '待处理'
+
+// 竞赛材料的级别与奖项来自规则包枚举，展示层只做中文映射，不参与任何计分判断。
+const COMPETITION_LEVEL_NAMES = Object.freeze({
+  national: '国家级',
+  provincial: '省级',
+  municipal: '市级',
+  school: '校级'
+})
+const COMPETITION_AWARD_NAMES = Object.freeze({
+  first_or_above: '一等奖及以上',
+  first: '一等奖',
+  second: '二等奖',
+  third: '三等奖',
+  excellence: '优秀奖'
+})
+export const competitionLevelText = (value) =>
+  COMPETITION_LEVEL_NAMES[value] || (value ? String(value) : '—')
+export const competitionAwardText = (value) =>
+  COMPETITION_AWARD_NAMES[value] || (value ? String(value) : '—')
+
+// 材料事件的 action 是后端枚举；直接渲染会让教师看到 competition_approved 这种机器码。
+const MATERIAL_EVENT_NAMES = Object.freeze({
+  created: '创建草稿',
+  attachments_added: '上传原件',
+  submitted: '提交审核',
+  withdrawn: '撤回',
+  abandoned: '放弃',
+  reviewed: '审核',
+  checked: '核对',
+  competition_approved: '审核通过',
+  competition_returned: '审核退回',
+  competition_ocr_started: '发起识别',
+  competition_ocr_cancelled: '取消识别',
+  competition_rule_invalidated: '规则失效',
+  correction_version_created: '创建修正版本',
+  confirmed_rule_and_submitted: '确认规则并提交',
+  mark_rule_available: '标记规则可用',
+  save_unmatched: '保存为未匹配'
+})
+export const materialEventText = (value) =>
+  MATERIAL_EVENT_NAMES[value] || (value ? String(value) : '未知动作')
+export const reviewDecisionText = (decision) =>
+  decision === 'approve'
+    ? '已通过'
+    : decision === 'return' || decision === 'reject'
+      ? '已退回'
+      : '—'
 export const scoreRuleVersions = (dto) =>
   (dto?.rule_versions || [])
     .map((v) => v.label)
