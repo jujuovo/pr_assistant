@@ -24,7 +24,21 @@
             ><div
               ><span>计入状态</span
               ><b>{{ row.included ? '已计入' : row.reason || '未计入' }}</b></div
-            ><p>{{ row.ruleLabel }}</p></section
+            ><p>{{ row.ruleLabel }}</p>
+            <p>更新时间（北京时间）：{{ formatScoreTime(row.updatedAt) }}</p>
+            <button
+              v-if="
+                row.category === 'competition'
+                  ? competitionRecord?.status === 'rule_reconfirmation_required'
+                  : canReconfirm
+              "
+              type="button"
+              class="source-retry"
+              :disabled="submitting"
+              @click="emit('reconfirm', competitionRecord)"
+              >{{ submitting ? '正在提交…' : '确认规则并重新提交' }}</button
+            >
+            <p v-if="submitError" class="source-error" role="alert">{{ submitError }}</p></section
           >
           <p v-if="loading" class="source-state" role="status">正在加载项目申报信息与原件…</p>
           <section v-else-if="error" class="source-state source-error" role="alert"
@@ -76,6 +90,7 @@
 </template>
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import materialApi from '@/services/materialApi.js'
 import workflowApi from '@/services/workflowApi.js'
 import { lockBodyScroll } from '@/services/bodyScrollLock.js'
 import { formatScoreTime, scoreStatusText } from '@/services/scorePresentation.js'
@@ -84,9 +99,13 @@ import MaterialImagePreview from '@/components/common/MaterialImagePreview.vue'
 const props = defineProps({
     row: { type: Object, required: true },
     studentId: { type: String, required: true },
+    canReconfirm: Boolean,
+    submitting: Boolean,
+    submitError: String,
     year: { type: Number, required: true }
   }),
-  emit = defineEmits(['close'])
+  emit = defineEmits(['close', 'reconfirm'])
+const competitionRecord = ref(null)
 const detail = ref(null),
   loading = ref(true),
   error = ref(''),
@@ -136,7 +155,17 @@ async function load() {
       props.row.sourceId,
       requestController.signal
     )
-    if (alive && controller === requestController) detail.value = result
+    if (props.row.category === 'competition' && result.status === 'rule_reconfirmation_required') {
+      const record = await materialApi.getRecord(
+        'competition',
+        props.row.sourceId,
+        requestController.signal
+      )
+      if (alive && controller === requestController) {
+        competitionRecord.value = record
+        detail.value = { ...result, data: record.data, status: record.status }
+      }
+    } else if (alive && controller === requestController) detail.value = result
   } catch (e) {
     if (alive && controller === requestController && e.name !== 'AbortError')
       error.value =

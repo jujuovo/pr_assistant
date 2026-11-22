@@ -18,17 +18,33 @@ from flask import (
     send_from_directory,
     current_app,
     send_file,
+    session,
 )
 from datetime import datetime
 from extensions import db
-from models import SystemSettings
-from psycopg2 import connect, OperationalError
-from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
-from psycopg2.extensions import cursor
+from models import SystemSettings, User
+
+# psycopg2 只在 PostgreSQL 部署下需要；本地 SQLite 允许它缺失，备份走另一条路。
+try:
+    from psycopg2 import connect, OperationalError
+    from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+    from psycopg2.extensions import cursor
+except ImportError:  # pragma: no cover - 取决于部署环境
+    connect = None
+    OperationalError = Exception
+    ISOLATION_LEVEL_AUTOCOMMIT = None
+    cursor = object
 
 # 导入数据库备份模块
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from db_backup import backup_database_python, restore_database_python, restore_uploads
+from db_backup import (  # noqa: E402
+    backup_database_python,
+    backup_sqlite_snapshot,
+    is_sqlite_database,
+    restore_database_python,
+    restore_uploads,
+    uploads_dir,
+)
 
 
 # 获取数据库连接
@@ -38,6 +54,12 @@ def get_db_connection():
     """
     from config import Config
     from urllib.parse import urlparse
+
+    if connect is None:
+        raise RuntimeError(
+            "当前环境没有安装 psycopg2，无法连接 PostgreSQL；"
+            "本地 SQLite 库请设置 DATABASE_URL=sqlite:///<库文件路径>"
+        )
 
     try:
         # 从SQLALCHEMY_DATABASE_URI解析数据库配置
@@ -74,13 +96,101 @@ os.makedirs(BACKUP_FOLDER, exist_ok=True)
 os.makedirs(LOG_FOLDER, exist_ok=True)
 
 
-# API端点：手动备份数据库
+@system_bp.before_request
+def _guard_system_endpoints():
+    """系统维护接口一律只允许学院管理员调用。
+
+    这组端点能重建备份、用上传的 ZIP 覆盖整个数据库、读服务器日志、清缓存。
+    它们此前没有任何鉴权，匿名请求就能触发恢复；这里用蓝图级守卫统一挡住，
+    以后新增的端点也会自动覆盖到。
+    """
+    user = (
+        db.session.get(User, session.get("user_id")) if session.get("user_id") else None
+    )
+    if user is None or user.status != "active":
+        return jsonify({"success": False, "message": "请先登录后再使用系统维护功能"}), 401
+    if user.role != "admin":
+        return (
+            jsonify({"success": False, "message": "只有学院管理员可以使用系统维护功能"}),
+            403,
+        )
+    return None
+
+
+def _backup_sqlite_bundle():
+    """SQLite 版备份：在线快照 + 附件，包结构与响应字段和 PostgreSQL 版一致。
+
+    单独走一条路而不是改造下面那段 PostgreSQL 导出逻辑，原因是那段逻辑依赖
+    information_schema、序列和 pg_dump 语义，在 SQLite 上无一适用。
+    """
+    import tempfile
+    import zipfile
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    current_app.logger.info("管理员开始执行数据库备份操作（SQLite 在线快照）")
+
+    with tempfile.TemporaryDirectory() as workdir:
+        snapshot_path = os.path.join(workdir, "database.sqlite")
+        uploads_zip_path = os.path.join(workdir, "uploads.zip")
+
+        # 在线备份接口：WAL 里尚未合并的事务也会进快照，不需要停服务
+        backup_sqlite_snapshot(snapshot_path)
+
+        with zipfile.ZipFile(uploads_zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+            source_dir = uploads_dir()
+            if os.path.isdir(source_dir):
+                for root, dirs, files in os.walk(source_dir):
+                    for name in files:
+                        file_path = os.path.join(root, name)
+                        zipf.write(file_path, os.path.relpath(file_path, source_dir))
+
+        os.makedirs(BACKUP_FOLDER, exist_ok=True)
+        final_backup_filename = f"gradpush_backup_{timestamp}.zip"
+        final_backup_path = os.path.join(BACKUP_FOLDER, final_backup_filename)
+
+        with zipfile.ZipFile(final_backup_path, "w", zipfile.ZIP_DEFLATED) as final_zip:
+            final_zip.write(
+                snapshot_path, f"gradpush_backup_{timestamp}_database.sqlite"
+            )
+            final_zip.write(
+                uploads_zip_path, f"gradpush_backup_{timestamp}_uploads.zip"
+            )
+
+    settings = SystemSettings.query.first()
+    if settings:
+        settings.last_backup = datetime.now()
+        db.session.commit()
+        current_app.logger.info("系统设置中的最后备份时间已更新")
+
+    current_app.logger.info(f"数据库备份成功，生成备份文件: {final_backup_filename}")
+    return (
+        jsonify(
+            {
+                "success": True,
+                "message": "数据库备份成功",
+                "backup_file": final_backup_filename,
+            }
+        ),
+        200,
+    )
+
+
 @system_bp.route("/backup", methods=["POST"])
 def backup_database():
     """
     手动备份数据库
     生成包含SQL文件和uploads.zip的单个ZIP文件
     """
+    if is_sqlite_database():
+        try:
+            return _backup_sqlite_bundle()
+        except Exception as e:
+            current_app.logger.error(f"数据库备份失败: {str(e)}")
+            return (
+                jsonify({"success": False, "message": f"数据库备份失败: {str(e)}"}),
+                500,
+            )
+
     try:
         import zipfile
         import io
@@ -460,19 +570,24 @@ def upload_and_restore():
             with zipfile.ZipFile(final_backup_path, "r") as zipf:
                 current_app.logger.info(f"开始解析备份ZIP文件: {final_backup_filename}")
 
-                # 寻找SQL文件
-                sql_files = [name for name in zipf.namelist() if name.endswith(".sql")]
+                # 寻找数据库备份文件：PostgreSQL 版是 .sql，SQLite 版是 .sqlite/.db
+                sql_files = [
+                    name
+                    for name in zipf.namelist()
+                    if name.lower().endswith((".sql", ".sqlite", ".sqlite3", ".db"))
+                ]
                 if not sql_files:
-                    current_app.logger.error("ZIP文件中未找到SQL数据库备份文件")
-                    raise ValueError("ZIP文件中未找到SQL数据库备份文件")
+                    current_app.logger.error("ZIP文件中未找到数据库备份文件")
+                    raise ValueError("ZIP文件中未找到数据库备份文件（.sql 或 .sqlite）")
 
-                # 使用第一个找到的SQL文件
+                # 使用第一个找到的备份文件
                 sql_filename = sql_files[0]
-                current_app.logger.info(f"找到SQL备份文件: {sql_filename}")
+                current_app.logger.info(f"找到数据库备份文件: {sql_filename}")
 
-                # 提取SQL文件到临时路径
+                # 临时文件名沿用原后缀，恢复逻辑据此区分方言
+                temp_suffix = os.path.splitext(sql_filename)[1].lower() or ".sql"
                 temp_sql_path = os.path.join(
-                    BACKUP_FOLDER, f"temp_restore_{timestamp}.sql"
+                    BACKUP_FOLDER, f"temp_restore_{timestamp}{temp_suffix}"
                 )
                 with open(temp_sql_path, "wb") as sql_out:
                     sql_out.write(zipf.read(sql_filename))

@@ -72,7 +72,6 @@ test('student statistics renders project names, Chinese rule/formula/status and 
     '当前有效',
     '学业竞赛计分规则（第3版）',
     '学业基础分 × 学业成绩权重 ÷ 100 + 学术专长计入分 + 综合表现计入分',
-    '2026年11月19日 18:34:21',
     '62.4667',
     '已计分'
   ])
@@ -82,7 +81,11 @@ test('student statistics renders project names, Chinese rule/formula/status and 
   expect(w.findAll('tbody tr')).toHaveLength(1)
   expect(w.get('.score-details-button').text()).toBe('查看详情')
   expect(w.get('.score-main-value strong').text()).toBe('62.4667')
-  expect(w.findAll('.score-components>div')).toHaveLength(3)
+  expect(w.findAll('.score-components dt').map(label => label.text())).toEqual(['学业基础', '学术专长', '综合表现'])
+  expect(w.findAll('th').map(cell => cell.text())).toEqual(['材料', '材料状态', '候选分', '逐项加分', '计入状态／排除原因', '操作'])
+  expect(w.get('.score-formula').isVisible()).toBe(true)
+  expect(w.text()).not.toContain('18:34:21')
+  expect(w.text()).not.toContain('计分结果：第')
   w.unmount()
 })
 test('missing project metadata stays a Chinese description rather than internal source codes', async () => {
@@ -104,6 +107,7 @@ test('opens the actual project details from a score row and supports closing and
   let dialog = document.querySelector('[aria-label="证明原件大图预览"]')
   expect(dialog).toBeNull()
   const source = document.querySelector('[aria-labelledby="score-source-title"]')
+  expect(source.textContent).toContain('2026年11月19日 18:34:21')
   expect(source.textContent).toContain('申报信息')
   expect(source.textContent).toContain('审核通过并计分')
   expect(source.textContent).toContain('蓝桥杯')
@@ -182,10 +186,69 @@ test('shows the paper bonus separately from the capped academic group', async ()
   const w = mount(Statistics, { attachTo: document.body })
   await flushPromises()
   expect(w.get('.included-score').text()).toBe('20.0000')
-  expect(w.get('.score-components').text()).toContain('学术专长最终实际计分15.0000')
+  expect(w.get('.score-components').text()).toContain('学术专长15.0000')
   expect(w.get('small.score-cap-note').text()).toContain('受本组上限影响')
   await w.get('.score-details-button').trigger('click')
   await flushPromises()
   expect(document.querySelector('.source-score-summary').textContent).toContain('逐项加分20.0000')
   w.unmount()
+})
+
+test('retries a failed rule confirmation from details and refreshes after success', async () => {
+  const api = (await import('@/services/materialApi.js')).default
+  const submit = vi.spyOn(api, 'reconfirmSubmit')
+    .mockRejectedValueOnce(new Error('版本冲突'))
+    .mockResolvedValueOnce({})
+  Object.assign(state.score.entries[0], {
+    allowed_actions: ['confirm_submit'], source_version: 4, rule_version_id: 7
+  })
+  state.score.entries[0].project_source.category = 'honor'
+  const w = mount(Statistics, { attachTo: document.body })
+  try {
+    await flushPromises()
+    expect(w.text()).not.toContain('确认规则并重新提交')
+    await w.get('.score-details-button').trigger('click')
+    await flushPromises()
+    const dialog = document.querySelector('.score-source-dialog')
+    const button = dialog.querySelector('.source-score-summary button')
+    button.click()
+    await flushPromises()
+    expect(dialog.querySelector('[role=alert]').textContent).toContain('版本冲突')
+    button.click()
+    await flushPromises()
+    expect(submit).toHaveBeenLastCalledWith('honor', 1, 4, 7)
+    expect(state.load).toHaveBeenCalledTimes(2)
+    expect(document.querySelector('.score-source-dialog')).toBeNull()
+  } finally {
+    w.unmount()
+    submit.mockRestore()
+  }
+})
+
+test('competition confirms the displayed record version and catalog facts only in the required state', async () => {
+  const api = (await import('@/services/materialApi.js')).default
+  const data = { competition_id: 'demo', level: 'national', award: 'second' }
+  state.detail.mockResolvedValue({ status: 'rule_reconfirmation_required', data })
+  vi.spyOn(api, 'getRecord').mockResolvedValue({ status: 'rule_reconfirmation_required', version: 8, data })
+  vi.spyOn(api, 'getCompetitionCatalogItem').mockResolvedValue({
+    field_schema: { levels: ['national'], awards_by_level: { national: ['second'] } }
+  })
+  const confirm = vi.spyOn(api, 'reconfirmCompetition').mockResolvedValue({})
+  const w = mount(Statistics, { attachTo: document.body })
+  try {
+    await flushPromises()
+    await w.get('.score-details-button').trigger('click')
+    await flushPromises()
+    document.querySelector('.source-score-summary button').click()
+    await flushPromises()
+    expect(confirm).toHaveBeenCalledWith(1, 8, data)
+    state.detail.mockResolvedValue({ status: 'rule_available', data })
+    state.score.entries[0].allowed_actions = ['confirm_submit']
+    await w.get('.score-details-button').trigger('click')
+    await flushPromises()
+    expect(document.querySelector('.source-score-summary button')).toBeNull()
+  } finally {
+    w.unmount()
+    vi.restoreAllMocks()
+  }
 })

@@ -21,6 +21,7 @@ from models import (
     FacultyScoreSettings,
 )
 from extensions import db
+from sqlalchemy import func
 from services.automation import actor
 
 
@@ -528,6 +529,29 @@ def update_student(student_id):
 
 
 # 获取学生加分统计
+def _major_rank(student):
+    """按综合分即时计算专业内排名与人数；只读，不写库。
+
+    历史实现会在 GET 里重算并 commit 全专业排名：1000 人规模下首个请求约 1.3 秒，
+    并发访问时还会抢 SQLite 写锁。权威排名在 RankingBatch 与计分快照里，
+    这里只需要一个展示用的即时结果。
+
+    并列名次沿用「严格高于我的人数 + 1」，与原先按排序位置赋值的结果一致：
+    [10, 5, 5, 3] → 1, 2, 2, 4。
+    """
+    if not student.major_id:
+        return "-", 0
+    mine = student.comprehensive_score or 0.0
+    total = db.session.query(func.count(Student.id)).filter(
+        Student.major_id == student.major_id
+    ).scalar() or 0
+    ahead = db.session.query(func.count(Student.id)).filter(
+        Student.major_id == student.major_id,
+        func.coalesce(Student.comprehensive_score, 0.0) > mine,
+    ).scalar() or 0
+    return ahead + 1, total
+
+
 @score_bp.route("/students/statistics", methods=["GET"])
 def get_student_statistics():
     # 获取查询参数
@@ -548,41 +572,8 @@ def get_student_statistics():
         # 保持向后兼容，total_score使用comprehensive_score的值
         total_score = comprehensive_score
 
-        # 确保排名和专业内人数已计算
-        if student.major_id and (
-            student.major_ranking is None or student.total_students is None
-        ):
-            # 获取该专业的所有学生
-            major_students = Student.query.filter_by(major_id=student.major_id).all()
-            total_students = len(major_students)
-
-            # 按综合成绩降序排序
-            major_students.sort(
-                key=lambda s: s.comprehensive_score or 0.0, reverse=True
-            )
-
-            # 计算排名（处理并列情况）
-            for i, s in enumerate(major_students):
-                if (
-                    i > 0
-                    and s.comprehensive_score
-                    == major_students[i - 1].comprehensive_score
-                ):
-                    s.major_ranking = major_students[i - 1].major_ranking
-                else:
-                    s.major_ranking = i + 1
-                s.total_students = total_students
-
-            # 保存更改到数据库
-            db.session.commit()
-
-        ranking = student.major_ranking or "-"
-        # 计算专业内人数
-        major_total_students = student.total_students or (
-            Student.query.filter_by(major_id=student.major_id).count()
-            if student.major_id
-            else 0
-        )
+        # 排名与专业人数改为只读即时计算，GET 不再写库。
+        ranking, major_total_students = _major_rank(student)
     else:
         # 如果Student模型中没有数据，初始化默认值
         academic_score = 0.0

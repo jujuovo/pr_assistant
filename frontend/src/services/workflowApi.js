@@ -17,6 +17,7 @@ export const workflowApi = {
     requestJson(`${base}/scores/recalculation-previews`, { method: 'POST', data }),
   executeScoreRecalculation: (data) =>
     requestJson(`${base}/scores/recalculation-executions`, { method: 'POST', data }),
+  listRankings: (signal) => requestJson(`${base}/rankings`, { signal }),
   getRanking: (batchId, signal) =>
     requestJson(`${base}/rankings/${positiveInteger(batchId)}`, { signal }),
   exportRanking: (batchId, purpose) =>

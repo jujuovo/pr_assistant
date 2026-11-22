@@ -17,13 +17,10 @@ const source = readFileSync(
 test('statistics page is driven only by authoritative workflow snapshot', () => {
   assert.match(source, /workflow\.loadCurrentScore/)
   for (const field of [
-    'snapshot_version',
     'score.status',
-    'updated_at',
     'candidateScore',
     'includedScore',
-    'reason',
-    'updatedAt'
+    'reason'
   ])
     assert(source.includes(field))
   for (const forbidden of [

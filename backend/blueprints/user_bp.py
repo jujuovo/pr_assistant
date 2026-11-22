@@ -147,6 +147,36 @@ def is_admin(user):
     return user and user.role == "admin"
 
 
+def _session_admin():
+    """当前会话对应的用户；`/api/admin/*` 视图必须以它判断"我是谁"。"""
+    user_id = session.get("user_id")
+    if not user_id:
+        # 没登录就直接判定为 None：db.session.get(User, None) 会触发
+        # "fully NULL primary key" 告警，且没有意义
+        return None
+    return db.session.get(User, user_id)
+
+
+@user_bp.before_request
+def _guard_admin_routes():
+    """`/api/admin/*` 一律要求管理员会话。
+
+    这组端点原来完全没有鉴权，而且在函数体里用查询参数 `currentUserId` 判断
+    "我是谁"——这个参数由请求方随意填写。后果是匿名请求就能改任意账号的角色
+    （等价于把自己提权成管理员）、重置任意账号的密码、批量新建用户。
+
+    身份只能来自服务端会话；`currentUserId` 从此只作为历史兼容被忽略。
+    """
+    if not request.path.startswith("/api/admin/"):
+        return None
+    user = _session_admin()
+    if user is None or user.status != "active":
+        return jsonify({"message": "请先登录"}), 401
+    if not is_admin(user):
+        return jsonify({"message": "需要管理员权限"}), 403
+    return None
+
+
 # 管理员获取所有用户接口
 @user_bp.route("/admin/users", methods=["GET"])
 def get_all_users():
@@ -273,11 +303,11 @@ def get_all_users():
 # 管理员删除用户接口
 @user_bp.route("/admin/users/<int:user_id>", methods=["DELETE"])
 def delete_user(user_id):
-    # 获取当前登录用户的ID
-    current_user_id = request.args.get("currentUserId", type=int)
+    # 身份以会话为准；currentUserId 查询参数可被伪造，不再作为判断依据
+    current_user = _session_admin()
 
     # 检查是否尝试删除自己
-    if current_user_id == user_id:
+    if current_user is not None and current_user.id == user_id:
         return jsonify({"message": "无法删除自己的账号"}), 400
 
     user = User.query.get(user_id)
@@ -306,11 +336,11 @@ def delete_user(user_id):
 # 管理员更新用户信息接口
 @user_bp.route("/admin/users/<int:user_id>", methods=["PUT"])
 def update_user(user_id):
-    # 获取当前登录用户的ID
-    current_user_id = request.args.get("currentUserId", type=int)
+    # 身份以会话为准；currentUserId 查询参数可被伪造，不再作为判断依据
+    current_user = _session_admin()
 
     # 检查是否尝试修改自己
-    if current_user_id == user_id:
+    if current_user is not None and current_user.id == user_id:
         return jsonify({"message": "无法修改自己的账号信息"}), 400
 
     user = User.query.get(user_id)
@@ -460,11 +490,11 @@ def create_user():
 # 管理员重置用户密码接口
 @user_bp.route("/admin/users/<int:user_id>/reset-password", methods=["POST"])
 def admin_reset_password(user_id):
-    # 获取当前登录用户的ID
-    current_user_id = request.args.get("currentUserId", type=int)
+    # 身份以会话为准；currentUserId 查询参数可被伪造，不再作为判断依据
+    current_user = _session_admin()
 
     # 检查是否尝试重置自己的密码
-    if current_user_id == user_id:
+    if current_user is not None and current_user.id == user_id:
         return jsonify({"message": "无法重置自己的密码，请使用个人设置修改密码"}), 400
 
     user = User.query.get(user_id)

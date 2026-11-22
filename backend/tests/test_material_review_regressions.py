@@ -31,7 +31,7 @@ def test_linked_application_cannot_change_owner(env):
                   department_id=owner.department_id,major_id=owner.major_id)
     db.session.add(other); db.session.commit()
     response=env[1].put(f'/api/applications/{application.id}',json={'studentId':'S2'})
-    assert response.status_code==400
+    assert response.status_code==403
     db.session.refresh(application)
     assert application.student_id=='S1'
 
@@ -41,7 +41,7 @@ def test_linked_application_student_cannot_approve_or_change_score(env):
     response=env[1].post(f'/api/applications/{application.id}/review',json={
         'status':'approved','finalScore':5,'reviewedBy':'学生自己'})
     assert response.status_code==403
-    assert env[1].put(f'/api/applications/{application.id}',json={'finalScore':8}).status_code==400
+    assert env[1].put(f'/api/applications/{application.id}',json={'finalScore':8}).status_code==409
     db.session.refresh(application)
     assert application.status=='pending' and application.final_score is None
 

@@ -129,7 +129,7 @@ def test_identity_whitelist_and_permissions(env):
     assert env[1].get(url).status_code == 200
     login(env[1],env[2]['student'])
     assert env[1].post(f"/api/applications/{response.json['id']}/review",json={'status':'approved'}).status_code == 403
-    assert env[1].put(f"/api/applications/{response.json['id']}",json={'finalScore':100}).status_code == 400
+    assert env[1].put(f"/api/applications/{response.json['id']}",json={'finalScore':100}).status_code == 409
     assert env[1].get(url+f"/artifacts/{report['version']}/../../config.py").status_code == 404
 
 
