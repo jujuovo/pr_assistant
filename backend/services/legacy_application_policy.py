@@ -48,10 +48,12 @@ def validate_edit(data, application):
     if not isinstance(data, dict):
         abort(400, description="申请内容必须是对象")
     if REVIEW_FIELDS.intersection(data):
-        abort(400, description="学生不能修改审核结果或系统时间")
+        # 与创建路径保持一致：篡改审核结果属于状态冲突，用 409 而不是 400
+        abort(409, description="学生不能修改审核结果或系统时间")
     for field in IDENTITY_FIELDS:
         if field in data and str(data[field]) != str(getattr(application, field)):
-            abort(400, description="申请不能更改所属学生或学院")
+            # 与 bind_student_identity 的 403 对齐：这是越权，不是格式错误
+            abort(403, description="申请不能更改所属学生或学院")
     if data.get("status", application.status) not in {"draft", "pending"}:
         abort(409, description="状态只能通过相应提交、撤回或审核入口修改")
     if "files" in data:

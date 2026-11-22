@@ -82,8 +82,10 @@ def test_migrated_rule_cannot_be_disguised_as_another_category(env):
 
 def test_update_cannot_change_identity_score_or_other_attachment(env):
     row=draft(env);login(env[1],env[2]['student'])
-    for payload in ({'studentId':'S2'},{'finalScore':100},{'files':[{'path':'/uploads/files/other.png'}]}):
-        assert env[1].put(url(row),json=payload).status_code==400
+    # 身份篡改按越权处理（403），审核字段按状态冲突处理（409），附件白名单仍是格式错误（400）
+    for payload, expected in (({'studentId':'S2'},403),({'finalScore':100},409),
+                              ({'files':[{'path':'/uploads/files/other.png'}]},400)):
+        assert env[1].put(url(row),json=payload).status_code==expected
     assert env[1].put(url(row),json={'projectName':'正常修改'}).status_code==200
     assert db.session.get(Application,row.id).project_name=='正常修改'
 

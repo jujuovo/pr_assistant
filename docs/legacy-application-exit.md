@@ -78,3 +78,42 @@
 实现和验证归属独立变更：`openspec/changes/secure-legacy-application-compatibility/`。低风险界面维护仍属于另一个变更。最终验证与尚未执行的数据库/浏览器验收见本变更的evidence.md。
 
 本轮保留旧Application与所有历史宿主依赖，未实施阶段2业务迁移或阶段3物理删除。旧证书预览/确认/重试/审核仍是兼容链路；完整退出须另行排期。
+
+## 六、旧批量志愿链路下线清单（2026-11-22 整理）
+
+对象：`/api/automation/volunteer/**`（`backend/blueprints/automation_bp.py`，12 个路由）。
+这套批量上传 + 政策分配的实现已被材料级志愿链路（`/api/materials/volunteer/records`）取代，
+后者覆盖填报、OCR 比对、申诉、提交门禁、教师核定与年度累计封顶，且前后端均已接通。
+
+### 现状核对
+
+| 事实 | 数据 |
+|---|---|
+| 前端页面调用这些接口 | **0 处**（客户端 `frontend/src/services/volunteerApi.js` 已删除） |
+| 后端测试引用 `/api/automation` | **46 处 / 6 个文件** |
+| `services/automation.py` 被谁 import | **9 个模块**，其中 `actor()` 被 8 个后端蓝图共用 |
+
+### 不能直接删的原因
+
+`services/automation.py` 同时承载两件事：批量志愿业务 **和** 公共鉴权 `actor()`。
+直接删除会连带打断 `application_bp`、`certificate_bp`、`material_bp`、`ocr_bp`、
+`rule_bp`、`score_bp`、`workflow_bp` 与 `legacy_application_policy.py` 的正常工作。
+
+### 下线步骤（需负责人确认后执行）
+
+1. **抽出公共能力**：把 `actor()`（以及 `application_bp` 使用的 `authorize`）移到独立模块（如 `services/actors.py`），
+   保持导入路径可控；`round_score` / `score_increment` 等志愿专用函数留在原处或随模块删除。
+2. **确认无存量依赖**：`automation_batch` / `automation_item` / `automation_review` 三张表若已有数据，
+   需先按阶段 2 迁移到 `MaterialRecord + ScoreEntry`，否则历史分数失去解释。
+3. **删除路由与蓝图**：移除 `automation_bp` 的 12 个路由及 `app.py` 中的注册。
+4. **同步改测试**：6 个文件 46 处引用需删除或改写；`test_automation_lifecycle.py` 中与"删除保护"相关的
+   用例需移到旧申请删除保护的测试里，避免覆盖缺口。
+5. **清理文档**：`docs/volunteer-automation.md`（532 行）应标注为已废弃或归档，
+   否则后来者仍会照它去接前端。
+6. **回归**：后端全量 + 前端挂载 + `node --test`，并确认教师端待审/汇总、学生端材料页不受影响。
+
+### 风险提示
+
+- 第 2 步是硬前置：库里只要还有按批次计分的志愿记录，删接口就会让"历史分数从哪来"无法解释。
+- 这不是单方面可完成的改动，涉及 `services/automation.py` 拆分与 46 处测试改造，
+  必须与模块负责人一起做。

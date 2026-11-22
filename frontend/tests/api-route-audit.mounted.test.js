@@ -14,7 +14,6 @@ import ocr from '../src/services/ocrApi.js'
 import workflow from '../src/services/workflowApi.js'
 import rulePackages from '../src/services/competitionRulePackageApi.js'
 import structured from '../src/services/structuredRuleApi.js'
-import volunteer from '../src/services/volunteerApi.js'
 import review from '../src/services/applicationReviewApi.js'
 
 const manifest = process.env.API_ROUTE_MANIFEST
@@ -26,7 +25,6 @@ const modules = {
   workflow,
   rulePackages,
   structured,
-  volunteer,
   review
 }
 const uuid = '01234567-1234-1234-1234-1234567890ab'

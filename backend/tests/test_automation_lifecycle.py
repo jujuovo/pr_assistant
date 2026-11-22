@@ -136,6 +136,8 @@ def test_delete_with_automation_preserves_database_and_files(deletion_env, route
         assert approve(client, users, batch, "5.05").status_code == 200
     item = AutomationItem.query.filter_by(batch_id=batch).one()
     evidence = Path(app.config["AUTOMATION_UPLOAD_FOLDER"]) / item.stored_name
+    # 删除组织架构/用户是管理员操作：必须以管理员会话发起，否则只会拿到 403
+    login(client, users["admin"])
     response = client.delete(routes[route])
     assert response.status_code == 409, response.data
     db.session.expire_all()
@@ -154,6 +156,11 @@ def test_delete_reviewer_with_audit_is_protected(deletion_env):
     run_one(app, Provider(credit()))
     submit(client, batch)
     assert approve(client, users, batch, "5.05").status_code == 200
+    # 删除"有审核记录的审核人"要由另一位管理员执行：
+    # 管理员删除自己在接口层就被挡住（400），测不到数据保护那条 409
+    db.session.get(User, users["other"]).role = "admin"
+    db.session.commit()
+    login(client, users["other"])
     response = client.delete(f"/api/admin/users/{users['admin']}")
     assert response.status_code == 409
     assert AutomationReview.query.count() == 1
@@ -173,6 +180,7 @@ def test_delete_faculty_with_only_policy_is_protected(deletion_env):
 @pytest.mark.parametrize("route", ["user", "faculty", "department", "major"])
 def test_normal_deletion_still_works_without_automation(deletion_env, route):
     app, client, users, attachment, routes, application_id = deletion_env
+    login(client, users["admin"])
     response = client.delete(routes[route])
     assert response.status_code == 200, response.data
     assert not attachment.exists()
@@ -185,6 +193,7 @@ def test_normal_deletion_still_works_without_automation(deletion_env, route):
 @pytest.mark.parametrize("integrity", [False, True])
 def test_failed_commit_never_deletes_attachments(deletion_env, monkeypatch, route, integrity):
     app, client, users, attachment, routes, application_id = deletion_env
+    login(client, users["admin"])
     def fail_commit():
         if integrity:
             raise IntegrityError("DELETE", {}, RuntimeError("foreign key violation"))

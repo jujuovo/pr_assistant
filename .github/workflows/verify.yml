@@ -29,7 +29,7 @@ jobs:
         run: python -c "import sys; assert sys.prefix != sys.base_prefix, 'CI must use its isolated Python environment'; print(sys.executable)"
       - run: python -m pip install -r backend/requirements-ocr.txt
       - run: python -m pip check
-      - run: python -B backend/tools/prepare_local.py
+      # 只需一次：prepare_local 是幂等的，第二步同步日期的场景留给本地手工执行
       - run: python -B backend/tools/prepare_local.py
       - run: python -B -m pytest backend/tests -q -p no:cacheprovider
       - run: npm ci --prefix frontend

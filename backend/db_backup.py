@@ -2,29 +2,170 @@
 """
 数据库备份与恢复脚本
 
-该脚本用于备份和恢复PostgreSQL数据库，基于项目的配置文件获取数据库连接信息。
-同时备份和恢复uploads目录下的实际文件。
+按 `Config.SQLALCHEMY_DATABASE_URI` 的方言分两条路走：
+
+- PostgreSQL：沿用原有的 pg_dump / psql / 手写 SQL 导出；
+- SQLite（本地开发与课程演示的默认库）：走 `tools/backup_sqlite.py` 的在线备份接口，
+  对 WAL 安全，不会丢掉还留在 `-wal` 里的事务。
+
+两条路产出的备份包结构与附件目录处理保持一致，因此管理员页面不需要区分方言。
+
+同时备份和恢复上传目录下的实际文件。
 """
 
 import os
 import sys
-import psycopg2
 import argparse
+import tempfile
 import zipfile
 import shutil
 from datetime import datetime
-from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+
+# psycopg2 只在 PostgreSQL 部署下需要；纯 SQLite 环境允许它缺失。
+try:
+    import psycopg2
+    from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+except ImportError:  # pragma: no cover - 取决于部署环境
+    psycopg2 = None
+    ISOLATION_LEVEL_AUTOCOMMIT = None
 
 # 添加项目根目录到Python路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+_BACKEND_ROOT = os.path.dirname(os.path.abspath(__file__))
+if _BACKEND_ROOT not in sys.path:
+    sys.path.insert(0, _BACKEND_ROOT)
+
 from config import Config
+from tools.backup_sqlite import backup as _sqlite_online_backup
+from tools.backup_sqlite import restore as _sqlite_online_restore
+
+
+SQLITE_URI_PREFIXES = ("sqlite:///", "sqlite+pysqlite:///")
+SQLITE_SNAPSHOT_SUFFIXES = (".sqlite", ".sqlite3", ".db")
+
+
+def sqlite_database_path(uri=None):
+    """把数据库 URI 还原成本地 SQLite 库文件路径。
+
+    非 SQLite（PostgreSQL 等）和内存库都返回 None，调用方据此走原有的 PostgreSQL 流程。
+    """
+    uri = uri or getattr(Config, "SQLALCHEMY_DATABASE_URI", "")
+    if isinstance(uri, bytes):
+        uri = uri.decode("utf-8", errors="replace")
+    uri = uri or ""
+
+    for prefix in SQLITE_URI_PREFIXES:
+        if uri.startswith(prefix):
+            path = uri[len(prefix):]
+            break
+    else:
+        return None
+
+    # 去掉 ?check_same_thread=false 之类的查询串
+    path = path.split("?", 1)[0]
+    if not path or path == ":memory:":
+        return None
+    if not os.path.isabs(path):
+        # Flask-SQLAlchemy 把相对 sqlite 路径解析到 <backend>/instance 下
+        path = os.path.join(_BACKEND_ROOT, "instance", path)
+    return os.path.normpath(path)
+
+
+def is_sqlite_database(uri=None):
+    """当前配置是否指向本地 SQLite 文件库。"""
+    return sqlite_database_path(uri) is not None
+
+
+def uploads_dir():
+    """上传文件目录：跟随配置，缺省回落到 backend/uploads。"""
+    configured = getattr(Config, "UPLOAD_FOLDER", None)
+    if configured:
+        return configured
+    return os.path.join(_BACKEND_ROOT, "uploads")
+
+
+def uploads_backup_path(backup_file):
+    """由数据库备份文件名推出配套的附件备份文件名。
+
+    不能用 str.replace('.sql', ...)：'.sqlite' 里也含 '.sql'，会拼出
+    'xxx_uploads.zipite' 这种坏名字。
+    """
+    stem, _extension = os.path.splitext(backup_file)
+    return f"{stem}_uploads.zip"
+
+
+def backup_sqlite_snapshot(destination, source=None):
+    """用在线备份接口把运行中的 SQLite 库导出到 destination（WAL 安全）。"""
+    source = source or sqlite_database_path()
+    if not source:
+        raise RuntimeError("当前数据库不是本地 SQLite，无法生成 SQLite 快照")
+    print(f"导出 SQLite 在线快照: {source} -> {destination}")
+    return _sqlite_online_backup(source, destination, overwrite=True)
+
+
+def extract_sqlite_snapshot(backup_file, workdir=None):
+    """从备份包里取出 SQLite 快照文件。
+
+    备份可能是整包 .zip（内含 *_database.sqlite），也可能是裸的 .sqlite / .db。
+    默认解到系统临时目录，避免在仓库的 backup 目录里留下中间文件。
+    """
+    if not backup_file.lower().endswith(".zip"):
+        return backup_file
+
+    workdir = workdir or tempfile.gettempdir()
+    with zipfile.ZipFile(backup_file, "r") as archive:
+        candidates = [
+            name for name in archive.namelist()
+            if name.lower().endswith(SQLITE_SNAPSHOT_SUFFIXES)
+        ]
+        if not candidates:
+            raise ValueError("备份 ZIP 中未找到 SQLite 数据库文件（期望 *_database.sqlite）")
+        member = candidates[0]
+        target = os.path.join(
+            workdir, f"restore_{datetime.now().strftime('%Y%m%d_%H%M%S')}.sqlite"
+        )
+        with archive.open(member) as source, open(target, "wb") as output:
+            shutil.copyfileobj(source, output)
+    print(f"已从备份 ZIP 提取 SQLite 快照: {target}")
+    return target
+
+
+def restore_sqlite_snapshot(backup_file, target=None):
+    """用快照覆盖本地 SQLite 库；恢复前先留一份可回退的副本。"""
+    target = target or sqlite_database_path()
+    if not target:
+        raise RuntimeError("当前数据库不是本地 SQLite，无法恢复 SQLite 快照")
+
+    # 误点恢复不是不可逆操作：先给当前库拍一张快照，留在库文件旁边
+    safety = f"{target}.before-restore-{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    try:
+        _sqlite_online_backup(target, safety, overwrite=True)
+        print(f"恢复前快照已保存: {safety}")
+    except Exception as exc:  # 备份失败不该阻塞恢复，但要留痕
+        print(f"警告: 恢复前快照生成失败，继续恢复: {exc}")
+
+    # 断开连接池，避免旧连接持有被替换前的页
+    try:
+        from extensions import db
+
+        db.session.remove()
+        db.engine.dispose()
+    except Exception:
+        pass
+
+    return _sqlite_online_restore(backup_file, target, overwrite=True)
 
 
 def get_db_connection():
     """
     获取数据库连接
     """
+    if psycopg2 is None:
+        raise RuntimeError(
+            "当前环境没有安装 psycopg2，无法使用 PostgreSQL 备份路径；"
+            "本地 SQLite 请设置 DATABASE_URL=sqlite:///<库文件路径>"
+        )
     try:
         # 直接使用完整的连接字符串，避免解析过程中的编码问题
         db_uri = Config.SQLALCHEMY_DATABASE_URI
@@ -47,11 +188,11 @@ def backup_uploads(backup_file):
     """
     备份uploads目录
     """
-    # 获取uploads目录路径
-    uploads_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
+    # 获取uploads目录路径（跟随配置，缺省 backend/uploads）
+    source_dir = uploads_dir()
 
-    if not os.path.exists(uploads_dir):
-        print(f"警告: uploads目录不存在 - {uploads_dir}")
+    if not os.path.exists(source_dir):
+        print(f"警告: uploads目录不存在 - {source_dir}")
         return
 
     print(f"开始备份uploads目录到 {backup_file}...")
@@ -59,11 +200,11 @@ def backup_uploads(backup_file):
     # 创建zip文件
     with zipfile.ZipFile(backup_file, "w", zipfile.ZIP_DEFLATED) as zipf:
         # 遍历uploads目录并添加所有文件
-        for root, dirs, files in os.walk(uploads_dir):
+        for root, dirs, files in os.walk(source_dir):
             for file in files:
                 file_path = os.path.join(root, file)
                 # 计算相对路径，保留目录结构
-                arcname = os.path.relpath(file_path, uploads_dir)
+                arcname = os.path.relpath(file_path, source_dir)
                 zipf.write(file_path, arcname)
 
     print(f"uploads目录备份完成: {backup_file}")
@@ -71,9 +212,16 @@ def backup_uploads(backup_file):
 
 def backup_database(backup_file):
     """
-    备份数据库
+    备份数据库：SQLite 走在线快照，PostgreSQL 走 pg_dump
     """
     print(f"开始备份数据库到 {backup_file}...")
+
+    if is_sqlite_database():
+        # SQLite 既没有 pg_dump 也没有序列，直接导出在线一致性快照
+        backup_sqlite_snapshot(backup_file)
+        print(f"数据库备份完成: {backup_file}")
+        backup_uploads(uploads_backup_path(backup_file))
+        return
 
     # 使用psycopg2执行pg_dump命令
     result = os.system(
@@ -86,8 +234,7 @@ def backup_database(backup_file):
     print(f"数据库备份完成: {backup_file}")
 
     # 同时备份uploads目录
-    uploads_backup = backup_file.replace(".sql", "_uploads.zip")
-    backup_uploads(uploads_backup)
+    backup_uploads(uploads_backup_path(backup_file))
 
 
 def backup_database_python(backup_file):
@@ -95,6 +242,12 @@ def backup_database_python(backup_file):
     使用Python代码备份数据库（备选方案，当pg_dump不可用时）
     """
     print(f"开始使用Python备份数据库到 {backup_file}...")
+
+    if is_sqlite_database():
+        backup_sqlite_snapshot(backup_file)
+        print(f"数据库备份完成: {backup_file}")
+        backup_uploads(uploads_backup_path(backup_file))
+        return
 
     conn = get_db_connection()
     conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
@@ -276,8 +429,7 @@ def backup_database_python(backup_file):
         print(f"数据库备份完成: {backup_file}")
 
         # 同时备份uploads目录
-        uploads_backup = backup_file.replace(".sql", "_uploads.zip")
-        backup_uploads(uploads_backup)
+        backup_uploads(uploads_backup_path(backup_file))
 
     except Exception as e:
         print(f"备份数据库失败: {e}")
@@ -304,22 +456,22 @@ def restore_uploads(backup_file):
     # 获取当前时间戳
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S%f")[:-3]
 
-    # 获取uploads目录路径
-    uploads_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
+    # 获取uploads目录路径（跟随配置，缺省 backend/uploads）
+    target_dir = uploads_dir()
 
     # 如果uploads目录不存在，创建它
-    if not os.path.exists(uploads_dir):
-        os.makedirs(uploads_dir)
-        print(f"创建uploads目录: {uploads_dir}")
+    if not os.path.exists(target_dir):
+        os.makedirs(target_dir)
+        print(f"创建uploads目录: {target_dir}")
     else:
         # 清空现有uploads目录内容
-        for item in os.listdir(uploads_dir):
-            item_path = os.path.join(uploads_dir, item)
+        for item in os.listdir(target_dir):
+            item_path = os.path.join(target_dir, item)
             if os.path.isfile(item_path):
                 os.unlink(item_path)
             elif os.path.isdir(item_path):
                 shutil.rmtree(item_path)
-        print(f"清空现有uploads目录: {uploads_dir}")
+        print(f"清空现有uploads目录: {target_dir}")
 
     # 确定上传文件备份的位置
     uploads_backup = None
@@ -336,7 +488,7 @@ def restore_uploads(backup_file):
         uploads_backup = backup_file
     else:
         # 查找对应的uploads备份文件
-        uploads_backup = backup_file.replace(".sql", "_uploads.zip")
+        uploads_backup = uploads_backup_path(backup_file)
 
     if not os.path.exists(uploads_backup):
         print(f"警告: 未找到uploads备份文件 - {uploads_backup}")
@@ -351,8 +503,8 @@ def restore_uploads(backup_file):
 
         if is_direct_uploads_zip:
             # 如果是直接的uploads备份文件，直接解压所有内容到uploads目录
-            zipf.extractall(uploads_dir)
-            print(f"uploads目录恢复完成: {uploads_dir}")
+            zipf.extractall(target_dir)
+            print(f"uploads目录恢复完成: {target_dir}")
             return
 
         # 查找内部的_uploads.zip文件
@@ -381,9 +533,9 @@ def restore_uploads(backup_file):
                     print(f"内部uploads.zip文件包含: {inner_zipf.namelist()}")
 
                     # 解压所有文件到uploads目录
-                    inner_zipf.extractall(uploads_dir)
+                    inner_zipf.extractall(target_dir)
 
-                print(f"uploads目录恢复完成: {uploads_dir}")
+                print(f"uploads目录恢复完成: {target_dir}")
                 print(f"恢复的文件数量: {len(inner_zipf.namelist())}")
                 return
             except Exception as e:
@@ -406,7 +558,7 @@ def restore_uploads(backup_file):
             for member in zipf.infolist():
                 if not member.is_dir() and member.filename:
                     # 直接提取文件到uploads目录
-                    target_path = os.path.join(uploads_dir, member.filename)
+                    target_path = os.path.join(target_dir, member.filename)
                     # 创建目标目录
                     os.makedirs(os.path.dirname(target_path), exist_ok=True)
                     # 提取文件
@@ -414,14 +566,17 @@ def restore_uploads(backup_file):
                         shutil.copyfileobj(source, target)
             print(f"直接从完整备份提取文件完成")
 
-    print(f"uploads目录恢复完成: {uploads_dir}")
+    print(f"uploads目录恢复完成: {target_dir}")
 
 
 def restore_database(backup_file):
     """
-    恢复数据库
+    恢复数据库：SQLite 走快照替换，PostgreSQL 走 psql
     """
     print(f"开始从 {backup_file} 恢复数据库...")
+
+    if is_sqlite_database():
+        return restore_database_python(backup_file)
 
     # 先恢复uploads目录
     restore_uploads(backup_file)
@@ -456,6 +611,29 @@ def restore_database_python(backup_file):
     使用Python代码恢复数据库（备选方案，当psql不可用时）
     """
     print(f"开始使用Python从 {backup_file} 恢复数据库...")
+
+    if is_sqlite_database():
+        snapshot = None
+        try:
+            # 附件先恢复，再替换库文件；两步都成功才报告成功
+            restore_uploads(backup_file)
+            snapshot = extract_sqlite_snapshot(backup_file)
+            restore_sqlite_snapshot(snapshot)
+            print(f"数据库恢复完成")
+            return True
+        except Exception as e:
+            print(f"恢复数据库失败: {e}")
+            import traceback
+
+            traceback.print_exc()
+            return False
+        finally:
+            # 解包出来的中间快照不属于任何人的数据，用完就删
+            if snapshot and snapshot != backup_file and os.path.exists(snapshot):
+                try:
+                    os.remove(snapshot)
+                except OSError as exc:
+                    print(f"警告: 临时快照删除失败 {snapshot}: {exc}")
 
     # 先恢复uploads目录
     restore_uploads(backup_file)
