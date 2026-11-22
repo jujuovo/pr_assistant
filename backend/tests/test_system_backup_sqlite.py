@@ -155,12 +155,17 @@ def test_sqlite_database_path_recognises_only_local_file_databases():
     assert db_backup.sqlite_database_path("sqlite:///:memory:") is None
 
 
-def test_sqlite_database_path_rejects_query_string_and_resolves_relative():
+def test_sqlite_database_path_strips_query_string(tmp_path):
+    # 必须用当前平台的绝对路径：在 macOS/Linux 上 "C:/..." 不是绝对路径，
+    # 会被当成相对路径拼到 instance/ 下，写死盘符的断言只能在 Windows 通过。
+    absolute = tmp_path / "data" / "gradpush.db"
     parsed = db_backup.sqlite_database_path(
-        "sqlite:///C:/data/gradpush.db?check_same_thread=false"
+        f"sqlite:///{absolute.as_posix()}?check_same_thread=false"
     )
-    assert parsed == os.path.normpath("C:/data/gradpush.db")
+    assert parsed == os.path.normpath(str(absolute))
 
+
+def test_sqlite_database_path_resolves_relative_into_instance_dir():
     relative = db_backup.sqlite_database_path("sqlite:///gradpush.db")
     assert relative == os.path.normpath(
         os.path.join(db_backup._BACKEND_ROOT, "instance", "gradpush.db")
@@ -172,7 +177,7 @@ def test_uploads_backup_path_keeps_sqlite_extension_intact():
     # "x_database.sqlite" 拼成 "x_database_uploads.zipite"
     assert db_backup.uploads_backup_path("x_database.sqlite") == "x_database_uploads.zip"
     assert db_backup.uploads_backup_path("x_database.sql") == "x_database_uploads.zip"
-    assert db_backup.uploads_backup_path("/tmp/a/b.sqlite") == "/tmp/a/b_uploads.zip"
+    assert db_backup.uploads_backup_path("a/b/x.sqlite") == "a/b/x_uploads.zip"
 
 
 # --------------------------------------------------------------------------
