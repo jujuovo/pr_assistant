@@ -1,16 +1,28 @@
 <template>
-  <RankingBatch title="我的排名">
-    <template #default="{ ranking }">
-      <p v-if="messages[ranking.status]" role="status">{{ messages[ranking.status] }}</p>
-      <dl v-if="ranking.entries[0]" class="personal-result">
-        <div><dt>本人名次</dt><dd>{{ ranking.entries[0].rank ?? '—' }}</dd></div>
-        <div><dt>批次总人数</dt><dd>{{ ranking.total_count }}</dd></div>
-        <div><dt>推免综合成绩</dt><dd>{{ ranking.entries[0].comprehensive_score ?? '—' }}</dd></div>
-      </dl>
-      <p v-if="ranking.entries[0]?.reason_code">未纳入原因 {{ ranking.entries[0].reason_code }}</p>
-      <p v-if="!ranking.entries.length">本批次暂无你的排名结果。</p>
-    </template>
-  </RankingBatch>
+  <div class="student-ranking-page">
+    <RankingBatch title="我的排名">
+      <template #default="{ ranking }">
+        <p v-if="messages[ranking.status]" class="ranking-notice" role="status">{{
+          messages[ranking.status]
+        }}</p>
+        <dl v-if="ranking.entries[0]" class="personal-result">
+          <div class="personal-rank"
+            ><dt>本人名次</dt><dd>{{ ranking.entries[0].rank ?? '—' }}</dd></div
+          >
+          <div
+            ><dt>批次总人数</dt><dd>{{ ranking.total_count }}</dd></div
+          >
+          <div
+            ><dt>推免综合成绩</dt><dd>{{ ranking.entries[0].comprehensive_score ?? '—' }}</dd></div
+          >
+        </dl>
+        <p v-if="ranking.entries[0]?.reason_code"
+          >未纳入原因 {{ ranking.entries[0].reason_code }}</p
+        >
+        <p v-if="!ranking.entries.length">本批次暂无你的排名结果。</p>
+      </template>
+    </RankingBatch>
+  </div>
 </template>
 
 <script setup>
@@ -25,7 +37,4 @@ const messages = {
 }
 </script>
 
-<style scoped>
-.personal-result { display: flex; gap: 2rem; flex-wrap: wrap; margin: 1rem 0; }
-dd { font-size: 1.4rem; font-weight: 600; margin: .4rem 0 0; }
-</style>
+<style scoped src="@/assets/styles/pages/student/rankings/StudentRanking.css"></style>
