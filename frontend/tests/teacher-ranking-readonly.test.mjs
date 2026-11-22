@@ -4,8 +4,11 @@ import { readFileSync } from 'node:fs'
 const source = readFileSync(new URL('../src/pages/teacher/rankings/TeacherRanking.vue', import.meta.url), 'utf8')
 
 test('teacher ranking shows complete read-only rows and score basis', () => {
-  for (const value of ['ranking.status', 'ranking.scope', 'ranking.version', 'ranking.entries', 'row.score_basis']) assert(source.includes(value))
-  assert.match(source, /workflowApi\.getRanking/)
+  const shared = readFileSync(new URL('../src/pages/common/statistics/RankingBatch.vue', import.meta.url), 'utf8')
+  assert.match(source, /<RankingBatch title="专业排名" show-basis>/)
+  assert.match(shared, /v-for="row in ranking.entries"/)
+  assert.match(shared, /row.score_basis/)
+  assert.match(source, /allowed_actions.includes\('export'\)/)
 })
 
 test('teacher ranking has no ranking mutation controls', () => {

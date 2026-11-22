@@ -38,3 +38,29 @@ def test_student_sees_only_personal_entry_and_export_is_audited(env):
 def test_other_faculty_cannot_read_ranking(env):
     batch=_batch(env);login(env[1],env[2]["other"])
     assert env[1].get(f"/api/workflow/rankings/{batch.id}").status_code==403
+
+
+def test_ranking_options_include_only_authorized_batch_summaries(env):
+    visible = _batch(env)
+    hidden = RankingBatch(year=visible.year, faculty_id=visible.faculty_id,
+        major_id=visible.major_id, scope_type="major", scope_definition={},
+        cutoff_at=visible.cutoff_at, rule_version_ids=[], status="draft", version=1,
+        input_digest="d" * 64, created_by=env[2]["admin"])
+    db.session.add(hidden)
+    db.session.commit()
+
+    login(env[1], env[2]["student"])
+    response = env[1].get("/api/workflow/rankings")
+    assert response.status_code == 200
+    assert response.json == {"items": [{
+        "batch_id": visible.id, "year": 2026, "major_name": "测试专业",
+        "version": 3, "status": "published",
+    }]}
+
+    login(env[1], env[2]["admin"])
+    assert {item["batch_id"] for item in env[1].get("/api/workflow/rankings").json["items"]} == {
+        visible.id, hidden.id,
+    }
+
+    login(env[1], env[2]["other"])
+    assert env[1].get("/api/workflow/rankings").json == {"items": []}

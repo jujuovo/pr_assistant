@@ -19,7 +19,7 @@ test('each ranking lifecycle action sends exactly one versioned request',async()
 
 test('admin ranking page renders command buttons only from allowed_actions',()=>{
   const source=readFileSync(new URL('../src/pages/admin/rankings/RankingPublication.vue',import.meta.url),'utf8')
-  assert.match(source,/batch\.value\?\.allowed_actions/)
+  assert.match(source,/ranking\.allowed_actions\.filter/)
   assert.match(source,/workflowApi\.rankingCommand/)
   assert.equal((source.match(/workflowApi\.rankingCommand/g)||[]).length,1)
   assert.match(source,/blockers/)
