@@ -1,0 +1,53 @@
+.student-ranking-page {
+  min-width: 0;
+}
+.student-ranking-page :deep(.batch-details) {
+  border-top: 8px solid var(--system-blue);
+}
+.student-ranking-page :deep(.batch-details h2) {
+  font-size: 22px;
+  overflow-wrap: anywhere;
+  color: var(--system-ink-blue);
+}
+.student-ranking-page :deep(.batch-details > p) {
+  color: var(--system-muted);
+}
+.personal-result {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1fr;
+  gap: 16px;
+  margin: 24px 0 0;
+  align-items: end;
+}
+.personal-result > div {
+  padding: 16px;
+}
+.personal-rank,
+.ranking-notice {
+  background: var(--system-surface);
+  border-radius: var(--system-radius);
+}
+.ranking-notice {
+  padding: 12px 16px;
+}
+.personal-result dd {
+  margin: 4px 0 0;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.personal-rank dd {
+  color: var(--system-ink-blue);
+  font-size: clamp(36px, 5vw, 56px);
+}
+@media (max-width: 768px) {
+  .personal-result {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .personal-rank {
+    grid-column: 1 / -1;
+  }
+}

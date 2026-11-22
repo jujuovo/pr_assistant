@@ -4,7 +4,7 @@ from datetime import date, datetime, timedelta
 
 from flask import Blueprint, abort, jsonify, request
 
-from models import Student
+from models import Major, Student
 from services.automation import actor
 from services.materials.schemas import integer
 from use_cases.scoring import (
@@ -261,6 +261,25 @@ def _ranking_view(user, batch, entries):
         source, presented_entries, role=user.role, student_id=user.student_id,
         faculty_id=user.faculty_id,
     )
+
+
+@workflow_bp.get("/rankings")
+def ranking_options():
+    user = actor()
+    query = db.session.query(RankingBatch, Major.name).outerjoin(Major, RankingBatch.major_id == Major.id)
+    if user.role == "student" and user.student_id:
+        query = query.filter(RankingEntry.query.filter(
+            RankingEntry.batch_id == RankingBatch.id, RankingEntry.student_id == user.student_id
+        ).exists())
+    elif user.role in {"teacher", "admin"} and user.faculty_id:
+        query = query.filter(RankingBatch.faculty_id == user.faculty_id)
+    else:
+        abort(403, description="没有排名查看权限")
+    rows = query.order_by(RankingBatch.created_at.desc(), RankingBatch.id.desc()).all()
+    return jsonify(items=[{
+        "batch_id": batch.id, "year": batch.year, "major_name": major_name,
+        "version": batch.version, "status": batch.status,
+    } for batch, major_name in rows])
 
 
 @workflow_bp.get("/rankings/<int:batch_id>")
