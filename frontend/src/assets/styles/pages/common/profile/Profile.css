@@ -28,6 +28,15 @@
   line-height: 1.6;
 }
 
+.profile-page .profile-editing .form-group input.form-control:disabled {
+  background-color: #f1f3f5;
+  border-color: #cbd1d8;
+  color: #505965;
+  -webkit-text-fill-color: currentColor;
+  opacity: 1;
+  cursor: not-allowed;
+}
+
 .profile-page .btn {
   font-size: 17px;
 }

@@ -10,7 +10,7 @@
 
     <div class="card profile-section-frame">
       <div class="card-title">基本资料</div>
-      <form @submit.prevent="saveProfile">
+      <form :class="{ 'profile-editing': isEditing }" @submit.prevent="saveProfile">
         <!-- 头像显示与上传 -->
         <div class="form-row avatar-row">
           <div class="form-group avatar-group">
