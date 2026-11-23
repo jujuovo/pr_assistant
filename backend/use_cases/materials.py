@@ -3,6 +3,7 @@
 import hashlib
 import json
 import mimetypes
+from domain.competition_levels import competition_award_levels
 from datetime import date
 from pathlib import Path
 import uuid
@@ -290,7 +291,7 @@ def competition_workflow_context(user, *, expected_digest=None):
             "competition_id": item["competition_id"],
             "name": item["name"],
             "category": item["category"],
-            "levels": item["levels"],
+            "levels": competition_award_levels(item),
             "event_family": item["event_family"],
         }
         for item in package.snapshot["catalog"]

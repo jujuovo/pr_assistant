@@ -180,7 +180,7 @@
               }}</small></label
             >
             <label class="field" for="level"
-              >级别 *<select
+              >获奖级别 *<select
                 id="level"
                 v-model="form.level"
                 class="form-control"

@@ -56,6 +56,7 @@ def test_student_work_review(env):
     login(client, users["student"])
     explanation = client.get("/api/workflow/students/S1/score/current").json
     assert explanation["comprehensive_score"] == "74.0000"
+    assert all(item["score_group"] == "comprehensive" for item in explanation["entries"])
     assert any("上限" in (item["exclusion_reason"] or "") for item in explanation["entries"])
     detail = client.get(base+"/3").json["bonus_result"]
     assert float(detail["candidate_score"]) == 1 and float(detail["included_score"]) == 0.8

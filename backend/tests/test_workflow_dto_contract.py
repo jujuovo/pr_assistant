@@ -101,3 +101,12 @@ def test_role_trimming_and_organization_scope_protect_ranking_entries():
     with pytest.raises(PermissionError):
         score_presentation_dto({"student_id": "S1", "faculty_id": 1},
                                role="student", student_id="S2")
+
+
+def test_score_contract_keeps_faculty_policy_basis():
+    basis = {"id": 3, "title": "信息学院推免总规则", "cycle_code": 2028}
+    payload = score_snapshot_dto({"student_id":"S1", "year":2028, "status":"current",
+        "base":{}, "categories":{}, "comprehensive_score":"80.0000", "formula":"x",
+        "rule_version_ids":[], "cycle_policy_version_ids":[], "input_digest":"d",
+        "updated_at":"now", "entries":[], "faculty_scoring_policy":basis})
+    assert payload["faculty_scoring_policy"] == basis

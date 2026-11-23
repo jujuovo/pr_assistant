@@ -163,6 +163,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import materialApi from '@/services/materialApi.js'
 import {
   scoreStatusText,
+  scoreExclusionText,
   competitionLevelText,
   competitionAwardText
 } from '@/services/scorePresentation.js'
@@ -249,9 +250,7 @@ const hiddenNote = computed(() => {
 })
 
 function exclusionText(item) {
-  if (['competition_count_limit', 'competition_top_three_limit'].includes(item.exclusion_reason))
-    return '超出竞赛计入项目数上限'
-  if (item.exclusion_reason) return item.exclusion_reason
+  if (item.exclusion_reason) return scoreExclusionText(item.exclusion_reason)
   if (item.status === 'needs_correction') return '审核退回，待学生补正'
   if (item.included === false) return '未计入'
   if (item.status === 'scored') return '—'

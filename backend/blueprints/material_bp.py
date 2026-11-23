@@ -3,6 +3,7 @@ import csv
 import hashlib
 import io
 import json
+from domain.competition_levels import competition_award_levels
 from pathlib import Path
 import uuid
 from domain.student_work_scoring import POLICY_VERSION as WORK_POLICY
@@ -152,7 +153,7 @@ def competition_catalog():
     return jsonify({'package_id': package.package_id, 'digest': package.digest, 'items': [
         {
             'competition_id': item['competition_id'], 'name': item['name'],
-            'category': item['category'], 'levels': item['levels'],
+            'category': item['category'], 'levels': competition_award_levels(item),
             'event_family': item['event_family'],
         }
         for item in catalog
@@ -167,7 +168,7 @@ def competition_catalog_item(competition_id):
     if item is None:
         return jsonify({'error': '竞赛不在当前正式目录', 'code': 'unknown_competition'}), 404
     schema = package.snapshot['field_schema']
-    levels = item['levels']
+    levels = competition_award_levels(item)
     return jsonify({
         'package_id': package.package_id,
         'competition': {

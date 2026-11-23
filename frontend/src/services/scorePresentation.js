@@ -39,6 +39,16 @@ const STATUS_NAMES = Object.freeze({
   no_authoritative_snapshot: '暂无计分记录',
   invalidated: '已失效'
 })
+const EXCLUSION_REASONS = Object.freeze({
+  same_event_lower_score: '同一赛事同年度仅计最高分',
+  same_work_lower_score: '同一作品仅计最高分',
+  csp_lower_score: 'CSP 认证仅计最高分',
+  icpc_ccpc_same_year_lower_score: '同年度 ICPC、CCPC 仅计最高分',
+  competition_top_three_limit: '超出竞赛计入项目数上限',
+  competition_count_limit: '超出竞赛计入项目数上限'
+})
+export const scoreExclusionText = (reason) => EXCLUSION_REASONS[reason] || reason
+
 export const scoreStatusText = (value) => STATUS_NAMES[value] || '待处理'
 
 // 竞赛材料的级别与奖项来自规则包枚举，展示层只做中文映射，不参与任何计分判断。
@@ -133,6 +143,7 @@ const comprehensiveCategories = new Set([
   'military_service',
   'volunteer',
   'social_work',
+  'student_work',
   'sports',
   'honor_title'
 ])
@@ -147,7 +158,9 @@ export function scoreRows(dto) {
         source.name ||
         `${CATEGORY_NAMES[category] || '证明'}材料${source.id ? '（编号' + source.id + '）' : ''}`,
       ruleLabel: entry.rule_label || '未匹配计分规则',
-      group: comprehensiveCategories.has(category) ? 'comprehensive' : 'academic',
+      group: ['academic', 'comprehensive'].includes(entry.score_group)
+        ? entry.score_group
+        : comprehensiveCategories.has(category) ? 'comprehensive' : 'academic',
       verificationStatus: entry.verification_status,
       scoringStatus: entry.scoring_status,
       ruleVersionId: entry.rule_version_id,
@@ -158,9 +171,7 @@ export function scoreRows(dto) {
       candidateScore: entry.candidate_score ?? entry.automatic_score,
       includedScore: entry.item_bonus ?? entry.included_score,
       included: entry.included,
-      reason: ['competition_count_limit', 'competition_top_three_limit'].includes(entry.exclusion_reason)
-        ? '超出竞赛计入项目数上限'
-        : entry.exclusion_reason,
+      reason: scoreExclusionText(entry.exclusion_reason),
       updatedAt: entry.updated_at,
       allowedActions: entry.allowed_actions || []
     }

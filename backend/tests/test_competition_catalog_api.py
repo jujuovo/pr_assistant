@@ -65,3 +65,37 @@ def test_unknown_catalog_identifier_is_rejected(env):
     response = client.get('/api/materials/competition/catalog/not-formal')
     assert response.status_code == 404
     assert response.json['code'] == 'unknown_competition'
+
+
+def test_lanqiao_provincial_awards_follow_policy_without_rewriting_catalog(env):
+    package = load_package(env)
+    original = json.loads(json.dumps(package.snapshot))
+    client = env[1]
+    login(client, env[2]['student'])
+    detail = client.get('/api/materials/competition/catalog/c15-lanqiao-cup').json
+    assert detail['field_schema']['levels'] == ['national', 'provincial']
+    assert detail['field_schema']['awards_by_level']['provincial'] == ['first_or_above', 'second']
+    context = client.get('/api/materials/competition/context').json
+    assert next(item for item in context['catalog']['items'] if item['competition_id'] == 'c15-lanqiao-cup')['levels'] == ['national', 'provincial']
+    facts = {'competition_id': 'c15-lanqiao-cup', 'project_name': '蓝桥杯省赛',
+             'award_date': '2027-05-01', 'event_year': 2027, 'level': 'provincial',
+             'participation_mode': 'individual'}
+    for award, expected in [('first_or_above', '0.3333'), ('second', '0.1667')]:
+        response = client.post('/api/materials/competition/estimate', json={'data': dict(facts, award=award)})
+        assert response.status_code == 200, response.json
+        assert response.json['declared_estimate'] == expected
+    rejected = client.post('/api/materials/competition/estimate', json={'data': dict(facts, award='third')})
+    assert rejected.status_code == 400
+    assert rejected.json['code'] == 'provincial_third_award_forbidden'
+    saved = client.post('/api/materials/competition/records', json={'year': 2028, 'data': dict(facts, award='second')})
+    assert saved.status_code == 201, saved.json
+    assert saved.json['data']['level'] == 'provincial'
+    assert package.snapshot == original
+
+
+def test_special_competitions_keep_their_explicit_levels(env):
+    load_package(env)
+    login(env[1], env[2]['student'])
+    for competition in ['c04-icpc', 'c05-ccpc', 'c28-ccf-csp']:
+        response = env[1].get('/api/materials/competition/catalog/' + competition)
+        assert response.json['field_schema']['levels'] == ['national']

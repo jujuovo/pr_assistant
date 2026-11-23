@@ -181,3 +181,19 @@ it('previews original attachments in a dialog and reports an unavailable file', 
     vi.unstubAllGlobals()
   }
 })
+
+
+it('renders the same-event exclusion in Chinese while preserving the zero included score', async () => {
+  const response = structuredClone(SUMMARY)
+  response.items[0].included = false
+  response.items[0].effective_score = '0.0000'
+  response.items[0].exclusion_reason = 'same_event_lower_score'
+  state.api.getTeacherCompetitionSummary.mockResolvedValue(response)
+  const w = mount(TeacherStudentSummary)
+  try {
+    await flushPromises()
+    expect(w.text()).toContain('同一赛事同年度仅计最高分')
+    expect(w.text()).not.toContain('same_event_lower_score')
+    expect(w.get('tbody tr').text()).toContain('0.0000')
+  } finally { w.unmount() }
+})

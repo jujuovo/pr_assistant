@@ -59,11 +59,12 @@ def test_student_score_contract_explains_totals_rules_and_exclusions(env):
         "cycle_code", "cycle_policy_version_id", "rule_version_id",
         "automatic_score", "override_score", "candidate_score",
         "included_score", "item_bonus", "included", "exclusion_reason", "allowed_actions",
-        "updated_at", "rule_label",
+        "updated_at", "rule_label", "score_group",
     }
     assert data["entries"][0]["project_source"] == {
         "type": "material", "id": "1", "category": "competition"
     }
+    assert data["entries"][0]["score_group"] == "academic"
     assert data["entries"][0]["automatic_score"] == "5.0000"
     assert data["entries"][0]["candidate_score"] == "5.0000"
     assert data["entries"][0]["included_score"] == "5.0000"

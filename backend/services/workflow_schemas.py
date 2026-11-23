@@ -158,6 +158,7 @@ def score_snapshot_dto(data):
         "snapshot_id": data.get("snapshot_id"),
         "snapshot_version": data.get("snapshot_version"),
         "rule_versions": data.get("rule_versions", []),
+        "faculty_scoring_policy": data.get("faculty_scoring_policy"),
     }
 
 

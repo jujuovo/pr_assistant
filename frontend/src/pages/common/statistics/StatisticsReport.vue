@@ -305,7 +305,7 @@ import { useAuthStore } from '@/stores/auth.js'
 import * as XLSX from 'xlsx'
 import api from '@/services/api.js'
 import workflowApi from '@/services/workflowApi.js'
-import { scoreStatusText } from '@/services/scorePresentation.js'
+import { scoreStatusText, scoreExclusionText } from '@/services/scorePresentation.js'
 
 const applicationsStore = useApplicationsStore()
 const toastStore = useToastStore()
@@ -350,6 +350,7 @@ const officialReportRows = computed(() => (officialReport.value?.students || [])
       ...student, ...item, sequence: index + 1,
       snapshot_status: student.snapshot_status === 'no_authoritative_snapshot' ? '暂无正式成绩快照' : '正式成绩',
       status: item.status ? scoreStatusText(item.status) : null,
+      exclusion_reason: scoreExclusionText(item.exclusion_reason),
       score_group: { academic: '学术专长', comprehensive: '综合表现' }[item.score_group],
       included: item.included == null ? null : item.included ? '已计入' : '未计入'
     }

@@ -1,5 +1,7 @@
 """Pure policies for formal academic-competition scoring."""
 
+from domain.competition_levels import competition_award_levels
+
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
 
@@ -88,7 +90,7 @@ def calculate_competition_candidate(
         raise CompetitionScoringError(
             "competition is outside the formal catalog", code="unknown_competition"
         )
-    if level not in item["levels"]:
+    if level not in competition_award_levels(item):
         raise CompetitionScoringError(
             "level is not allowed for this competition", code="invalid_competition_level"
         )

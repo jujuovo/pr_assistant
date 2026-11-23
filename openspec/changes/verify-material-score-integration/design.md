@@ -1,0 +1,9 @@
+# 验收与修复设计
+
+backend/tools/check_competition_score_flow.py拒绝覆盖已有数据库，运行正式prepare_local新建2028数据库，创建隔离验收账号并以真实服务端session测试授权后的业务流程。使用动态本机端口启动真实Flask服务，Node直接导入生产materialApi、workflowApi、buildCompetitionFacts和scoreRows模块并经fetch访问实际路由；只为相对URL和服务器session补传输包装，不mock响应。
+
+25组蓝桥杯分值用独立期望值（国家A- 10/5/2，省级A- 1/0.5，个人与团队既有分配系数）校验。每组独立学生避免限项交叉；额外学生验证4项取3、同作品省国奖取高、A+单项合计30但组封顶15，以及学生工作1.2进入综合表现。额外真实样本通过PaddleProvider和持久OCR worker，OCR差异不得改写手填事实；教师未确认409，确认后方可计分。
+
+登录/captcha界面不在工具范围，session值只经子进程stdin内存传递，不输出到日志或结果。原件、模型、数据库、日志、session与结果JSON均为本地忽略产物。测试服务在finally关闭，不替换正常Web进程。浏览器交互按仓库规则留给用户验收。
+
+score_group仅来自已关联ScoreEntry事实，未计分记录为null；前端兼容旧响应。总规则依据仅补齐已有授权个人成绩DTO字段，不修改快照或重算历史。
