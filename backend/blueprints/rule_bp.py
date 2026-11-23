@@ -19,7 +19,7 @@ import traceback
 import json
 from utils.rule_engine import RuleEngine
 from use_cases.rule_versions import publish_rule_version
-from services.automation import actor
+from services.actors import actor
 from use_cases.structured_rules import (
     StructuredRuleError, create_rule_draft, disable_rule,
     optional_total_score_cap, list_uncovered_terms, preview_rule, publish_draft, serialize_rule,

@@ -117,3 +117,19 @@
 - 第 2 步是硬前置：库里只要还有按批次计分的志愿记录，删接口就会让"历史分数从哪来"无法解释。
 - 这不是单方面可完成的改动，涉及 `services/automation.py` 拆分与 46 处测试改造，
   必须与模块负责人一起做。
+
+### 执行结果（2026-11-23）
+
+| 步骤 | 状态 |
+|---|---|
+| 1. 抽出公共能力 | ✅ 新增 `services/actors.py`；15 个模块改为从它导入 `actor()`。`services/automation.py` 保留同名再导出，旧调用方无需一次改完 |
+| 2. 确认无存量依赖 | ✅ 实测本地库 `automation_batch/item/review/policy/fingerprint` 五张表均为 **0 行**，没有历史分数依赖批量链路 |
+| 3. 删除路由与蓝图 | ✅ 删除 `blueprints/automation_bp.py`（10 个路由）与 `app.py` 中的注册；`app.url_map` 里已无 `/api/automation` |
+| 4. 同步改测试 | ✅ 删除 5 个面向已下线接口的测试文件（`test_automation*.py`、`test_real_ocr.py`）；`test_automation_lifecycle.py` 重写为用 ORM 直接构造旧数据，保留"删除用户/学院/系/专业时的旧数据保护"5 组用例 |
+| 5. 清理文档 | ✅ `docs/volunteer-automation.md` 已标注冻结，不得作为开发依据 |
+| 6. 回归 | ✅ 后端 886 passed / 4 skipped；前端与 `node --test` 未受影响（本次未改前端） |
+
+保留项：`services/automation.py` 的志愿业务函数仍在——`application_bp` 的旧申请审核路径
+仍调用其中 `authorize` / `review_batch`。`automation_*` 模型与 `services/deletion.py`
+的保护逻辑也保留，用于保护可能存在的历史数据。待阶段 2（旧申请迁到 `MaterialRecord`）
+完成后可一并删除。

@@ -60,7 +60,7 @@ def publish_material_result(job_id, report, error=None):
 
 
 def queue_material(row, version, *, attachment_id=None, expected_key=None):
-    from services.automation import actor
+    from services.actors import actor
     from use_cases.competition_ocr import start_competition_ocr
     folder = None
     try:

@@ -8,7 +8,7 @@ from models import Application, Student, User
 from material_models import MaterialRecord, MaterialEvent, MaterialSource
 from services.time_format import utc_timestamp
 from automation_models import utcnow
-from services.automation import actor
+from services.actors import actor
 from .schemas import TYPES, integer, normalize, analyze, text, source_url, object_keys
 
 

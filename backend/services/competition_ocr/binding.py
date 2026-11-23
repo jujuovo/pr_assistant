@@ -9,7 +9,7 @@ from extensions import db
 from material_models import MaterialAttachment, MaterialRecord
 from models import Application
 from ocr_models import OCRJob, OCRMaterialLink
-from services.automation import actor
+from services.actors import actor
 from services.materials.schemas import object_keys, integer
 from services.materials.service import record_at, event, stored_path
 from use_cases.materials import create_material, edit_material

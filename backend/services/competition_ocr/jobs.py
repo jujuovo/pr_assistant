@@ -6,7 +6,7 @@ import uuid
 from flask import abort, current_app
 from extensions import db
 from ocr_models import OCRJob
-from services.automation import actor
+from services.actors import actor
 from services.certificates.service import contained
 from .catalog import category, IMAGE_EXTENSIONS
 from .service import MAX_BYTES, _decode

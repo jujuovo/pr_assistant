@@ -6,7 +6,7 @@ from decimal import Decimal
 from flask import Blueprint, abort, jsonify, request
 
 from models import Major, Student
-from services.automation import actor
+from services.actors import actor
 from services.materials.schemas import integer
 from use_cases.scoring import (
     ScoringUseCaseError,

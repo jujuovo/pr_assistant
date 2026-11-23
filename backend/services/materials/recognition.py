@@ -2,7 +2,7 @@
 from hashlib import sha256
 
 from flask import abort
-from services.automation import actor
+from services.actors import actor
 from .schemas import integer, object_keys
 from .service import record_at, stored_path
 from services.competition_ocr.jobs import enqueue

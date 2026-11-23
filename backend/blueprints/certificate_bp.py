@@ -4,7 +4,7 @@ from werkzeug.exceptions import HTTPException
 from extensions import db
 from models import Application
 from certificate_models import CertificateAssessment
-from services.automation import actor
+from services.actors import actor
 from services.certificates.service import (CATALOG, authorize_application, enqueue, view,
                                            artifact_root, contained)
 

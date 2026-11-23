@@ -95,7 +95,6 @@ from blueprints.organization_bp import organization_bp
 from blueprints.score_bp import score_bp
 from blueprints.system_bp import system_bp
 from routes import main_bp
-from blueprints.automation_bp import automation_bp
 from blueprints.workflow_bp import workflow_bp
 
 
@@ -263,7 +262,6 @@ app.register_blueprint(organization_bp)  # organization_bp 已经在定义时设
 app.register_blueprint(system_bp)  # system_bp 已经在定义时设置了 url_prefix='/api/system'
 app.register_blueprint(workflow_bp)
 app.register_blueprint(main_bp, url_prefix='/api')
-app.register_blueprint(automation_bp)
 from blueprints.certificate_bp import certificate_bp
 app.register_blueprint(certificate_bp)
 from blueprints.material_bp import material_bp
