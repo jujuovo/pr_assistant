@@ -1351,7 +1351,9 @@ const loadSystemSettings = async () => {
 // 原有方法保持不变...
 const getFileIcon = (fileName) => {
   if (!fileName) {
-    return ['fas', 'file-question']
+    // FA7 已把 file-question 更名为 file-circle-question；用旧名不会报错，
+    // 只是图标渲染为空白，因此统一改成现有名称。
+    return ['fas', 'file-circle-question']
   }
   const ext = fileName.split('.').pop().toLowerCase()
   if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(ext)) {
