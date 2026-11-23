@@ -35,3 +35,18 @@ def test_teacher_cannot_forge_ranking_state_command(env):
     with app.app_context():
         saved = db.session.get(type(batch), batch.id)
         assert saved.status == "published" and saved.version == 3
+
+
+def test_ranking_list_filters_by_major_and_year_without_widening_access(env):
+    _, client, users = env
+    batch = _batch(env)
+    scope = {"major_id": batch.major_id, "year": batch.year}
+    login(client, users["admin"])
+    path = "/api/workflow/rankings"
+    assert [item["batch_id"] for item in client.get(path, query_string=scope).json["items"]] == [batch.id]
+    assert client.get(path, query_string={**scope, "year": batch.year + 1}).json["items"] == []
+    assert client.get(path, query_string={**scope, "major_id": batch.major_id + 1}).json["items"] == []
+    assert client.get(path, query_string={**scope, "major_id": "invalid"}).status_code == 400
+    login(client, users["other"])
+    response = client.get(path, query_string=scope)
+    assert response.status_code == 403 or response.json["items"] == []

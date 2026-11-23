@@ -10,14 +10,15 @@ test('role layouts push in-app page navigation so browser back returns to the pr
   assert.match(student, /router\.push\(\{ query \}\)/)
   assert.match(student, /router\.push\(\{ query: \{ \.\.\.route\.query, page: 'profile' \} \}\)/)
 
-  for (const path of [
-    '../src/pages/teacher/TeacherLayout.vue',
-    '../src/pages/admin/AdminLayout.vue'
-  ]) {
-    const source = read(path)
-    assert.match(source, /router\.push\(\{ query: \{ \.\.\.route\.query, page \} \}\)/)
-    assert.doesNotMatch(source, /router\.replace\(\{ query: \{ \.\.\.route\.query, page \} \}\)/)
-  }
+  const teacher = read('../src/pages/teacher/TeacherLayout.vue')
+  const teacherNavigation = teacher.match(/const switchPage = \(page\) => \{([\s\S]*?)\n\}/)?.[1] || ''
+  assert.match(teacherNavigation, /const query = \{ \.\.\.route\.query, page \}/)
+  assert.match(teacherNavigation, /router\.push\(\{ query \}\)/)
+  assert.doesNotMatch(teacherNavigation, /router\.replace\(/)
+
+  const admin = read('../src/pages/admin/AdminLayout.vue')
+  assert.match(admin, /router\.push\(\{ query: \{ \.\.\.route\.query, page \} \}\)/)
+  assert.doesNotMatch(admin, /router\.replace\(\{ query: \{ \.\.\.route\.query, page \} \}\)/)
 })
 
 test('material and competition history actions push instead of replacing', () => {

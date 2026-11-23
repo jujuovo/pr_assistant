@@ -1,6 +1,6 @@
 <template>
-  <section class="page-content ranking-batches">
-    <div class="page-title"><span>{{ title }}</span></div>
+  <section class="ranking-batches" :class="{ 'page-content': !embedded }">
+    <div v-if="!embedded" class="page-title"><span>{{ title }}</span></div>
     <slot name="before" />
     <div class="card batch-controls">
       <p v-if="loadingOptions" role="status">正在加载排名批次…</p>
@@ -20,7 +20,7 @@
       <p>生成时间 {{ formatScoreTime(ranking.generated_at) }} · 发布时间 {{ ranking.published_at ? formatScoreTime(ranking.published_at) : '尚未发布' }}</p>
       <p v-if="ranking.reason_code" role="status">{{ ranking.reason_code }}</p>
       <slot :ranking="ranking" :label="selectedLabel">
-      <div class="table-container">
+      <div class="table-container" :tabindex="embedded ? 0 : undefined" :role="embedded ? 'region' : undefined" :aria-label="embedded ? '排名批次明细' : undefined">
         <table class="application-table">
           <thead><tr><th>学号</th><th>推免综合成绩</th><th>名次</th><th>未纳入原因</th><th v-if="showBasis">计分依据</th></tr></thead>
           <tbody>
@@ -55,7 +55,10 @@ import { formatScoreTime } from '@/services/scorePresentation.js'
 import workflowApi from '@/services/workflowApi.js'
 import { workflowErrorMessage } from '@/services/workflowPresentation.js'
 
-defineProps({
+const props = defineProps({
+  embedded: Boolean,
+  preferLatest: Boolean,
+  scope: Object,
   title: { type: String, default: '排名批次' },
   showBasis: Boolean,
   disabled: Boolean
@@ -85,7 +88,7 @@ async function loadOptions(preferredId = null) {
   optionsError.value = ''
   loadingOptions.value = true
   try {
-    batches.value = (await workflowApi.listRankings(request.signal)).items
+    batches.value = (await (props.scope ? workflowApi.listRankings(request.signal, props.scope) : workflowApi.listRankings(request.signal))).items
     if (preferredId && batches.value.some(batch => batch.batch_id === preferredId)) {
       if (batchId.value === preferredId) await loadDetail(preferredId)
       else batchId.value = preferredId
@@ -103,11 +106,11 @@ function selectFromRoute() {
   const requested = Number(route.query.batch_id)
   if (batches.value.some(item => item.batch_id === requested)) {
     batchId.value = requested
-  } else if (route.query.batch_id) {
+  } else if (route.query.batch_id && !props.scope) {
     batchId.value = ''
     detailError.value = '该排名批次不存在或你没有查看权限。'
   } else {
-    batchId.value = batches.value.find(item => item.status === 'published')?.batch_id
+    batchId.value = (!props.preferLatest ? batches.value.find(item => item.status === 'published')?.batch_id : undefined)
       ?? batches.value[0]?.batch_id ?? ''
   }
 }
@@ -145,7 +148,13 @@ watch(() => route.query.batch_id, () => {
   if (!loadingOptions.value) selectFromRoute()
 })
 
-defineExpose({ refresh: loadOptions })
+const exportableRanking = computed(() => (
+  !loadingOptions.value && !loadingDetail.value &&
+  ranking.value?.batch_id === batchId.value && ranking.value?.allowed_actions.includes('export')
+    ? ranking.value
+    : null
+))
+defineExpose({ refresh: loadOptions, exportableRanking })
 onMounted(() => loadOptions())
 onUnmounted(() => {
   optionsRequest?.abort()

@@ -1,2 +1,8 @@
 /* 引入共享样式 */
 @import '@/assets/styles/shared/content.css';
+
+.teacher-review-page .compatibility-heading { margin: 24px 0 16px; font-size: 22px; color: var(--system-ink-blue); }
+.teacher-review-page .filters { display: flex; flex-wrap: wrap; align-items: end; }
+.teacher-review-page .filter-group { min-width: 0; }
+.teacher-review-page .table-container { max-width: 100%; overflow-x: auto; }
+.teacher-review-page .application-table { min-width: 760px; }

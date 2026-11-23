@@ -1,11 +1,11 @@
 <template>
-  <div class="page-content">
+  <div class="page-content teacher-review-page">
     <div class="page-title">
-      <span>审核记录</span>
+      <h1>审核记录</h1>
     </div>
     <TeacherCompetitionReview mode="history" />
-    <ManualMaterialReview history />
-    <div class="page-title"><span>非竞赛兼容审核记录</span></div>
+    <ManualMaterialReview compare-evidence history />
+    <h2 class="compatibility-heading">非竞赛兼容审核记录</h2>
     <!-- 筛选区域 -->
     <div class="filters primary-section-frame">
       <div class="filter-group">

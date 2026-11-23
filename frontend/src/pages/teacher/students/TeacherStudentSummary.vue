@@ -1,12 +1,9 @@
 <template>
   <section class="page-content teacher-student-summary">
-    <header class="summary-hero">
+    <header class="page-title">
       <div>
-        <p class="eyebrow">MaterialRecord · 正式竞赛链路</p>
-        <h2>学生竞赛计分汇总</h2>
-        <p>
-          候选分、计入分与排除原因全部由后端权威投影给出；本页只读，不提供任何改分、改规则或改材料的入口。
-        </p>
+        <h1>学生竞赛计分汇总</h1>
+        <p> 按学号和周期查看竞赛材料、候选分、计入分与排除原因。 </p>
       </div>
       <div class="cycle-chip">
         <span>申报周期</span>
@@ -46,6 +43,7 @@
     </section>
 
     <template v-else-if="summary">
+      <h2 class="summary-result-title">{{ summary.student_id }} · {{ summary.year }} 周期</h2>
       <div class="summary-metrics">
         <article>
           <span>材料总数</span><strong>{{ aggregate.record_count ?? items.length }}</strong>
@@ -72,55 +70,58 @@
         正确，学生提交材料后此处才会出现明细。
       </p>
 
-      <table v-else class="application-table summary-table">
-        <thead>
-          <tr>
-            <th>项目</th>
-            <th>级别</th>
-            <th>奖项</th>
-            <th>获奖日期</th>
-            <th>材料状态</th>
-            <th>候选分</th>
-            <th>计入分</th>
-            <th>排除原因</th>
-            <th>其他事实</th>
-            <th>原件</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="item in items" :key="item.record_id">
-            <td>
-              <strong>{{ item.project_name || '未命名项目' }}</strong>
-              <small v-if="item.superseded_by_record_id" class="cell-replaced"
-                >已被新版本（#{{ item.superseded_by_record_id }}）取代，以新版本为准</small
-              >
-              <small v-else class="cell-meta">{{ item.competition_id }}</small>
-            </td>
-            <td>{{ competitionLevelText(item.level) }}</td>
-            <td>{{ competitionAwardText(item.award) }}</td>
-            <td>{{ item.award_date || '—' }}</td>
-            <td>
-              <span class="status-badge">{{ scoreStatusText(item.status) }}</span>
-            </td>
-            <td>{{ item.candidate_score ?? '—' }}</td>
-            <td :class="{ 'cell-zero': !item.included }">
-              {{ item.effective_score ?? '—' }}
-            </td>
-            <td>{{ exclusionText(item) }}</td>
-            <td>{{ otherFactsText(item) }}</td>
-            <td>
-              <a
-                v-if="item.attachments && item.attachments.length"
-                :href="item.attachments[0].url"
-                target="_blank"
-                rel="noopener"
-                >查看{{ item.attachments.length > 1 ? `(${item.attachments.length})` : '' }}</a
-              >
-              <span v-else>—</span>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <div v-else class="summary-scroll" tabindex="0" role="region" aria-label="竞赛计分明细"
+        ><table class="application-table summary-table">
+          <thead>
+            <tr>
+              <th>项目</th>
+              <th>级别</th>
+              <th>奖项</th>
+              <th>获奖日期</th>
+              <th>材料状态</th>
+              <th>候选分</th>
+              <th>计入分</th>
+              <th>排除原因</th>
+              <th>其他事实</th>
+              <th>原件</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in items" :key="item.record_id">
+              <td>
+                <strong>{{ item.project_name || '未命名项目' }}</strong>
+                <small v-if="item.superseded_by_record_id" class="cell-replaced"
+                  >已被新版本（#{{ item.superseded_by_record_id }}）取代，以新版本为准</small
+                >
+                <small v-else class="cell-meta">{{ item.competition_id }}</small>
+              </td>
+              <td>{{ competitionLevelText(item.level) }}</td>
+              <td>{{ competitionAwardText(item.award) }}</td>
+              <td>{{ item.award_date || '—' }}</td>
+              <td>
+                <span class="status-badge">{{ scoreStatusText(item.status) }}</span>
+              </td>
+              <td>{{ item.candidate_score ?? '—' }}</td>
+              <td :class="{ 'cell-zero': !item.included }">
+                {{ item.effective_score ?? '—' }}
+              </td>
+              <td>{{ exclusionText(item) }}</td>
+              <td>{{ otherFactsText(item) }}</td>
+              <td>
+                <button
+                  v-if="item.attachments?.length"
+                  type="button"
+                  class="btn btn-outline"
+                  @click="openEvidence(item, $event)"
+                >
+                  查看原件{{ item.attachments.length > 1 ? `（${item.attachments.length}）` : '' }}
+                </button>
+                <span v-else>—</span>
+              </td>
+            </tr>
+          </tbody>
+        </table></div
+      >
 
       <p class="summary-footnote">
         该页面不允许编辑材料、规则、候选分或计入分。候选分按原规则版本保留，限项按本周期当前规则统一重算。
@@ -131,11 +132,34 @@
     <p v-else class="review-state" role="status">
       输入学生学号后查询该生当前周期的竞赛计分汇总。
     </p>
+    <dialog ref="evidenceDialog" class="evidence-dialog" aria-labelledby="summary-evidence-title" @close="closeEvidence">
+      <header class="evidence-header">
+        <h2 id="summary-evidence-title">{{ evidence?.project_name || '证明原件' }}</h2>
+        <button type="button" class="btn btn-outline" autofocus @click="evidenceDialog.close()">关闭</button>
+      </header>
+      <template v-if="evidence">
+        <label v-if="evidence.attachments.length > 1" class="evidence-select">
+          选择附件
+          <select v-model="attachmentIndex">
+            <option v-for="(file, index) in evidence.attachments" :key="file.id" :value="index">
+              {{ file.filename }}
+            </option>
+          </select>
+        </label>
+        <p v-if="previewLoading" role="status">正在加载原件…</p>
+        <p v-else-if="previewError" role="alert">{{ previewError }}</p>
+        <figure v-else-if="previewUrl" class="evidence-preview">
+          <img v-if="previewKind === 'image'" :src="previewUrl" :alt="attachment.filename" @error="showPreviewError" />
+          <iframe v-else :src="previewUrl" :title="attachment.filename" @error="showPreviewError"></iframe>
+          <figcaption>{{ attachment.filename }}</figcaption>
+        </figure>
+      </template>
+    </dialog>
   </section>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import materialApi from '@/services/materialApi.js'
 import {
   scoreStatusText,
@@ -151,6 +175,66 @@ const validationError = ref('')
 const loading = ref(false)
 const studentCandidates = ref([])
 
+const evidenceDialog = ref(null)
+const evidence = ref(null)
+const attachmentIndex = ref(0)
+const attachment = computed(() => evidence.value?.attachments[attachmentIndex.value])
+const previewUrl = ref('')
+const previewKind = ref('')
+const previewError = ref('')
+const previewLoading = ref(false)
+let evidenceTrigger
+
+function openEvidence(item, event) {
+  evidenceTrigger = event.currentTarget
+  attachmentIndex.value = 0
+  evidence.value = item
+  evidenceDialog.value.showModal()
+}
+
+function closeEvidence() {
+  evidence.value = null
+  evidenceTrigger?.focus()
+  evidenceTrigger = null
+}
+
+function showPreviewError() {
+  previewError.value = '原件无法预览，请关闭后重试。'
+}
+
+watch(attachment, async (file, _, onCleanup) => {
+  previewUrl.value = ''
+  previewError.value = ''
+  previewLoading.value = Boolean(file)
+  if (!file) return
+
+  const request = new AbortController()
+  let objectUrl
+  onCleanup(() => {
+    request.abort()
+    if (objectUrl) URL.revokeObjectURL(objectUrl)
+  })
+  try {
+    const url = new URL(file.url, window.location.origin)
+    url.searchParams.set('inline', '1')
+    const response = await fetch(url, { credentials: 'same-origin', signal: request.signal })
+    if (!response.ok) throw new Error('attachment unavailable')
+    const blob = await response.blob()
+    if (request.signal.aborted) return
+    if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'application/pdf'].includes(blob.type)) {
+      previewError.value = '此附件格式暂不支持网页预览。'
+      return
+    }
+    objectUrl = URL.createObjectURL(blob)
+    previewKind.value = blob.type.startsWith('image/') ? 'image' : 'pdf'
+    previewUrl.value = objectUrl
+  } catch {
+    if (!request.signal.aborted) showPreviewError()
+  } finally {
+    if (!request.signal.aborted) previewLoading.value = false
+  }
+})
+
 const items = computed(() => summary.value?.items || [])
 const aggregate = computed(() => summary.value?.aggregate || {})
 // 指标卡只统计明细内的材料，草稿与已放弃要单独说明，教师才能把总数算平。
@@ -165,7 +249,8 @@ const hiddenNote = computed(() => {
 })
 
 function exclusionText(item) {
-  if (['competition_count_limit', 'competition_top_three_limit'].includes(item.exclusion_reason)) return '超出竞赛计入项目数上限'
+  if (['competition_count_limit', 'competition_top_three_limit'].includes(item.exclusion_reason))
+    return '超出竞赛计入项目数上限'
   if (item.exclusion_reason) return item.exclusion_reason
   if (item.status === 'needs_correction') return '审核退回，待学生补正'
   if (item.included === false) return '未计入'
@@ -248,96 +333,4 @@ onMounted(async () => {
 })
 </script>
 
-<style scoped>
-.summary-hero {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 1.5rem;
-  flex-wrap: wrap;
-  margin-bottom: 1rem;
-}
-.summary-hero h2 {
-  margin: 0.25rem 0 0.5rem;
-}
-.summary-hero .eyebrow {
-  margin: 0;
-  font-size: 0.75rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  opacity: 0.7;
-}
-.summary-hero p {
-  max-width: 46rem;
-  margin: 0;
-}
-.cycle-chip {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 0.6rem 1.2rem;
-  border-radius: 0.75rem;
-  background: rgba(37, 99, 235, 0.08);
-}
-.cycle-chip span {
-  font-size: 0.75rem;
-  opacity: 0.75;
-}
-.cycle-chip strong {
-  font-size: 1.4rem;
-  line-height: 1.2;
-}
-.summary-metrics {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
-  gap: 0.75rem;
-  margin: 1rem 0;
-}
-.summary-metrics article {
-  padding: 0.75rem 1rem;
-  border-radius: 0.75rem;
-  border: 1px solid rgba(15, 23, 42, 0.12);
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-.summary-metrics span {
-  font-size: 0.8rem;
-  opacity: 0.75;
-}
-.summary-metrics strong {
-  font-size: 1.35rem;
-  line-height: 1.2;
-}
-.metric-included {
-  border-color: rgba(22, 163, 74, 0.35);
-  background: rgba(22, 163, 74, 0.06);
-}
-.metric-excluded {
-  border-color: rgba(220, 38, 38, 0.3);
-  background: rgba(220, 38, 38, 0.05);
-}
-.metric-score {
-  border-color: rgba(37, 99, 235, 0.3);
-  background: rgba(37, 99, 235, 0.05);
-}
-.summary-table td small.cell-meta {
-  display: block;
-  font-size: 0.72rem;
-  opacity: 0.6;
-}
-.summary-table td small.cell-replaced {
-  display: block;
-  margin-top: 0.15rem;
-  font-size: 0.72rem;
-  color: #b45309;
-}
-.cell-zero {
-  opacity: 0.55;
-}
-.summary-footnote {
-  margin-top: 0.75rem;
-  font-size: 0.85rem;
-  opacity: 0.8;
-}
-</style>
+<style scoped src="@/assets/styles/pages/teacher/students/TeacherStudentSummary.css"></style>

@@ -9,10 +9,16 @@ export const roleNavigation = {
       title: '推免审核',
       items: [
         { key: 'pending-review', icon: 'file-arrow-up', title: '待审核申请' },
-        { key: 'review-history', icon: 'clock-rotate-left', title: '审核记录' },
-        { key: 'student-summary', icon: 'users', title: '学生汇总' },
-        { key: 'statistics-report', icon: 'chart-pie', title: '统计报表' }
-        ,{ key: 'rankings', icon: 'ranking-star', title: '专业排名（只读）' }
+        { key: 'review-history', icon: 'clock-rotate-left', title: '审核记录' }
+      ]
+    },
+    {
+      id: 'student-information',
+      icon: 'users',
+      title: '学生信息',
+      items: [
+        { key: 'statistics-report', icon: 'chart-pie', title: '统计报表' },
+        { key: 'student-summary', icon: 'users', title: '学生汇总' }
       ]
     }
   ],

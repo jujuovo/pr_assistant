@@ -144,3 +144,40 @@ describe('教师·学生竞赛计分汇总', () => {
     expect(wrapper.text()).toContain('重新加载')
   })
 })
+
+it('previews original attachments in a dialog and reports an unavailable file', async () => {
+  state.api.getTeacherCompetitionSummary.mockResolvedValue({
+    ...SUMMARY,
+    items: [{
+      ...SUMMARY.items[0],
+      attachments: [
+        ...SUMMARY.items[0].attachments,
+        { id: 2, filename: '第二份.pdf', url: '/api/materials/competition/records/1/attachments/2' }
+      ]
+    }]
+  })
+  const fetchAttachment = vi.fn()
+    .mockResolvedValueOnce({ ok: true, blob: async () => new Blob(['image'], { type: 'image/png' }) })
+    .mockResolvedValueOnce({ ok: false })
+  vi.stubGlobal('fetch', fetchAttachment)
+  const wrapper = mount(TeacherStudentSummary, { attachTo: document.body })
+  try {
+    await flushPromises()
+    const trigger = wrapper.findAll('button').find((button) => button.text().startsWith('查看原件'))
+    await trigger.trigger('click')
+    await flushPromises()
+    expect(wrapper.get('dialog').element.open).toBe(true)
+    expect(wrapper.get('dialog img').attributes('alt')).toBe('proof_0.png')
+    expect(fetchAttachment.mock.calls[0][0].searchParams.get('inline')).toBe('1')
+    await wrapper.get('dialog select').setValue('1')
+    await flushPromises()
+    expect(wrapper.get('dialog [role=alert]').text()).toContain('原件无法预览')
+    await wrapper.get('dialog button').trigger('click')
+    await wrapper.get('dialog').trigger('close')
+    expect(wrapper.get('dialog').element.open).toBe(false)
+    expect(document.activeElement).toBe(trigger.element)
+  } finally {
+    wrapper.unmount()
+    vi.unstubAllGlobals()
+  }
+})
