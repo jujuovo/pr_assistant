@@ -29,7 +29,7 @@ from services.certificates.service import (authorize_application, validate_selec
                                             selection_present, selection_json)
 from services.legacy_application_policy import (application_actor, bind_student_identity,
     authorize_write, validate_edit, protect_deletion)
-from services.automation import actor
+from services.actors import actor
 from services.materials.service import has_linked_material, scope_application_query
 from blueprints.score_bp import update_student_statistics
 from material_models import MaterialRecord

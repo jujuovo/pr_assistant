@@ -1,7 +1,7 @@
 """One access boundary for compatibility application writes; never owns a transaction."""
 from flask import abort
 from models import Student
-from services.automation import actor
+from services.actors import actor
 
 IDENTITY_FIELDS = ("student_id", "student_name", "faculty_id", "department_id", "major_id")
 REVIEW_FIELDS = {"final_score", "review_comment", "reviewed_at", "reviewed_by", "applied_at", "created_at", "updated_at"}

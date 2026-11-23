@@ -11,7 +11,7 @@ from extensions import db
 from models import Application, Student, Rule, SystemSettings
 from certificate_models import CertificateAssessment
 from automation_models import utcnow
-from services.automation import actor
+from services.actors import actor
 from domain.material_terms import (NORMALIZATION_VERSION, TermNormalizationError,
                                    normalize_confirmed_terms)
 from .service import artifact_root, contained

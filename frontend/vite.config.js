@@ -24,6 +24,24 @@ export default defineConfig({
     noDiscovery: true,
     include: []
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // 把一个 1.8 MB 的单包拆成可并行的缓存块。不做这件事时首次加载要等
+        // 一个巨型 JS 下载完才渲染，且任何一行业务代码变更都会让整包缓存失效。
+        // `xlsx`（只在统计报表导出用）和整套 FontAwesome 图标是两个大件。
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined
+          if (id.includes('xlsx')) return 'vendor-xlsx'
+          if (id.includes('@fortawesome')) return 'vendor-icons'
+          if (id.includes('@vue/') || id.includes('/vue/') || id.includes('vue-router') || id.includes('pinia')) {
+            return 'vendor-vue'
+          }
+          return 'vendor'
+        }
+      }
+    }
+  },
   test: {
     include: ['tests/*.mounted.test.js']
   },

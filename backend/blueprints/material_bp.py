@@ -13,7 +13,7 @@ from werkzeug.exceptions import HTTPException
 from services.time_format import utc_timestamp
 from extensions import db
 from material_models import CompetitionOcrJob, MaterialRecord, MaterialAttachment, MaterialSource
-from services.automation import actor
+from services.actors import actor
 from services.materials.schemas import (RESEARCH_TYPES, TYPES, type_view, normalize, analyze, integer, text, object_keys)
 from services.materials.service import (body, record_at, category_exists, authorize, view,
                                        version_change, event, stored_path, check, import_sources)

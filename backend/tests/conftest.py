@@ -13,7 +13,6 @@ from datetime import date
 from flask import Flask
 from extensions import db
 from models import Faculty, Department, Major, Student, User
-from blueprints.automation_bp import automation_bp
 from blueprints.application_bp import application_bp
 from blueprints.certificate_bp import certificate_bp
 from blueprints.workflow_bp import workflow_bp
@@ -28,7 +27,6 @@ def env(tmp_path):
                       AUTOMATION_LEASE_SECONDS=60, AUTOMATION_MAX_ATTEMPTS=3,
                       ALLOW_LEGACY_CERTIFICATE_PREVIEWS=True)
     db.init_app(app)
-    app.register_blueprint(automation_bp)
     app.register_blueprint(application_bp)
     app.register_blueprint(certificate_bp)
     from blueprints.ocr_bp import ocr_bp

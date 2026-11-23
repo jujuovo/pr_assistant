@@ -163,6 +163,10 @@ def legacy_reconciliation_report(year, *, faculty_id=None):
     material_query = MaterialRecord.query.order_by(MaterialRecord.id)
     if faculty_id is not None:
         material_query = material_query.filter_by(faculty_id=faculty_id)
+    # 学生已放弃的材料既不计分也不属于待处理工作，不应阻断排名发布。
+    # 其余查询处（material_bp、use_cases/materials、use_cases/competition_review、
+    # services/materials/service）同样把 abandoned 排除在外，这里保持一致。
+    material_query = material_query.filter(MaterialRecord.status != "abandoned")
     for material in material_query.all():
         if material.cycle_policy_version_id is not None and material.year != year:
             continue
