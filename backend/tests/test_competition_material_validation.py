@@ -56,7 +56,7 @@ def test_create_normalizes_and_pins_formal_package(env):
         ({'award_date': '2028-09-01'}, 'award_date_ineligible'),
         ({'team_size': None}, 'team_fields_missing'),
         ({'personal_rank': 4}, 'invalid_team_rank'),
-        ({'level': 'provincial'}, 'invalid_competition_level'),
+        ({'level': 'school'}, 'invalid_competition_level'),
         ({'rule_id': 1}, 'legacy_authority_field_forbidden'),
     ],
 )

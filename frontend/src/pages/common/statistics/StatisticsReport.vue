@@ -111,6 +111,7 @@ import { useAuthStore } from '@/stores/auth.js'
 import * as XLSX from 'xlsx'
 import api from '@/services/api.js'
 import workflowApi from '@/services/workflowApi.js'
+import { scoreExclusionText } from '@/services/scorePresentation.js'
 
 const authStore = useAuthStore()
 const filters = reactive({
@@ -182,7 +183,7 @@ const officialReportRows = computed(() => (officialReport.value?.students || [])
     project ? project.name || '未记录项目名称' : null,
     project?.score ?? null,
     project ? Number(project.score) > 0 ? '已计入'
-      : projectReasons[project.exclusion_reason] || project.exclusion_reason || '未记录原因' : null
+      : projectReasons[project.exclusion_reason] || scoreExclusionText(project.exclusion_reason) || '未记录原因' : null
   ])
 }))
 

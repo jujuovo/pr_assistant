@@ -1,0 +1,7 @@
+# 展示设计
+
+OcrAssessment沿用conciseEstimate标识我的材料学生视图，采用两列大号分数卡：申请分数绑定declared_estimate，系统建议分数只在completed且值非空时绑定ocr_suggested_score。真实0显示0，null为需人工核验，排队/运行显示识别完成后显示，失败/过期不展示旧建议。可提交时才显示确认无误后正式提交，权限仍由后端allowed_actions与现有canSubmit决定。
+
+学生侧只保留最终分以教师审核为准的说明，移除OCR缺失技术诊断、冗长notice和内部规则版本文本。教师默认视图保留既有诊断。差异列表显示字段及申报/识别两值并标红；展开详情通过MaterialFacts可选highlightedFields对对应dt/dd标红并标注待核对，原始OCR日期等别名映射到同一差异。旧任务差异不高亮，匹配字段无标红。
+
+响应式小屏分数上下排列，未知分不伪造0或沿用申请分数。该变更不重新解释OCR文本或比较逻辑，只展示后端明确返回的差异。

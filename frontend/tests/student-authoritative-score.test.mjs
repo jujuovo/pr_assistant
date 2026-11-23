@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import {
   scoreRows,
+  scoreExclusionText,
   scoreStatusText,
   scoreFormulaText,
   formatScoreTime,
@@ -66,7 +67,7 @@ test('same-work and top-count exclusions remain server explanations', () => {
   })
   assert.deepEqual(
     rows.map((row) => row.reason),
-    [undefined, 'same_work_lower_score', 'max_count_exceeded']
+    [undefined, '同一作品仅计最高分', 'max_count_exceeded']
   )
   assert.equal(rows[0].candidateScore, '5')
   assert.equal(rows[1].included, false)
@@ -112,4 +113,30 @@ test('score labels translate state and formula and preserve seconds in Beijing t
   })
   assert.equal(rows[0].title, '蓝桥杯省赛二等奖')
   assert.equal(rows[0].ruleLabel, '学业竞赛计分规则（第3版）')
+})
+
+
+test('backend score group overrides category guessing, with old student-work fallback', () => {
+  const rows = scoreRows({ entries: [
+    { project_source: { category: 'student_work' }, score_group: 'comprehensive', included_score: '1.2' },
+    { project_source: { category: 'honor' }, score_group: 'comprehensive', included_score: '1' },
+    { project_source: { category: 'volunteer' }, score_group: 'academic', included_score: '2' },
+    { project_source: { category: 'student_work' }, included_score: '0.8' }
+  ] })
+  assert.deepEqual(rows.map(row => row.group), ['comprehensive', 'comprehensive', 'academic', 'comprehensive'])
+  assert.deepEqual(rows.map(row => row.includedScore), ['1.2', '1', '2', '0.8'])
+})
+
+
+test('competition exclusion reasons are Chinese and preserve server-provided explanations', () => {
+  for (const [code, text] of Object.entries({
+    same_event_lower_score: '同一赛事同年度仅计最高分',
+    same_work_lower_score: '同一作品仅计最高分',
+    csp_lower_score: 'CSP 认证仅计最高分',
+    icpc_ccpc_same_year_lower_score: '同年度 ICPC、CCPC 仅计最高分',
+    competition_count_limit: '超出竞赛计入项目数上限',
+    competition_top_three_limit: '超出竞赛计入项目数上限'
+  })) assert.equal(scoreExclusionText(code), text)
+  assert.equal(scoreExclusionText('按学院规定不予计入'), '按学院规定不予计入')
+  assert.equal(scoreExclusionText(null), null)
 })

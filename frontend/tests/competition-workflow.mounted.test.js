@@ -529,3 +529,56 @@ it('refreshes only persisted pending jobs and stops watching when history unmoun
   await vi.advanceTimersByTimeAsync(10000)
   expect(state.api.getRecord).toHaveBeenCalledTimes(count)
 })
+
+
+it('lets a Lanqiao student select a provincial award and sends it to the score API', async () => {
+  const lanqiao = { competition_id: 'c15-lanqiao-cup', name: '蓝桥杯', category: 'A-', event_family: 'lanqiao-cup' }
+  state.api.getCompetitionContext.mockResolvedValue({
+    cycle: { cycle_code: 2028 }, catalog: { count: 1, items: [lanqiao] },
+    field_schema: schema, evidence_period: { start: '2025-09-01', end: '2028-08-31' },
+    allowed_actions: ['create_draft']
+  })
+  state.api.getCompetitionCatalogItem.mockResolvedValue({ competition: lanqiao, field_schema: schema })
+  const w = render()
+  await flushPromises()
+  await w.get('#competition-select').setValue('c15-lanqiao-cup')
+  await flushPromises()
+  expect(w.get('label[for="level"]').text()).toContain('获奖级别')
+  expect(w.findAll('#level option').map(option => option.text())).toEqual(['请选择', '国家级', '省级'])
+  await w.get('#project-name').setValue('蓝桥杯省赛')
+  await w.get('#award-date').setValue('2027-05-01')
+  await w.get('#event-year').setValue('2027')
+  await w.get('#level').setValue('national')
+  await w.get('#award').setValue('third')
+  await w.get('#level').setValue('provincial')
+  expect(w.get('#award').element.value).toBe('')
+  expect(w.findAll('#award option').map(option => option.element.value)).toEqual(['', 'first_or_above', 'second'])
+  await w.get('#award').setValue('second')
+  await button(w, '预估分数').trigger('click')
+  await flushPromises()
+  expect(state.api.estimateCompetition).toHaveBeenCalledWith(expect.objectContaining({
+    competition_id: 'c15-lanqiao-cup', level: 'provincial', award: 'second'
+  }))
+})
+
+
+it('student history highlights only current differing declared and raw OCR fields', async () => {
+  state.api.listRecords.mockImplementation(async category => ({ records: category === 'competition' ? [{
+    ...structuredClone(row), workflow_state: 'ready_to_submit',
+    ocr_raw_terms: { report: { fields: { award: '二等奖', date: '2027-05-21', project: facts.project_name } } },
+    ocr_assessment: { ...row.ocr_assessment, job: { status: 'completed' }, ocr_suggested_score: '1.6667',
+      missing_fields: ['level'], differences: [
+        { field: 'award', declared: 'first_or_above', recognized: 'second' },
+        { field: 'award_date', declared: facts.award_date, recognized: '2027-05-21' }
+      ] }
+  }] : [] }))
+  const w = render(History)
+  await flushPromises()
+  expect(w.get('.submission-guidance').text()).toContain('正式提交审核')
+  expect(w.get('.material-facts dd[data-field="award"]').classes()).toContain('fact-difference')
+  expect(w.get('.material-facts dd[data-field="award_date"]').classes()).toContain('fact-difference')
+  expect(w.get('.material-facts dd[data-field="date"]').classes()).toContain('fact-difference')
+  expect(w.get('.material-facts dd[data-field="project_name"]').classes()).not.toContain('fact-difference')
+  expect(w.text()).not.toContain('OCR 尚不足')
+  expect(button(w, '正式提交审核')).toBeDefined()
+})

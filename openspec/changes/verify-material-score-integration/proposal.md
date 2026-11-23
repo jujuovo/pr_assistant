@@ -1,0 +1,5 @@
+# 验证前后端计分链路并修复映射遗漏
+
+用户要求测试前后端，尤其加分映射。独立于repair-competition-award-levels，复用该变更的蓝桥杯获奖级别修复，新增真实HTTP验收工具，不修改计分公式或业务数据库。
+
+发现两处传输/展示问题：scoreRows通过类别猜测计分组，遗漏student_work且无法服从后台动态分组；score_snapshot_dto丢弃已有faculty_scoring_policy依据。改为输出ScoreEntry权威score_group、前端优先使用它，并保留总规则依据。旧返回保留student_work兼容映射。

@@ -252,3 +252,25 @@ test('competition confirms the displayed record version and catalog facts only i
     vi.restoreAllMocks()
   }
 })
+
+
+test('places student work under performance and displays the backend faculty policy basis', async () => {
+  const entry = state.score.entries[0]
+  entry.project_source = { type: 'material', id: '1', category: 'student_work', name: '学生干部任职' }
+  entry.score_group = 'comprehensive'
+  entry.candidate_score = entry.included_score = '1.2000'
+  state.score.categories.academic.effective_score = '0.0000'
+  state.score.categories.comprehensive.effective_score = '1.2000'
+  state.score.comprehensive_score = '62.0000'
+  state.score.faculty_scoring_policy = { id: 9, title: '信息学院2028届总规则' }
+  const w = mount(Statistics)
+  try {
+    await flushPromises()
+    expect(w.findAll('.score-group')).toHaveLength(1)
+    expect(w.get('.score-group h3').text()).toContain('综合表现')
+    expect(w.get('.score-group').text()).toContain('学生干部任职')
+    expect(w.get('.included-score').text()).toBe('1.2000')
+    expect(w.get('.score-policy').text()).toContain('信息学院2028届总规则')
+    expect(w.get('.score-main-value strong').text()).toBe('62.0000')
+  } finally { w.unmount() }
+})

@@ -47,7 +47,7 @@
             >（{{ row.last_review.actor.name }} · {{ formatScoreTime(row.last_review.at) }}）</small
           >
         </p>
-        <OcrAssessment v-if="row.category === 'competition'" :advice="row.ocr_assessment" concise-estimate />
+        <OcrAssessment v-if="row.category === 'competition'" :advice="row.ocr_assessment" concise-estimate :ready-to-submit="canSubmit(row)" />
         <p v-else-if="row.bonus_result">候选分 {{row.bonus_result.candidate_score}} · 同类取舍后 {{row.bonus_result.included_score}} 分。{{row.bonus_result.reason}} 分组封顶结果见加分统计。</p>
         <p v-else-if="row.manual_only">此项通过人工通道核验，不自动计分。</p
         ><p v-else>根据该类别的现行规则审核计分。</p>
@@ -59,6 +59,7 @@
           ><summary>申报信息与原件</summary
           ><MaterialFacts
             :data="row.data"
+            :highlighted-fields="differenceFields(row)"
             :labels="
               row.category === 'volunteer'
                 ? { award_date: '服务记录日期' }
@@ -71,8 +72,8 @@
           ><MaterialFacts
             v-if="row.ocr_raw_terms && row.category !== 'volunteer'"
             :data="row.ocr_raw_terms?.report?.fields || row.ocr_raw_terms?.fields || {}"
+            :highlighted-fields="differenceFields(row, true)"
         /></details>
-        <p v-if="row.rule_version_id">规则版本 #{{row.rule_version_id}} · {{row.normalization_version}}</p>
         <VolunteerOcrAssessment
           :assessment="row.volunteer_ocr"
           :appeal="row.appeal"
@@ -300,6 +301,13 @@ async function loadMore() {
   } finally {
     loading.value = false
   }
+}
+function differenceFields(row, recognized = false) {
+  if (row.category !== 'competition' || row.ocr_assessment?.job?.status !== 'completed') return []
+  const fields = (row.ocr_assessment.differences || []).map((item) => item.field)
+  if (!recognized) return fields
+  const aliases = { award_date: 'date', project_name: 'project', competition_name: 'event', level: 'competition_level', award: 'award_level' }
+  return [...new Set(fields.flatMap((field) => [field, aliases[field]].filter(Boolean)))]
 }
 function canSubmit(row) {
   return (

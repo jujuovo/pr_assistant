@@ -1,0 +1,1 @@
+教师汇总、学生分数明细和教师正式报表共用scorePresentation的中文映射，same_event_lower_score显示为“同一赛事同年度仅计最高分”。既有中文服务端说明原样保留，null保持null；未识别原因不擅自重写。

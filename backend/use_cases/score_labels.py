@@ -55,4 +55,5 @@ def decorate_score_entries(entries, facts, student_id, snapshot_references):
         package_id=fact.competition_rule_package_id if fact else record.competition_rule_package_id if record else None
         reference=-package_id if package_id else entry.get('rule_version_id')
         entry['rule_label']=labels.get(reference,'未匹配计分规则')
+        entry['score_group'] = fact.score_group if fact else None
     return [{'reference':reference,'label':labels[reference]} for reference in sorted(set(snapshot_references or []))]
