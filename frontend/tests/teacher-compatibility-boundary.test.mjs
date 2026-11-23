@@ -15,10 +15,10 @@ test('competition teacher page uses only material APIs and authority-free payloa
   for (const forbidden of ['getRules', '/rules', 'rule_id', 'self_score', 'final_score', 'dynamic_coefficients', 'override_score', 'override_reason']) assert(!source.includes(forbidden))
 })
 
-test('general teacher pages explicitly apply noncompetition compatibility boundary', () => {
+test('general teacher pages exclude legacy compatibility controls', () => {
   for (const path of ['../src/pages/teacher/reviews/PendingReview.vue', '../src/pages/teacher/reviews/ReviewHistory.vue']) {
     const source = readFileSync(new URL(path, import.meta.url), 'utf8')
-    assert.match(source, /isNonCompetitionCompatibilityApplication/)
-    assert.match(source, /nonCompetitionRules/)
+    assert.doesNotMatch(source, /applicationsStore|isNonCompetitionCompatibilityApplication/)
+    assert.match(source, path.endsWith('/ReviewHistory.vue') ? /<PendingReview history/ : /<ManualMaterialReview/)
   }
 })

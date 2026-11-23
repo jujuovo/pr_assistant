@@ -70,3 +70,63 @@ def test_teacher_history_excludes_drafts_and_abandoned_records(env):
 
     assert result["items"] == []
     assert result["reviewed_items"] == []
+
+def test_teacher_workbench_student_search_includes_older_records(env):
+    row, teacher = _submitted_competition(env)
+    review_competition_material(teacher, row, _command(row))
+    admin = db.session.get(User, env[2]["admin"])
+    cycle, _ = create_cycle_policy(
+        admin, 2028, date(2025, 9, 1), date(2028, 8, 31), "2028 推免周期"
+    )
+    activate_cycle_policy(admin, cycle)
+    for _ in range(50):
+        db.session.add(type(row)(
+            student_id=row.student_id, faculty_id=row.faculty_id,
+            year=row.year, category=row.category, status=row.status,
+            data=row.data, analysis=row.analysis,
+            competition_rule_package_id=row.competition_rule_package_id,
+            rule_version_id=row.rule_version_id,
+        ))
+    db.session.flush()
+
+    latest = competition_workbench_summary(teacher)["reviewed_items"]
+    matching = competition_workbench_summary(teacher, row.student_id)["reviewed_items"]
+
+    assert len(latest) == 50
+    assert row.id not in {item["id"] for item in latest}
+    assert len(matching) == 51
+    assert row.id in {item["id"] for item in matching}
+    assert competition_workbench_summary(teacher, "missing-student")["reviewed_items"] == []
+
+
+def test_teacher_report_returns_material_project_and_snapshot_score(env):
+    from conftest import login
+    from models import Student
+
+    row, teacher = _submitted_competition(env)
+    student = Student.query.filter_by(student_id=row.student_id).one()
+    student.year = 2028
+    student.cet4_score = 550
+    review_competition_material(teacher, row, _command(row))
+    admin = db.session.get(User, env[2]["admin"])
+    cycle, _ = create_cycle_policy(
+        admin, 2028, date(2025, 9, 1), date(2028, 8, 31), "2028 推免周期"
+    )
+    activate_cycle_policy(admin, cycle)
+    db.session.commit()
+
+    login(env[1], teacher.id)
+    response = env[1].get("/api/workflow/teacher/score-report", query_string={
+        "faculty_id": student.faculty_id,
+        "department_id": student.department_id,
+        "major_id": student.major_id,
+        "year": 2028,
+    })
+    assert response.status_code == 200
+    report_student, = response.json["students"]
+    assert report_student["cet4"] == 550
+    project, = report_student["projects"]
+    assert project["category"] == "competition"
+    assert project["name"] == "只读事实"
+    assert float(project["score"]) == float(report_student["academic_total"])
+    assert project["exclusion_reason"] is None

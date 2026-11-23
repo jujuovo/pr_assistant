@@ -101,7 +101,6 @@ REVIEWED_STATUSES = frozenset({
 REVIEW_EVENT_DECISIONS = {
     'competition_approved': 'approve',
     'competition_returned': 'return',
-    'reviewed': 'review',
 }
 
 
@@ -109,14 +108,16 @@ def _last_review(row):
     """最近一次审核结论：学生必须看得到教师为什么退回，否则无法补正。"""
     event = MaterialEvent.query.filter(
         MaterialEvent.record_id == row.id,
-        MaterialEvent.action.in_(tuple(REVIEW_EVENT_DECISIONS)),
+        MaterialEvent.action.in_((*REVIEW_EVENT_DECISIONS, 'reviewed')),
     ).order_by(MaterialEvent.id.desc()).first()
     if event is None:
         return None
+    details = event.details or {}
+    decision = REVIEW_EVENT_DECISIONS.get(event.action) or details.get('decision')
     actor = db.session.get(User, event.actor_id) if event.actor_id else None
     return {
-        'decision': REVIEW_EVENT_DECISIONS[event.action],
-        'comment': (event.details or {}).get('comment'),
+        'decision': decision,
+        'comment': details.get('comment'),
         'actor': {'id': actor.id, 'name': actor.name, 'role': actor.role} if actor else None,
         'at': utc_timestamp(event.created_at),
     }

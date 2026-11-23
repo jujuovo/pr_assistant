@@ -6,3 +6,93 @@
 .teacher-review-page .filter-group { min-width: 0; }
 .teacher-review-page .table-container { max-width: 100%; overflow-x: auto; }
 .teacher-review-page .application-table { min-width: 760px; }
+
+.request-group {
+  margin-block: 1.25rem;
+  min-width: 0;
+  border: 1px solid var(--system-primary, #1677ff);
+  border-radius: 8px;
+}
+
+.request-group-header {
+  padding: 1.25rem clamp(1rem, 3vw, 1.75rem);
+  font-size: 1.25rem;
+  line-height: 1.5;
+  cursor: pointer;
+  color: var(--system-ink-blue, #0a448c);
+  background: #edf5ff;
+  border-radius: 7px;
+}
+
+.request-group[open] > .request-group-header {
+  border-radius: 7px 7px 0 0;
+  border-bottom: 1px solid #d5e5fa;
+}
+
+.request-group-header:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.request-group-title {
+  font-weight: 700;
+}
+
+.request-group-count {
+  display: inline-block;
+  margin-inline-start: 1rem;
+  font-size: 1rem;
+}
+
+.request-group-body {
+  padding: clamp(.75rem, 2vw, 1.25rem);
+}
+
+.review-category {
+  min-width: 0;
+}
+
+.review-category + .review-category {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid #d5e5fa;
+}
+
+.review-category h2 {
+  margin: 0 0 .75rem;
+  color: var(--system-ink-blue, #0a448c);
+  font-size: 1.15rem;
+}
+
+.review-category :deep(.review-category-empty) {
+  display: flex;
+  justify-content: space-between;
+  margin: 0;
+  padding: 18px;
+  border: 1px dashed #aebed0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.review-student-filter {
+  display: grid;
+  gap: .5rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  max-width: 22rem;
+  font-weight: 600;
+}
+
+.review-student-filter label {
+  grid-column: 1 / -1;
+}
+
+.review-student-filter input {
+  min-width: 0;
+}
+
+.review-student-filter .btn {
+  padding: .35rem .75rem;
+  font-size: .875rem;
+  white-space: nowrap;
+}

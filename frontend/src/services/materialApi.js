@@ -43,8 +43,10 @@ export const materialApi = {
       timeoutMs: 60000
     })
   },
-  getCompetitionWorkbenchSummary: (signal) =>
-    requestJson(`${base}/competition/workbench-summary`, { signal }),
+  getCompetitionWorkbenchSummary: (signal, studentId) => {
+    const query = studentId ? `?${new URLSearchParams({ student_id: studentId })}` : ''
+    return requestJson(`${base}/competition/workbench-summary${query}`, { signal })
+  },
   getStudentMaterialSummary: (signal) => requestJson(`${base}/student/summary`, { signal }),
   getTeacherMaterialSummary: (signal) => requestJson(`${base}/teacher/summary`, { signal }),
   getCompetitionPackage: (signal) => requestJson(`${base}/competition/rules/current`, { signal }),
