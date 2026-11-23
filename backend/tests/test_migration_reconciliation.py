@@ -90,3 +90,46 @@ def test_reconciliation_never_guesses_missing_cycle_from_award_date(env):
     assert report["manual_review"][0]["prohibited_inference"] == "award_date_year"
     assert report["release_blocks"][0]["application_id"] == application.id
     assert report["ranking_release_allowed"] is False
+
+
+def _material(student, *, status):
+    from material_models import MaterialRecord
+
+    material = MaterialRecord(
+        student_id=student.student_id, faculty_id=student.faculty_id,
+        category="competition", year=2028, status=status,
+        data={}, analysis={},
+    )
+    db.session.add(material)
+    db.session.commit()
+    return material
+
+
+def test_abandoned_material_does_not_block_ranking_release(env):
+    """学生已放弃的材料不计分，也不该阻断排名发布。
+
+    原先对账遍历材料时没有排除 abandoned：任何一个学生撤掉的材料只要没有
+    确认快照，就会让整个学院整年的排名永久无法发布。其余查询处
+    （material_bp、use_cases/materials、competition_review 等）都排除它。
+    """
+    student = Student.query.filter_by(student_id="S1").one()
+    _material(student, status="abandoned")
+
+    report = legacy_reconciliation_report(2028, faculty_id=student.faculty_id)
+
+    assert report["release_blocks"] == []
+    assert report["ranking_release_allowed"] is True
+    assert report["issue_counts"]["missing_confirmation_snapshot"] == 0
+
+
+def test_material_without_confirmation_still_blocks_when_in_scope(env):
+    """对照：仍参与计分的材料缺确认快照时，必须继续阻断。"""
+    student = Student.query.filter_by(student_id="S1").one()
+    _material(student, status="scored")
+
+    report = legacy_reconciliation_report(2028, faculty_id=student.faculty_id)
+
+    assert [block["code"] for block in report["release_blocks"]] == [
+        "structured_material_unresolved"
+    ]
+    assert report["ranking_release_allowed"] is False
