@@ -1,18 +1,16 @@
 <template>
   <section class="page-content material-history">
-    <header
-      ><div
-        ><h1>我的材料</h1
-        ><p>查看已保存材料、后台识别进度与审核结果。新材料请从“提交材料”入口申报。</p></div
-      ><button class="btn btn-outline" :disabled="loading" @click="load">刷新状态</button></header
-    >
-    <nav aria-label="材料历史类型"
-      ><button class="btn btn-outline" @click="legacy = false">材料记录</button
-      ><button class="btn btn-outline" @click="legacy = true">历史兼容记录</button></nav
-    >
+    <header class="page-title">
+      <h1>我的材料</h1>
+      <button class="btn btn-outline" :disabled="loading" @click="load">刷新状态</button>
+    </header>
+    <nav class="history-switch" aria-label="材料历史类型">
+      <button class="btn" :class="{ 'btn-outline': legacy }" :aria-pressed="!legacy" @click="legacy = false">材料记录</button>
+      <button class="btn" :class="{ 'btn-outline': !legacy }" :aria-pressed="legacy" @click="legacy = true">历史兼容记录</button>
+    </nav>
     <ApplicationHistory v-if="legacy" @edit-application="$emit('edit-application', $event)" />
     <template v-else>
-      <label
+      <label class="history-filter"
         >筛选状态<select v-model="filter"
           ><option value="">全部</option
           ><option v-for="option in statusFilters" :key="option.value" :value="option.value">{{
@@ -21,31 +19,35 @@
         ></label
       >
       <p v-if="loading" role="status">正在加载材料记录…</p
-      ><p v-if="error" role="alert">{{ error }} <button @click="load">重试</button></p>
-      <p v-if="!loading && !filtered.length" class="empty">暂无符合条件的材料记录。</p>
+      ><p v-if="error" role="alert">{{ error }} <span v-if="!filtered.length && error.startsWith('以下类别未能加载')">当前结果中暂无符合条件的记录，请重试以获取完整列表。</span> <button class="btn btn-outline" @click="load">重试</button></p>
+      <p v-if="!loading && !error && !filtered.length" class="empty">{{ filter ? '暂无符合条件的材料记录。' : '暂无材料记录，可从“提交材料”入口申报。' }}</p>
       <article v-for="row in filtered" :key="row.category + '-' + row.id" class="history-card">
-        <header
-          ><div
-            ><span class="badge">{{
-              states[row.workflow_state] || states[row.status] || '处理中'
-            }}</span
-            ><h2>{{
+        <header class="material-heading">
+          <div class="material-title-row">
+            <h2>{{
               row.data?.project_name ||
               row.data?.competition_name ||
               row.data?.certification_name ||
               categoryNames[row.category] ||
               '证明材料'
-            }}</h2></div
-          ><small>{{ row.year }} 年 · 材料 #{{ row.id }}</small></header
+            }}</h2>
+            <span class="badge">{{ states[row.workflow_state] || states[row.status] || '处理中' }}</span>
+          </div>
+          <small>{{ row.year }} 年 · 材料 #{{ row.id }}</small>
+        </header>
+        <p
+          v-if="row.last_review"
+          class="review-banner"
+          :class="reviewOutcomes[row.last_review.decision]?.tone"
+          role="note"
         >
-        <p v-if="row.last_review" class="review-banner" role="note">
-          <strong>{{ row.last_review.decision === 'return' ? '教师已退回' : '教师已通过' }}</strong>
-          <span>：{{ row.last_review.comment || '未填写具体意见' }}</span>
+          <strong>{{ reviewOutcomes[row.last_review.decision]?.label || '教师审核意见' }}：</strong>
+          <span>{{ row.last_review.comment?.trim() || '未填写审核意见' }}</span>
           <small v-if="row.last_review.actor"
             >（{{ row.last_review.actor.name }} · {{ formatScoreTime(row.last_review.at) }}）</small
           >
         </p>
-        <OcrAssessment v-if="row.category === 'competition'" :advice="row.ocr_assessment" />
+        <OcrAssessment v-if="row.category === 'competition'" :advice="row.ocr_assessment" concise-estimate />
         <p v-else-if="row.bonus_result">候选分 {{row.bonus_result.candidate_score}} · 同类取舍后 {{row.bonus_result.included_score}} 分。{{row.bonus_result.reason}} 分组封顶结果见加分统计。</p>
         <p v-else-if="row.manual_only">此项通过人工通道核验，不自动计分。</p
         ><p v-else>根据该类别的现行规则审核计分。</p>
@@ -71,8 +73,6 @@
             :data="row.ocr_raw_terms?.report?.fields || row.ocr_raw_terms?.fields || {}"
         /></details>
         <p v-if="row.rule_version_id">规则版本 #{{row.rule_version_id}} · {{row.normalization_version}}</p>
-        <button v-if="['needs_correction','rejected','scored','verified_not_eligible'].includes(row.status)" @click="showOpinion(row)">查看审核意见</button>
-        <p v-for="event in opinions[row.id]" :key="event.id">{{event.details?.comment}}</p>
         <VolunteerOcrAssessment
           :assessment="row.volunteer_ocr"
           :appeal="row.appeal"
@@ -153,14 +153,14 @@
           >
           <button
             v-if="row.status === 'rule_reconfirmation_required'"
-            class="btn btn-outline"
+            class="btn btn-primary"
             :disabled="busy"
             @click="reconfirm(row)"
             >确认新规则并重提</button
           >
           <button
             v-if="row.allowed_actions?.includes('abandon')"
-            class="btn btn-outline"
+            class="btn btn-danger"
             :disabled="busy"
             @click="command(row, 'abandon')"
             >{{ row.status === 'draft' ? '删除草稿' : '放弃材料' }}</button
@@ -208,6 +208,15 @@ const categoryNames = {
   research: '研究成果',
   arts_sports: '文体活动',
   competition_evidence: '其他竞赛'
+}
+const passed = { tone: 'passed', label: '教师已通过' }
+const notPassed = { tone: 'not-passed', label: '教师未通过' }
+const reviewOutcomes = {
+  approve: passed,
+  verified: passed,
+  return: notPassed,
+  rejected: notPassed,
+  needs_correction: notPassed
 }
 const states = {
   submitted:'待核验', scored:'已认定', verified_not_eligible:'已核验·不计分', draft: '草稿',
@@ -291,13 +300,6 @@ async function loadMore() {
   } finally {
     loading.value = false
   }
-}
-const opinions=ref({})
-async function showOpinion(row){
- try{
-   const result=await materialApi.getEvents(row.category,row.id)
-   opinions.value[row.id]=result.events.filter(event=>event.action==='reviewed')
- }catch(e){error.value=e.message}
 }
 function canSubmit(row) {
   return (
@@ -429,110 +431,4 @@ onBeforeUnmount(() => {
   clearInterval(timer)
 })
 </script>
-<style scoped>
-.review-banner {
-  margin: 0.5rem 0;
-  padding: 0.6rem 0.9rem;
-  border-left: 3px solid #d97706;
-  border-radius: 0.35rem;
-  background: rgba(217, 119, 6, 0.08);
-  font-size: 0.9rem;
-}
-.review-banner small {
-  opacity: 0.75;
-}
-.appeal-form {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding: 16px;
-  border: 1px solid #e6c98d;
-  border-radius: 10px;
-  background: #fffaf0;
-}
-.appeal-form label {
-  display: grid;
-  gap: 8px;
-  width: 100%;
-}
-.appeal-form textarea {
-  min-height: 90px;
-  padding: 12px;
-  border: 1px solid #b9c7d8;
-  border-radius: 8px;
-  font: inherit;
-}
-.material-history {
-  display: grid;
-  gap: 20px;
-}
-.material-history header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 18px;
-}
-.material-history h1 {
-  margin: 0;
-}
-.material-history p {
-  color: #59677b;
-  line-height: 1.7;
-}
-.history-card {
-  padding: 24px;
-  border: 1px solid #dce5ef;
-  border-radius: 12px;
-  background: #fff;
-  display: grid;
-  gap: 18px;
-}
-.history-card h2 {
-  font-size: 19px;
-}
-.badge {
-  padding: 5px 10px;
-  border-radius: 20px;
-  background: #eef5ff;
-  color: #18528b;
-}
-.actions,
-nav {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-select {
-  padding: 9px;
-  margin-left: 12px;
-  border: 1px solid #b9c7d8;
-  border-radius: 7px;
-}
-.empty {
-  padding: 32px;
-  text-align: center;
-  background: #f8fafc;
-  border-radius: 12px;
-}
-.btn {
-  min-height: 40px;
-  padding: 8px 15px;
-}
-.history-card details {
-  padding: 14px;
-  background: #f8fafc;
-  border-radius: 8px;
-}
-@media (max-width: 640px) {
-  .material-history header {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-  .history-card {
-    padding: 16px;
-  }
-  .actions button {
-    width: 100%;
-  }
-}
-</style>
+<style scoped src="@/assets/styles/pages/student/applications/StudentMaterialsHub.css"></style>

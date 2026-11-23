@@ -2,7 +2,7 @@
   <section class="assessment" aria-label="识别与预估分数">
     <h3>分数预估与材料核对</h3>
     <p
-      >如材料属实且与申报信息相符，审核通过后本项预计可得
+      ><template v-if="!conciseEstimate">如材料属实且与申报信息相符，审核通过后本项</template>预计可得
       <strong>{{ advice?.declared_estimate ?? '暂不可计算' }}</strong> 分。</p
     >
     <p v-if="advice?.job"
@@ -38,7 +38,7 @@
 </template>
 <script setup>
 import { fieldLabel, displayValue } from '@/services/materialFields.js'
-defineProps({ advice: { type: Object, default: null } })
+defineProps({ advice: { type: Object, default: null }, conciseEstimate: Boolean })
 const jobLabel = (v) =>
   ({
     queued: '队列中，可离开页面',

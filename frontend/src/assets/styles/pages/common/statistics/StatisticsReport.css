@@ -7,6 +7,10 @@
   margin-bottom: 20px;
 }
 
+.compact-report-wrapper {
+  margin-bottom: 0;
+}
+
 /* 顶部滚动条容器 */
 .top-scroll-container {
   overflow-x: auto;
@@ -46,21 +50,21 @@
   max-width: 100%;
 }
 
-.application-table {
+.comprehensive-table {
   width: 100%;
   border-collapse: collapse;
   min-width: 1200px;
 }
 
-.application-table th,
-.application-table td {
+.comprehensive-table th,
+.comprehensive-table td {
   padding: 8px 12px;
   text-align: left;
   border-bottom: 1px solid #e9ecef;
   font-size: 13px;
 }
 
-.application-table th {
+.comprehensive-table th {
   background-color: var(--system-surface);
   font-weight: bold;
   position: sticky;

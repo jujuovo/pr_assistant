@@ -68,7 +68,7 @@
             ><td>{{ item.status }}</td
             ><td>{{ item.candidate_score }} / {{ item.effective_score ?? '-' }}</td
             ><td
-              ><button class="btn btn-outline" @click="open(item.record_id)">查看原件</button></td
+              ><button class="btn btn-outline" @click="open(item.record_id)">查看审核详情</button></td
             ></tr
           ></tbody
         ></table
@@ -96,24 +96,22 @@
                 ><a :href="file.url" target="_blank" rel="noopener">下载原件</a></figcaption
               ></figure
             ></section
-          ><section
-            ><h4>固定规则依据</h4
-            ><p>{{ context.rule_basis.competition_name }} / {{ context.rule_basis.category }}</p
-            ><p
-              >规则包 v{{ context.rule_basis.package_version }} · 后端候选分
-              {{ context.candidate_score }}</p
-            ></section
-          ><section><h4>学生确认事实</h4><MaterialFacts :data="context.confirmed_terms" /></section
-          ><section
-            ><h4>OCR 原文（仅辅助）</h4
-            ><MaterialFacts
-              :data="
-                context.ocr_raw_terms?.report?.fields ||
-                context.ocr_raw_terms?.fields ||
-                context.ocr_raw_terms ||
-                {}
-              "
-            /> </section></div
+          ><MaterialReviewComparison
+            declared-heading="学生确认事实"
+            :declared="context.confirmed_terms"
+            :recognized="context.ocr_raw_terms?.report?.fields || context.ocr_raw_terms?.fields || context.ocr_raw_terms || {}"
+            :differences="context.ocr_assessment?.differences || []"
+          />
+        </div>
+        <details v-if="context.ocr_raw_terms">
+          <summary>OCR 原文（仅辅助）</summary>
+          <MaterialFacts :data="context.ocr_raw_terms?.report?.fields || context.ocr_raw_terms?.fields || context.ocr_raw_terms" />
+        </details>
+        <section class="rule-basis">
+          <h4>固定规则依据</h4>
+          <p>{{ context.rule_basis.competition_name }} / {{ context.rule_basis.category }}</p>
+          <p>规则包 v{{ context.rule_basis.package_version }} · 后端候选分 {{ context.candidate_score }}</p>
+        </section
         ><OcrAssessment :advice="context.ocr_assessment" /><label
           v-if="canReview && needsOcrConfirmation"
           class="ocr-confirmation"
@@ -176,6 +174,7 @@ import {
   reviewDecisionText
 } from '@/services/scorePresentation.js'
 import MaterialFacts from '@/components/common/MaterialFacts.vue'
+import MaterialReviewComparison from '@/components/teacher/MaterialReviewComparison.vue'
 import OcrAssessment from '@/components/common/OcrAssessment.vue'
 const props = defineProps({ mode: { type: String, default: 'pending' } })
 const workbench = ref({ pending_count: 0, items: [] }),
@@ -301,7 +300,7 @@ onMounted(load)
 .pending-card,
 .dialog-shell {
   border: 1px solid #dce5ef;
-  border-radius: 12px;
+  border-radius: var(--system-radius);
   background: #fff;
 }
 .review-hero {
@@ -309,8 +308,9 @@ onMounted(load)
   justify-content: space-between;
   gap: 24px;
   padding: 24px;
-  background: linear-gradient(135deg, #f8fbff, #edf6ff);
+  background: var(--system-surface);
 }
+.review-hero h2 { font-size: 22px; color: var(--system-ink-blue); }
 .review-hero h2,
 .review-hero p,
 .pending-card h3,
@@ -436,7 +436,7 @@ textarea {
 }
 .detail-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
   gap: 14px;
 }
 .detail-grid section {

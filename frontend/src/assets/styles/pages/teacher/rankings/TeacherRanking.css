@@ -1,0 +1,57 @@
+.ranking-toggle {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-height: 44px;
+  cursor: pointer;
+  margin-inline-start: auto;
+  align-self: flex-end;
+}
+
+.teacher-statistics :deep(.table-container) {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.teacher-statistics :deep(.ranking-batches .batch-details > .table-container) {
+  margin-top: 0;
+}
+
+.teacher-statistics :deep(.application-table) {
+  width: 100%;
+  font-size: 16px;
+}
+
+.teacher-statistics :deep(.application-table thead th) {
+  color: var(--system-ink-blue);
+  background: var(--system-surface);
+}
+
+.teacher-statistics :deep(.application-table :is(th, td)) {
+  padding: 12px 16px;
+  border-bottom: 1px solid #dbe7f3;
+  font-size: 16px;
+  line-height: 1.6;
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.teacher-statistics :deep(.ranking-batches .application-table),
+.teacher-statistics :deep(.official-report-table) {
+  min-width: 600px;
+}
+
+.teacher-statistics :deep(.ranking-batches :is(th, td):is(:nth-child(2), :nth-child(3))) {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.teacher-statistics :deep(.official-report-table th) {
+  white-space: nowrap;
+}
+
+.teacher-statistics :deep(.official-report-table td) {
+  min-width: 100px;
+}

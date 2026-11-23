@@ -279,6 +279,28 @@ describe('single upload submission', () => {
 })
 
 describe('persistent material history', () => {
+  it.each([
+    ['approve', 'scored', '教师已通过', 'passed'],
+    ['verified', 'verified_not_eligible', '教师已通过', 'passed'],
+    ['return', 'needs_correction', '教师未通过', 'not-passed'],
+    ['needs_correction', 'needs_correction', '教师未通过', 'not-passed'],
+    ['rejected', 'rejected', '教师未通过', 'not-passed']
+  ])('shows the latest %s opinion directly', async (decision, status, label, tone) => {
+    const comment = decision === 'verified' ? '' : '已核对原件'
+    state.api.listRecords.mockImplementation(async category => ({
+      records: category === 'social_practice' ? [{
+        id: 7, category, status, last_review: { decision, comment }
+      }] : []
+    }))
+    const w = render(History)
+    await flushPromises()
+    const banner = w.get('.review-banner')
+    expect(banner.classes()).toContain(tone)
+    expect(banner.text()).toContain(label)
+    expect(banner.text()).toContain(comment || '未填写审核意见')
+    expect(w.text()).not.toContain('查看审核意见')
+    w.unmount()
+  })
   it('offers eight concise filters and retains specific status badges', async () => {
     state.api.listRecords.mockImplementation(async (category) => ({
       records: category === 'competition' ? [structuredClone(row)] : []

@@ -1,6 +1,6 @@
 <template>
-  <div class="page-content">
-    <div class="page-title">
+  <div :class="{ 'page-content': !embedded }">
+    <div v-if="!embedded" class="page-title">
       <span>统计报表</span>
     </div>
 
@@ -44,32 +44,56 @@
         </select>
       </div>
       <div class="filter-group">
-        <span class="filter-label">当前学年:</span>
-        <span class="form-control"
+        <span class="filter-label">{{ embedded ? '推免周期' : '当前学年' }}：</span>
+        <select v-if="embedded" v-model="filters.academicYear" class="form-control" aria-label="推免周期">
+          <option value="" disabled>请选择推免周期</option>
+          <option v-for="year in academicYears" :key="year" :value="year">{{ year }} 届</option>
+        </select>
+        <span v-else class="form-control"
           >{{ currentYear }}-{{ currentYear ? parseInt(currentYear) + 1 : '' }}</span
         >
       </div>
       <button class="btn btn-outline" @click="clearFilters">清空筛选</button>
-      <button class="btn btn-outline" @click="generateReport">生成报表</button>
+      <button
+        type="button"
+        class="btn btn-outline"
+        :disabled="embedded && (hidden ? !rankingScope || !canExportRanking : !reportReady || loading || !officialReportRows.length)"
+        @click="exportCurrentTable"
+      >
+        {{ embedded ? '导出统计报表' : '生成报表' }}
+      </button>
+      <slot name="filter-actions" />
     </div>
 
+    <p v-if="embedded && (!rankingScope || (!hidden && !reportReady))" role="status">{{ reportHint }}</p>
+    <slot v-else-if="hidden" name="ranking" :scope="rankingScope" />
     <!-- 成绩分布总表 -->
-    <div class="card">
+    <div v-show="!hidden && (!embedded || reportReady)" class="card">
       <!-- 加载状态指示器 -->
       <div v-if="loading" class="loading-overlay">
         <div class="loading-spinner"></div>
         <div class="loading-text">数据加载中...</div>
       </div>
-      <div class="card-title">学生成绩分布总表</div>
-      <div class="table-wrapper">
+      <div v-if="!embedded" class="card-title">学生成绩分布总表</div>
+      <div class="table-wrapper" :class="{ 'compact-report-wrapper': embedded }">
         <!-- 顶部滚动条辅助容器 -->
-        <div class="top-scroll-container" ref="topScrollContainer">
+        <div v-if="!embedded" class="top-scroll-container" ref="topScrollContainer">
           <div class="top-scroll-content"></div>
         </div>
         <!-- 主表格容器 -->
-        <div class="table-container" ref="tableContainer">
+        <div class="table-container" ref="tableContainer" :tabindex="embedded ? 0 : undefined" :role="embedded ? 'region' : undefined" :aria-label="embedded ? '统计报表明细' : undefined">
           <!-- 未选择专业时显示提示 -->
           <div v-if="!filters.major" class="no-data"> 请选择专业 </div>
+          <p v-else-if="embedded && officialReportError" role="alert">{{ officialReportError }}</p>
+          <table v-else-if="embedded" class="application-table official-report-table" ref="dataTable">
+            <thead><tr><th v-for="[label] in reportColumns" :key="label" scope="col">{{ label }}</th></tr></thead>
+            <tbody>
+              <tr v-for="(row, index) in officialReportRows" :key="index">
+                <td v-for="(value, column) in row" :key="column">{{ value ?? '—' }}</td>
+              </tr>
+              <tr v-if="!officialReportRows.length && !loading"><td :colspan="reportColumns.length">暂无数据</td></tr>
+            </tbody>
+          </table>
           <table v-else class="application-table comprehensive-table" ref="dataTable">
             <thead>
               <tr>
@@ -261,12 +285,18 @@
 </template>
 
 <script setup>
-defineProps({
+const props = defineProps({
+  embedded: Boolean,
+  hidden: Boolean,
+  canExportRanking: Boolean,
+  rankingYears: { type: Array, default: () => [] },
   emphasizePrimaryFrame: {
     type: Boolean,
     default: false
   }
 })
+
+const emit = defineEmits(['export-ranking'])
 
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useApplicationsStore } from '@/stores/applications.js'
@@ -274,6 +304,8 @@ import { useToastStore } from '@/stores/toast.js'
 import { useAuthStore } from '@/stores/auth.js'
 import * as XLSX from 'xlsx'
 import api from '@/services/api.js'
+import workflowApi from '@/services/workflowApi.js'
+import { scoreStatusText } from '@/services/scorePresentation.js'
 
 const applicationsStore = useApplicationsStore()
 const toastStore = useToastStore()
@@ -286,7 +318,44 @@ const filters = reactive({
 })
 
 // 当前学年
-const currentYear = ref('2023')
+const currentYear = ref(props.embedded ? '' : '2023')
+
+const academicYears = computed(() => [...new Set(
+  [currentYear.value, ...props.rankingYears].filter(Boolean).map(String)
+)].sort((a, b) => Number(b) - Number(a)))
+const rankingScope = computed(() => {
+  if (!filters.faculty || !filters.department || !filters.major || !filters.academicYear) return null
+  return { facultyId: Number(filters.faculty), departmentId: Number(filters.department),
+    majorId: Number(filters.major), year: Number(filters.academicYear) }
+})
+const reportReady = computed(() => Boolean(rankingScope.value))
+const reportHint = '请选择学院、系、专业和推免周期。'
+const officialReport = ref(null)
+const officialReportError = ref('')
+const reportColumns = [
+  ['序号', 'sequence'], ['学院', 'faculty'], ['系', 'department'], ['专业', 'major'],
+  ['学号', 'student_id'], ['姓名', 'name'], ['性别', 'gender'], ['CET-4', 'cet4'],
+  ['CET-6', 'cet6'], ['推免绩点', 'gpa'], ['学业基础分', 'academic_base'],
+  ['学业成绩权重', 'academic_weight'], ['学术专长实际计分', 'academic_total'],
+  ['综合表现实际计分', 'comprehensive_total'], ['推免综合成绩', 'score'],
+  ['报表名次', 'report_rank'], ['报表排名人数', 'ranked_count'], ['正式成绩状态', 'snapshot_status'],
+  ['项目名称', 'title'], ['材料类别', 'category'], ['计分组', 'score_group'], ['获奖日期', 'award_date'],
+  ['奖项级别', 'level'], ['奖项', 'award'], ['参赛方式', 'participation'], ['本人排序', 'personal_rank'],
+  ['计分依据', 'rule_label'], ['材料计分状态', 'status'], ['候选分', 'candidate_score'],
+  ['逐项计入分', 'included_score'], ['计入状态', 'included'], ['排除原因', 'exclusion_reason']
+]
+const officialReportRows = computed(() => (officialReport.value?.students || []).flatMap(
+  (student, index) => (student.items.length ? student.items : [{}]).map((item) => {
+    const values = {
+      ...student, ...item, sequence: index + 1,
+      snapshot_status: student.snapshot_status === 'no_authoritative_snapshot' ? '暂无正式成绩快照' : '正式成绩',
+      status: item.status ? scoreStatusText(item.status) : null,
+      score_group: { academic: '学术专长', comprehensive: '综合表现' }[item.score_group],
+      included: item.included == null ? null : item.included ? '已计入' : '未计入'
+    }
+    return reportColumns.map(([, key]) => values[key] ?? null)
+  })
+))
 
 // 学院列表
 const faculties = ref([])
@@ -331,7 +400,28 @@ const loadFaculties = async () => {
 }
 
 // 从API获取学生排名数据
+let reportRequest = 0
 const fetchStudentsRanking = async () => {
+  const request = ++reportRequest
+  if (props.embedded && (props.hidden || !reportReady.value)) {
+    loading.value = false
+    return
+  }
+  if (props.embedded) {
+    officialReport.value = null
+    officialReportError.value = ''
+    loading.value = true
+    try {
+      const report = await workflowApi.getTeacherScoreReport(rankingScope.value)
+      if (request === reportRequest) officialReport.value = report
+    } catch (error) {
+      if (request === reportRequest) officialReportError.value = error.message || '加载正式成绩报表失败'
+    } finally {
+      if (request === reportRequest) loading.value = false
+    }
+    return
+  }
+  studentsRanking.value = []
   loading.value = true
   try {
     // 直接使用后端学生排名API
@@ -461,12 +551,12 @@ const fetchStudentsRanking = async () => {
       }
     })
 
-    studentsRanking.value = formattedStudents
+    if (request === reportRequest) studentsRanking.value = formattedStudents
   } catch (error) {
     console.error('获取学生排名失败:', error)
-    studentsRanking.value = []
+    if (request === reportRequest) studentsRanking.value = []
   } finally {
-    loading.value = false
+    if (request === reportRequest) loading.value = false
   }
 }
 
@@ -629,7 +719,24 @@ const clearFilters = () => {
   refreshData()
 }
 
+function exportCurrentTable() {
+  if (props.hidden) {
+    if (rankingScope.value && props.canExportRanking) emit('export-ranking')
+    return
+  }
+  if (props.embedded) {
+    if (!officialReportRows.value.length || loading.value) return
+    const workbook = XLSX.utils.book_new()
+    const sheet = XLSX.utils.aoa_to_sheet([reportColumns.map(([label]) => label), ...officialReportRows.value])
+    XLSX.utils.book_append_sheet(workbook, sheet, '正式成绩报表')
+    XLSX.writeFile(workbook, `统计报表_${officialReport.value.year}届.xlsx`)
+    return
+  }
+  generateReport()
+}
+
 const generateReport = () => {
+  if (props.embedded && (!reportReady.value || loading.value)) return
   if (filteredStudents.value.length === 0) {
     toastStore.error('当前没有数据可导出')
     return
@@ -862,15 +969,21 @@ const generateReport = () => {
 // 加载当前学年
 const loadCurrentYear = async () => {
   try {
+    if (props.embedded) {
+      const cycle = await workflowApi.getCurrentCycle()
+      currentYear.value = String(cycle.cycle_code)
+      filters.academicYear = currentYear.value
+      return
+    }
     const response = await api.getSystemSettings()
     const settings = response.settings
-    currentYear.value = settings.academicYear
-    filters.academicYear = settings.academicYear
+    currentYear.value = String(settings.academicYear || '')
+    filters.academicYear = currentYear.value
   } catch (error) {
     console.error('加载当前学年失败:', error)
     // 如果获取失败，使用默认值2023
-    currentYear.value = '2023'
-    filters.academicYear = '2023'
+    if (!props.embedded) currentYear.value = '2023'
+    filters.academicYear = currentYear.value
   }
 }
 
@@ -929,6 +1042,13 @@ const updateTopScrollWidth = () => {
     }
   }
 }
+watch(() => props.hidden, (hidden) => {
+  if (!hidden) {
+    updateTopScrollWidth()
+    fetchStudentsRanking()
+  }
+}, { flush: 'post' })
+
 // 生命周期
 onMounted(async () => {
   // 获取当前学年

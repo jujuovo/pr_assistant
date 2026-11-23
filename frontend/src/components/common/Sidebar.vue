@@ -111,6 +111,7 @@ const mobileOpen = ref(false)
 const avatarFailed = ref(false)
 const expanded = reactive({
   'recommendation-review': true,
+  'student-information': true,
   'recommendation-management': true,
   'recommendation-statistics': true,
   'system-management': true

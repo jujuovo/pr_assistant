@@ -38,6 +38,7 @@ const data = {
 function value(name, module, method) {
   name = name.split('=')[0].trim()
   if (name === 'signal' || name === 'token') return undefined
+  if (method === 'listRankings' && name === 'scope') return { majorId: 1, year: 2028 }
   if (name === 'input') return { status: 'approved', idempotencyKey: 'audit' }
   if (name === 'confirmedTerms') return {}
   if (['ids', 'item_ids'].includes(name)) return [1]
