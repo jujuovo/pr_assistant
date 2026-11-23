@@ -21,3 +21,13 @@ test('admin navigation exposes competition rules within the unified rule workben
   assert.match(layout,/rankings: RankingPublication/)
   assert.match(legacy,/rule\.sub_type !== 'competition'/)
 })
+
+test('admin and teacher statistics routes share the page with the ranking toggle', () => {
+  for (const path of ['admin/AdminLayout.vue', 'teacher/TeacherLayout.vue']) {
+    const layout = readFileSync(new URL(`../src/pages/${path}`, import.meta.url), 'utf8')
+    assert.match(layout, /import TeacherRanking from ['"]@\/pages\/teacher\/rankings\/TeacherRanking\.vue['"]/)
+    assert.match(layout, /'statistics-report': TeacherRanking/)
+  }
+  const admin = readFileSync(new URL('../src/pages/admin/AdminLayout.vue', import.meta.url), 'utf8')
+  assert.match(admin, /rankings: RankingPublication/)
+})
