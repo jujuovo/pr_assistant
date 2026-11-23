@@ -14,7 +14,7 @@
         <dd class="home-date-value od-row">
           <span class="od-nowrap">{{ date.text }}</span>
           <button
-            v-if="index === dateRows.length - 1"
+            v-if="!hideAction && index === dateRows.length - 1"
             :class="['home-link', 'od-fixed', { 'home-link-emphasis': emphasizeAction }]"
             @click="emit('navigate', actionTarget)"
           >
@@ -31,6 +31,7 @@ import { computed, onMounted, ref } from 'vue'
 import api from '@/services/api.js'
 
 const props = defineProps({
+  hideAction: Boolean,
   actionLabel: {
     type: String,
     default: '查看推免条例'

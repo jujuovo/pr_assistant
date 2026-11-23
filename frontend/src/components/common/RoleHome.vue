@@ -16,7 +16,8 @@
         </button>
       </template>
     </WorkbenchAction><p v-if="role === 'teacher' && competitionLoading" role="status" class="home-note">正在读取权威竞赛待审数…</p><p v-if="role === 'teacher' && competitionError" role="alert" class="home-note">{{ competitionError }}</p><p v-if="role === 'teacher' && materialLoading" role="status" class="home-note">正在读取非竞赛新材料待审数…</p><p v-if="role === 'teacher' && materialError" role="alert" class="home-note">{{ materialError }}</p>
-    <template v-else
+    <ApplicationPeriodPanel v-if="role === 'teacher'" hide-action />
+    <template v-if="role === 'admin'"
       ><ApplicationPeriodPanel
         action-label="查看规则"
         action-target="rule-management"

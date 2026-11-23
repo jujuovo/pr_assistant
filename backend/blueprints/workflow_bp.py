@@ -1,6 +1,7 @@
 """HTTP adapters for auditable score and ranking workflow use cases."""
 
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 
 from flask import Blueprint, abort, jsonify, request
 
@@ -123,6 +124,83 @@ def _authorize_student_score(user, student):
 def _student_score_response(user, student, year):
     _authorize_student_score(user, student)
     return jsonify(score_snapshot_dto(explain_student_score(student.student_id, year)))
+
+
+@workflow_bp.get("/teacher/score-report")
+def teacher_score_report():
+    user = actor()
+    if user.role != "teacher" or not user.faculty_id:
+        abort(403, description="仅所属学院教师可查看报表")
+    scope = {key: request.args.get(key, type=int) for key in ("faculty_id", "department_id", "major_id", "year")}
+    if any(value is None or value <= 0 for value in scope.values()):
+        abort(400, description="请选择学院、系、专业和推免周期")
+    if scope["faculty_id"] != user.faculty_id:
+        abort(403, description="无权查看其他学院报表")
+    major = db.session.get(Major, scope["major_id"])
+    if not major or major.department_id != scope["department_id"] or major.department.faculty_id != user.faculty_id:
+        abort(404, description="所选系和专业不属于当前学院")
+    year = scope.pop("year")
+    if not RecommendationCyclePolicy.query.filter_by(cycle_code=year).first():
+        return jsonify(error="该年份没有对应的推免周期，请选择有效周期。"), 400
+
+    from material_models import MaterialRecord
+    from workflow_models import ScoreEntry
+    students = Student.query.filter_by(**scope).order_by(Student.student_id).all()
+    materials = MaterialRecord.query.filter_by(faculty_id=user.faculty_id, year=year).filter(
+        MaterialRecord.student_id.in_([student.student_id for student in students])
+    ).all()
+    by_id = {str(material.id): material for material in materials}
+    score_groups = dict(db.session.query(ScoreEntry.id, ScoreEntry.score_group).filter(
+        ScoreEntry.faculty_id == user.faculty_id, ScoreEntry.year == year,
+        ScoreEntry.student_id.in_([student.student_id for student in students]),
+    ).all())
+    report = []
+    for student in students:
+        score = explain_student_score(student.student_id, year)
+        items = []
+        for entry in score["entries"]:
+            source = entry["project_source"]
+            material = by_id.get(source["id"]) if source["type"] == "material" else None
+            if not material or material.student_id != student.student_id:
+                continue
+            facts = material.data or {}
+            items.append({
+                "title": source.get("name") or facts.get("project_name") or material.category,
+                "category": material.category,
+                "score_group": score_groups.get(entry["id"]),
+                "award_date": facts.get("award_date"),
+                "level": facts.get("level") or facts.get("award_level"),
+                "award": facts.get("award"),
+                "participation": facts.get("participation_mode"),
+                "personal_rank": facts.get("personal_rank"),
+                "candidate_score": entry["candidate_score"],
+                "included_score": entry["included_score"],
+                "included": entry["included"],
+                "exclusion_reason": entry.get("exclusion_reason"),
+                "rule_label": entry.get("rule_label"),
+                "status": entry["scoring_status"],
+            })
+        report.append({
+            "student_id": student.student_id, "name": student.student_name,
+            "faculty": student.faculty.name, "department": major.department.name, "major": major.name,
+            "gender": student.gender, "cet4": student.cet4_score, "cet6": student.cet6_score,
+            "gpa": student.gpa, "academic_base": score["base"]["academic_score"],
+            "academic_weight": score["base"]["academic_weight"],
+            "academic_total": score["categories"]["academic"]["effective_score"],
+            "comprehensive_total": score["categories"]["comprehensive"]["effective_score"],
+            "score": score["comprehensive_score"], "snapshot_status": score["status"],
+            "items": items,
+        })
+    scored = sorted((row for row in report if row["score"] is not None),
+                    key=lambda row: Decimal(row["score"]), reverse=True)
+    previous = None
+    for position, row in enumerate(scored, start=1):
+        score = Decimal(row["score"])
+        if score != previous:
+            rank = position
+            previous = score
+        row.update(report_rank=rank, ranked_count=len(scored))
+    return jsonify(year=year, students=report)
 
 
 @workflow_bp.get("/students/<student_id>/score/current")
@@ -275,6 +353,12 @@ def ranking_options():
         query = query.filter(RankingBatch.faculty_id == user.faculty_id)
     else:
         abort(403, description="没有排名查看权限")
+    for param, column in (("major_id", RankingBatch.major_id), ("year", RankingBatch.year)):
+        if param in request.args:
+            value = request.args.get(param, type=int)
+            if value is None or value <= 0:
+                abort(400, description=f"{param} 必须为正整数")
+            query = query.filter(column == value)
     rows = query.order_by(RankingBatch.created_at.desc(), RankingBatch.id.desc()).all()
     return jsonify(items=[{
         "batch_id": batch.id, "year": batch.year, "major_name": major_name,

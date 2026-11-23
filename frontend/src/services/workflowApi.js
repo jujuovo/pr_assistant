@@ -17,7 +17,13 @@ export const workflowApi = {
     requestJson(`${base}/scores/recalculation-previews`, { method: 'POST', data }),
   executeScoreRecalculation: (data) =>
     requestJson(`${base}/scores/recalculation-executions`, { method: 'POST', data }),
-  listRankings: (signal) => requestJson(`${base}/rankings`, { signal }),
+  getTeacherScoreReport: ({ facultyId, departmentId, majorId, year }) =>
+    requestJson(`${base}/teacher/score-report?faculty_id=${facultyId}&department_id=${departmentId}&major_id=${majorId}&year=${year}`),
+  getCurrentCycle: () => requestJson(`${base}/cycles/current`),
+  listRankings: (signal, scope) => {
+    const query = scope ? `?major_id=${positiveInteger(scope.majorId)}&year=${positiveInteger(scope.year)}` : ''
+    return requestJson(`${base}/rankings${query}`, { signal })
+  },
   getRanking: (batchId, signal) =>
     requestJson(`${base}/rankings/${positiveInteger(batchId)}`, { signal }),
   exportRanking: (batchId, purpose) =>

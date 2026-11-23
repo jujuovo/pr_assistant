@@ -24,6 +24,18 @@
         :priority="row.priority_review"
         :reports="row.ocr_raw_terms?.reports || []"
       />
+      <div v-if="compareEvidence" class="review-evidence-grid">
+        <section>
+          <h4>证明原件</h4>
+          <MaterialImagePreview :attachments="row.attachments || []" />
+        </section>
+        <MaterialReviewComparison
+          :declared="row.data"
+          :recognized="row.ocr_raw_terms?.report?.fields || row.ocr_raw_terms?.fields || {}"
+          :labels="row.category === 'volunteer' ? { award_date: '服务记录日期' } : row.category === 'arts_sports' ? { award_date: '获得时间' } : {}"
+        />
+      </div>
+      <template v-else>
       <h4>学生申报值</h4
       ><MaterialFacts
         :data="row.data"
@@ -35,16 +47,17 @@
               : {}
         "
       />
+      </template>
       <p v-if="row.analysis?.submitted_hours"
         >本次有效工时：{{
           row.analysis.submitted_hours.effective_hours
         }}
         小时；审核通过后计入累计。</p
       >
-      <details v-if="row.category !== 'volunteer'"
+      <details v-if="!compareEvidence && row.category !== 'volunteer'"
         ><summary>核对原始识别</summary><MaterialFacts :data="row.ocr_raw_terms?.fields || {}"
       /></details>
-      <MaterialImagePreview :attachments="row.attachments || []" />
+      <MaterialImagePreview v-if="!compareEvidence" :attachments="row.attachments || []" />
       <PolicyMaterialFields v-if="!history && policy(row) && row.category !== 'student_work' && row.allowed_actions?.includes('review')" v-model="facts[row.id]" :category="row.category" review />
       <template v-if="!history && policy(row) && row.category === 'student_work' && row.allowed_actions?.includes('review')">
         <fieldset v-for="(a,i) in facts[row.id].assessments" :key="i"><legend>核定任职 {{a.appointment_index+1}}</legend>
@@ -83,10 +96,11 @@
 import { ref, onMounted } from 'vue'
 import materialApi from '@/services/materialApi.js'
 import PolicyMaterialFields from './PolicyMaterialFields.vue'
+import MaterialReviewComparison from '@/components/teacher/MaterialReviewComparison.vue'
 import MaterialFacts from './MaterialFacts.vue'
 import MaterialImagePreview from './MaterialImagePreview.vue'
 import VolunteerOcrAssessment from './VolunteerOcrAssessment.vue'
-const props = defineProps({ history: { type: Boolean, default: false } })
+const props = defineProps({ history: { type: Boolean, default: false }, compareEvidence: Boolean })
 const kinds = [
   ['all', '全部类别'],
   ['volunteer', '志愿服务累计工时'],
@@ -207,6 +221,15 @@ async function events(row) {
 onMounted(load)
 </script>
 <style scoped>
+.review-evidence-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: 16px;
+}
+@media (max-width: 768px) {
+  .review-evidence-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
 .manual-review {
   display: grid;
   gap: 14px;

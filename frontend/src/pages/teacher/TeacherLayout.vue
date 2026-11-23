@@ -9,7 +9,7 @@
 
     <div class="content-wrapper">
       <Sidebar
-        :active-page="currentPage"
+        :active-page="currentPage === 'rankings' ? 'statistics-report' : currentPage"
         @page-change="switchPage"
         @sidebar-toggle="handleSidebarToggle"
       />
@@ -21,7 +21,6 @@
         <RoleHome v-if="currentPage === 'home'" role="teacher" @navigate="switchPage" /><component
           v-else
           :is="currentPageComponent"
-          :emphasize-primary-frame="currentPage === 'statistics-report'"
           @new-application="switchToPendingReview"
         />
       </main>
@@ -43,7 +42,6 @@ import Sidebar from '@/components/common/Sidebar.vue'
 // 导入教师端组件
 import PendingReview from '@/pages/teacher/reviews/PendingReview.vue'
 import ReviewHistory from '@/pages/teacher/reviews/ReviewHistory.vue'
-import StatisticsReport from '@/pages/common/statistics/StatisticsReport.vue'
 import Profile from '@/pages/common/profile/Profile.vue'
 import TeacherRanking from '@/pages/teacher/rankings/TeacherRanking.vue'
 import TeacherStudentSummary from '@/pages/teacher/students/TeacherStudentSummary.vue'
@@ -61,7 +59,7 @@ const currentPage = ref(route.query.page || 'home')
 const pageComponents = {
   'pending-review': PendingReview,
   'review-history': ReviewHistory,
-  'statistics-report': StatisticsReport,
+  'statistics-report': TeacherRanking,
   'student-summary': TeacherStudentSummary,
   profile: Profile,
   rankings: TeacherRanking
@@ -88,7 +86,10 @@ const handleSidebarToggle = (isOpen) => {
 const switchPage = (page) => {
   if (page === currentPage.value) return
   currentPage.value = page
-  router.push({ query: { ...route.query, page } })
+  const query = { ...route.query, page }
+  delete query.ranking_only
+  delete query.batch_id
+  router.push({ query })
 }
 watch(() => route.query.page, page => { if (page) currentPage.value = page })
 
