@@ -19,6 +19,7 @@ from flask import (
     make_response,
     send_from_directory,
     current_app,
+    session,
 )
 from werkzeug.utils import secure_filename
 from models import (
@@ -48,6 +49,50 @@ from .organization_bp import (
 
 # 创建蓝图实例
 admin_bp = Blueprint("admin", __name__, url_prefix="/api/admin")
+
+
+# 组织结构和系统设置的只读端点被教师端筛选下拉、统计报表与个人资料页依赖，
+# 因此只要求登录，不要求管理员（调用方见 frontend/src/services/api.js）。
+LOGIN_ONLY_ENDPOINTS = {
+    "admin.get_faculties",
+    "admin.get_departments",
+    "admin.get_majors",
+    "admin.get_system_settings",
+}
+
+# 唯一允许匿名访问的端点：登录页展示各学院推免文件用。
+PUBLIC_ENDPOINTS = {"admin.get_public_graduate_files"}
+
+
+def _session_user():
+    user_id = session.get("user_id")
+    if not user_id:
+        return None
+    return db.session.get(User, user_id)
+
+
+@admin_bp.before_request
+def _guard_admin_blueprint():
+    """管理蓝图分级鉴权。
+
+    这 21 个端点此前完全没有鉴权：匿名请求就能改学院计分系数、改系统设置、
+    删除学院/系/专业、上传或删除推免文件。
+
+    不能一刀切限管理员——`GET /faculties|departments|majors|system-settings`
+    被教师端「待审核申请 / 审核记录 / 统计报表」和个人资料页读取，全拦会把
+    这些页面弄挂。所以按三档处理：公开 / 登录即可 / 仅管理员，默认落到最严。
+    """
+    endpoint = request.endpoint
+    if endpoint in PUBLIC_ENDPOINTS:
+        return None
+    user = _session_user()
+    if user is None or user.status != "active":
+        return jsonify({"message": "请先登录"}), 401
+    if endpoint in LOGIN_ONLY_ENDPOINTS:
+        return None
+    if user.role != "admin":
+        return jsonify({"message": "需要管理员权限"}), 403
+    return None
 
 
 # 获取所有学院

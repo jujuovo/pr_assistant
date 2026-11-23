@@ -171,6 +171,8 @@ def test_delete_reviewer_with_audit_is_protected(deletion_env):
 def test_delete_faculty_with_only_policy_is_protected(deletion_env):
     app, client, users, attachment, routes, application_id = deletion_env
     policy(client, users)
+    # 删除组织架构是管理员操作，必须先换成管理员会话，否则只会拿到 401
+    login(client, users["admin"])
     response = client.delete(routes["faculty"])
     assert response.status_code == 409
     assert "政策" in response.json["message"]
