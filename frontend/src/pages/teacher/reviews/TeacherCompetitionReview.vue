@@ -1,24 +1,15 @@
 <template>
-  <section class="competition-review" aria-labelledby="competition-review-title">
-    <header class="review-hero"
-      ><div
-        ><p class="eyebrow">MaterialRecord · 正式竞赛链路</p
-        ><h2 id="competition-review-title">{{
-          historyMode ? '竞赛审核记录' : '竞赛材料待审工作台'
-        }}</h2
-        ><p>材料事实、规则依据和候选分均来自后端权威投影；审核动作不会修改规则或分数。</p></div
-      ><div v-if="!historyMode" class="pending-total"
-        ><strong>{{ workbench.pending_count || 0 }}</strong
-        ><span>份待审核</span></div
-      ></header
-    >
+  <section class="competition-review" :aria-labelledby="historyMode ? 'competition-review-title' : undefined">
+    <header v-if="historyMode" class="review-hero">
+      <h2 id="competition-review-title">竞赛审核记录</h2>
+    </header>
     <p v-if="loading" class="review-state" role="status">正在加载竞赛待审材料…</p>
     <section v-else-if="error" class="review-state error" role="alert"
       ><p>{{ error }}</p
       ><button class="btn btn-outline" @click="load">重新加载</button></section
     >
-    <p v-else-if="!displayItems.length" class="review-state" role="status">{{
-      historyMode ? '当前周期没有已处理竞赛材料。' : '当前周期没有待审核竞赛材料。'
+    <p v-else-if="!displayItems.length" class="review-state review-category-empty" role="status">{{
+      historyMode ? '当前类别暂无核验记录。' : '当前类别暂无待核验材料。'
     }}</p>
     <div v-else class="pending-grid"
       ><article v-for="row in displayItems" :key="row.id" class="pending-card"
@@ -45,7 +36,7 @@
         }}</button></article
       ></div
     >
-    <section class="summary-card"
+    <section v-if="historyMode" class="summary-card"
       ><div><h3>授权学生汇总</h3><p>按学号读取该生当前周期的竞赛计分反馈。</p></div
       ><div class="summary-search"
         ><label for="summary-student">学生学号</label
@@ -165,7 +156,7 @@
   </section>
 </template>
 <script setup>
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import materialApi from '@/services/materialApi.js'
 import {
   scoreStatusText,
@@ -176,7 +167,8 @@ import {
 import MaterialFacts from '@/components/common/MaterialFacts.vue'
 import MaterialReviewComparison from '@/components/teacher/MaterialReviewComparison.vue'
 import OcrAssessment from '@/components/common/OcrAssessment.vue'
-const props = defineProps({ mode: { type: String, default: 'pending' } })
+const emit = defineEmits(['pending-count'])
+const props = defineProps({ mode: { type: String, default: 'pending' }, studentFilter: String })
 const workbench = ref({ pending_count: 0, items: [] }),
   context = ref(null),
   summary = ref(null),
@@ -195,18 +187,29 @@ const needsOcrConfirmation = computed(
   () => context.value?.ocr_assessment?.review_mode === 'manual_confirmation'
 )
 const historyMode = computed(() => props.mode === 'history')
-const displayItems = computed(() =>
-  historyMode.value ? workbench.value.reviewed_items || [] : workbench.value.items || []
-)
+const displayItems = computed(() => {
+  if (!historyMode.value) return workbench.value.items || []
+  const records = workbench.value.reviewed_items || []
+  return props.studentFilter
+    ? records.filter(row => String(row.student_id) === props.studentFilter)
+    : records
+})
+let loadVersion = 0
 async function load() {
+  const version = ++loadVersion
   loading.value = true
   error.value = ''
   try {
-    workbench.value = await materialApi.getCompetitionWorkbenchSummary()
-  } catch (e) {
-    error.value = e.message || '竞赛待审材料加载失败'
+    const result = await materialApi.getCompetitionWorkbenchSummary(undefined, historyMode.value ? props.studentFilter : undefined)
+    if (version !== loadVersion) return
+    workbench.value = result
+    emit('pending-count', workbench.value.pending_count)
+  } catch (cause) {
+    if (version !== loadVersion) return
+    emit('pending-count', null)
+    error.value = cause.message || '竞赛待审材料加载失败'
   } finally {
-    loading.value = false
+    if (version === loadVersion) loading.value = false
   }
 }
 async function open(id) {
@@ -262,7 +265,7 @@ async function loadSummary() {
     error.value = e.message || '学生汇总加载失败'
   }
 }
-onMounted(load)
+watch(() => props.studentFilter, load, { immediate: true })
 </script>
 <style scoped>
 .review-outcome {
@@ -322,18 +325,6 @@ onMounted(load)
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
-}
-.pending-total {
-  display: grid;
-  place-items: center;
-  min-width: 120px;
-  padding: 14px;
-  border-radius: 10px;
-  background: #fff;
-}
-.pending-total strong {
-  font-size: 32px;
-  color: #0b5cab;
 }
 .pending-grid {
   display: grid;
@@ -512,9 +503,6 @@ textarea {
   .pending-grid,
   .detail-grid {
     grid-template-columns: 1fr;
-  }
-  .pending-total {
-    min-width: 0;
   }
   .summary-card {
     overflow: auto;

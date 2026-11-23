@@ -32,7 +32,6 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
-import { useApplicationsStore } from '@/stores/applications.js'
 import { useToastStore } from '@/stores/toast.js'
 
 import Header from '@/components/common/Header.vue'
@@ -49,7 +48,6 @@ import TeacherStudentSummary from '@/pages/teacher/students/TeacherStudentSummar
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
-const applicationsStore = useApplicationsStore()
 const toastStore = useToastStore()
 
 // 当前活动页面
@@ -112,11 +110,6 @@ onMounted(() => {
   if (authStore.role !== 'teacher') {
     toastStore.error('您没有权限访问教师端')
     router.push('/login')
-  } else if (currentPage.value !== 'student-summary') {
-    // 汇总页直接读取材料计分明细。
-    if (applicationsStore.applications.length === 0) {
-      applicationsStore.fetchApplications()
-    }
   }
 })
 </script>

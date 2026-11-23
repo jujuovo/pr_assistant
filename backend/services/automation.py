@@ -15,6 +15,10 @@ from automation_models import (AutomationBatch, AutomationItem, AutomationPolicy
                                AutomationFingerprint, AutomationReview)
 from services.volunteer_rules import CREDIT_MAX_HOURS, parse_number, positive_int
 
+# actor() 已移到 services/actors.py：它被 17 个模块共用，不应继续绑在旧志愿模块上。
+# 这里保留同名导入，旧调用方（含本模块）无需一次改完。
+from services.actors import actor  # noqa: E402,F401
+
 
 def number(value):
     try:
@@ -59,13 +63,6 @@ def text_comment(data, key="comment"):
     if not isinstance(comment, str) or len(comment) > 2000:
         abort(400, description=f"{key} 必须是不超过2000字符的字符串")
     return comment.strip()
-
-
-def actor():
-    user = db.session.get(User, session.get("user_id")) if session.get("user_id") else None
-    if not user or user.status != "active":
-        abort(401, description="请先登录")
-    return user
 
 
 def authorize(batch, user=None, reviewer=False):

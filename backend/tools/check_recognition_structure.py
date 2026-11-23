@@ -13,7 +13,8 @@ LIMIT = 100
 def recognition_files():
     for folder in ('services/recognition', 'services/certificates', 'services/competition_ocr'):
         yield from sorted((BACKEND / folder).rglob('*.py'))
-    for name in ('services/automation.py', 'blueprints/automation_bp.py',
+    # 旧批量志愿蓝图（blueprints/automation_bp.py）已随链路下线，不再参与结构检查。
+    for name in ('services/automation.py',
                  'blueprints/certificate_bp.py', 'recognition_worker.py'):
         yield BACKEND / name
 

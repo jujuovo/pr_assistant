@@ -142,7 +142,7 @@ describe('authoritative competition workbench projection', () => {
     })
     await flushPromises()
     expect(wrapper.text()).toContain('1 份竞赛材料待审核')
-    expect(wrapper.text()).toContain('1 份非竞赛材料待审核')
+    expect(wrapper.text()).toContain('0 份非竞赛材料待审核')
   })
 
   it('renders student summary loading and actionable error states', async () => {
@@ -172,7 +172,8 @@ describe('authoritative competition workbench projection', () => {
   it('renders pending, read-only facts and authority-driven review actions', async () => {
     const wrapper = mount(TeacherCompetitionReview)
     await flushPromises()
-    expect(wrapper.text()).toContain('1份待审核')
+    expect(wrapper.text()).not.toContain('竞赛材料待审工作台')
+    expect(wrapper.text()).not.toContain('授权学生汇总')
     expect(wrapper.text()).toContain('竞赛作品')
     await wrapper.get('.pending-card button').trigger('click')
     await flushPromises()
@@ -275,7 +276,20 @@ describe('authoritative competition workbench projection', () => {
     })
     const wrapper = mount(TeacherCompetitionReview)
     await flushPromises()
-    expect(wrapper.get('[role="status"]').text()).toContain('没有待审核竞赛材料')
+    expect(wrapper.get('[role="status"]').text()).toContain('当前类别暂无待核验材料。')
+  })
+
+  it('reloads review history with the submitted student ID and restores the default when cleared', async () => {
+    const wrapper = mount(TeacherCompetitionReview, {
+      props: { mode: 'history', studentFilter: '' }
+    })
+    await flushPromises()
+    await wrapper.setProps({ studentFilter: 'student001' })
+    await flushPromises()
+    expect(state.api.getCompetitionWorkbenchSummary).toHaveBeenLastCalledWith(undefined, 'student001')
+    await wrapper.setProps({ studentFilter: '' })
+    await flushPromises()
+    expect(state.api.getCompetitionWorkbenchSummary).toHaveBeenLastCalledWith(undefined, '')
   })
 
   it('renders processed competition materials as read-only history', async () => {

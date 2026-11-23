@@ -5,7 +5,7 @@ from pathlib import Path
 from flask import abort, current_app
 from extensions import db
 from certificate_models import CertificateAssessment
-from services.automation import actor
+from services.actors import actor
 
 CATALOG = [{"key": "lanqiao", "name": "蓝桥杯（已适配样本模板）", "automatic_assistance": True,
             "note": "仅辅助核对已适配的图片/PDF模板，水印匹配不能证明证书真实。"}]

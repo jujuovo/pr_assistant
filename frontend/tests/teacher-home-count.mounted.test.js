@@ -38,7 +38,7 @@ test('教师主页显示本学院新材料待审份数', async () => {
   expect(wrapper.text()).toContain('1 份非竞赛材料待审核')
 })
 
-test('教师主页把旧兼容申请与新材料待审份数相加', async () => {
+test('教师主页不计入旧兼容申请', async () => {
   mocks.store.pendingApplications = [
     { id: 7, status: 'pending', rule: { sub_type: 'honor' } }
   ]
@@ -46,5 +46,5 @@ test('教师主页把旧兼容申请与新材料待审份数相加', async () =>
   const wrapper = mount(RoleHome, { props: { role: 'teacher' }, global: { stubs } })
   await flushPromises()
 
-  expect(wrapper.text()).toContain('2 份非竞赛材料待审核')
+  expect(wrapper.text()).toContain('1 份非竞赛材料待审核')
 })

@@ -22,7 +22,7 @@ from models import (
 )
 from extensions import db
 from sqlalchemy import func
-from services.automation import actor
+from services.actors import actor
 
 
 DERIVED_STUDENT_FIELDS = frozenset({

@@ -4,7 +4,7 @@ from werkzeug.exceptions import HTTPException
 from sqlalchemy.exc import IntegrityError
 from services.competition_ocr.mapping import TARGETS
 from extensions import db
-from services.automation import actor
+from services.actors import actor
 from services.certificates.service import contained
 from services.competition_ocr.catalog import CATEGORIES
 from services.competition_ocr.paths import file_sha256

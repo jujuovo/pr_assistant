@@ -6,7 +6,7 @@ from decimal import Decimal
 from flask import Blueprint, abort, jsonify, request
 
 from models import Major, Student
-from services.automation import actor
+from services.actors import actor
 from services.materials.schemas import integer
 from use_cases.scoring import (
     ScoringUseCaseError,
@@ -129,8 +129,8 @@ def _student_score_response(user, student, year):
 @workflow_bp.get("/teacher/score-report")
 def teacher_score_report():
     user = actor()
-    if user.role != "teacher" or not user.faculty_id:
-        abort(403, description="仅所属学院教师可查看报表")
+    if user.role not in {"teacher", "admin"} or not user.faculty_id:
+        abort(403, description="仅所属学院教师和管理员可查看报表")
     scope = {key: request.args.get(key, type=int) for key in ("faculty_id", "department_id", "major_id", "year")}
     if any(value is None or value <= 0 for value in scope.values()):
         abort(400, description="请选择学院、系、专业和推免周期")
@@ -145,52 +145,65 @@ def teacher_score_report():
 
     from material_models import MaterialRecord
     from workflow_models import ScoreEntry
+
     students = Student.query.filter_by(**scope).order_by(Student.student_id).all()
-    materials = MaterialRecord.query.filter_by(faculty_id=user.faculty_id, year=year).filter(
-        MaterialRecord.student_id.in_([student.student_id for student in students])
-    ).all()
-    by_id = {str(material.id): material for material in materials}
-    score_groups = dict(db.session.query(ScoreEntry.id, ScoreEntry.score_group).filter(
+    snapshots = StudentScoreSnapshot.query.filter_by(
+        faculty_id=user.faculty_id, year=year, status="current"
+    ).filter(
+        StudentScoreSnapshot.student_id.in_([student.student_id for student in students])
+    ).order_by(StudentScoreSnapshot.version).all()
+    by_student = {snapshot.student_id: snapshot for snapshot in snapshots}
+    projects_by_student = {}
+    entries = db.session.query(ScoreEntry, MaterialRecord).join(
+        MaterialRecord, MaterialRecord.id == ScoreEntry.material_record_id
+    ).filter(
         ScoreEntry.faculty_id == user.faculty_id, ScoreEntry.year == year,
-        ScoreEntry.student_id.in_([student.student_id for student in students]),
-    ).all())
+        ScoreEntry.source_type == "material", ScoreEntry.status == "active",
+        ScoreEntry.student_id.in_(list(by_student)),
+        MaterialRecord.faculty_id == ScoreEntry.faculty_id,
+        MaterialRecord.year == ScoreEntry.year,
+        MaterialRecord.student_id == ScoreEntry.student_id,
+    ).order_by(ScoreEntry.category, ScoreEntry.id)
+    snapshot_scores = {
+        student_id: {item["entry_id"]: item["effective_score"] for item in snapshot.breakdown
+                     if "entry_id" in item}
+        for student_id, snapshot in by_student.items()
+    }
+    for entry, material in entries:
+        frozen_score = snapshot_scores[entry.student_id].get(entry.id)
+        if frozen_score is None and entry.included:
+            continue
+        facts = {**(material.data or {}), **(material.confirmed_terms or {})}
+        projects_by_student.setdefault(entry.student_id, []).append({
+            "category": entry.category,
+            "name": next((facts[key] for key in (
+                "project_name", "paper_title", "patent_title", "title", "competition_name", "name"
+            ) if isinstance(facts.get(key), str) and facts[key].strip()), None),
+            "score": frozen_score if frozen_score is not None else "0",
+            "exclusion_reason": entry.exclusion_reason,
+        })
     report = []
     for student in students:
-        score = explain_student_score(student.student_id, year)
-        items = []
-        for entry in score["entries"]:
-            source = entry["project_source"]
-            material = by_id.get(source["id"]) if source["type"] == "material" else None
-            if not material or material.student_id != student.student_id:
-                continue
-            facts = material.data or {}
-            items.append({
-                "title": source.get("name") or facts.get("project_name") or material.category,
-                "category": material.category,
-                "score_group": score_groups.get(entry["id"]),
-                "award_date": facts.get("award_date"),
-                "level": facts.get("level") or facts.get("award_level"),
-                "award": facts.get("award"),
-                "participation": facts.get("participation_mode"),
-                "personal_rank": facts.get("personal_rank"),
-                "candidate_score": entry["candidate_score"],
-                "included_score": entry["included_score"],
-                "included": entry["included"],
-                "exclusion_reason": entry.get("exclusion_reason"),
-                "rule_label": entry.get("rule_label"),
-                "status": entry["scoring_status"],
-            })
-        report.append({
+        snapshot = by_student.get(student.student_id)
+        row = {
             "student_id": student.student_id, "name": student.student_name,
             "faculty": student.faculty.name, "department": major.department.name, "major": major.name,
-            "gender": student.gender, "cet4": student.cet4_score, "cet6": student.cet6_score,
-            "gpa": student.gpa, "academic_base": score["base"]["academic_score"],
-            "academic_weight": score["base"]["academic_weight"],
-            "academic_total": score["categories"]["academic"]["effective_score"],
-            "comprehensive_total": score["categories"]["comprehensive"]["effective_score"],
-            "score": score["comprehensive_score"], "snapshot_status": score["status"],
-            "items": items,
-        })
+            "gpa": student.gpa, "gender": student.gender,
+            "cet4": student.cet4_score, "cet6": student.cet6_score,
+            "projects": projects_by_student.get(student.student_id, []),
+            "snapshot_status": snapshot.status if snapshot else "no_authoritative_snapshot",
+        }
+        for key, field in (
+            ("academic_base", "academic_base_score"),
+            ("academic_weight", "academic_weight"),
+            ("academic_raw_total", "specialty_raw_score"),
+            ("academic_total", "specialty_score"),
+            ("comprehensive_raw_total", "performance_raw_score"),
+            ("comprehensive_total", "performance_score"),
+            ("score", "comprehensive_score"),
+        ):
+            row[key] = str(getattr(snapshot, field)) if snapshot else None
+        report.append(row)
     scored = sorted((row for row in report if row["score"] is not None),
                     key=lambda row: Decimal(row["score"]), reverse=True)
     previous = None
