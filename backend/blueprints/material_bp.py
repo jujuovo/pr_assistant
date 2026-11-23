@@ -129,7 +129,7 @@ def estimate_competition_route():
 
 @material_bp.get('/competition/workbench-summary')
 def competition_workbench():
-    return jsonify(competition_workbench_summary(actor()))
+    return jsonify(competition_workbench_summary(actor(), request.args.get("student_id", "").strip()))
 
 
 @material_bp.get('/student/summary')

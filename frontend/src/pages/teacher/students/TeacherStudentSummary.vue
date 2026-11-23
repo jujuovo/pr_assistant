@@ -3,7 +3,6 @@
     <header class="page-title">
       <div>
         <h1>学生竞赛计分汇总</h1>
-        <p> 按学号和周期查看竞赛材料、候选分、计入分与排除原因。 </p>
       </div>
       <div class="cycle-chip">
         <span>申报周期</span>
@@ -122,11 +121,6 @@
           </tbody>
         </table></div
       >
-
-      <p class="summary-footnote">
-        该页面不允许编辑材料、规则、候选分或计入分。候选分按原规则版本保留，限项按本周期当前规则统一重算。
-        <template v-if="hiddenNote"> {{ hiddenNote }}</template>
-      </p>
     </template>
 
     <p v-else class="review-state" role="status">
@@ -237,16 +231,6 @@ watch(attachment, async (file, _, onCleanup) => {
 
 const items = computed(() => summary.value?.items || [])
 const aggregate = computed(() => summary.value?.aggregate || {})
-// 指标卡只统计明细内的材料，草稿与已放弃要单独说明，教师才能把总数算平。
-const hiddenNote = computed(() => {
-  const draft = Number(aggregate.value.draft_count || 0)
-  const abandoned = Number(aggregate.value.abandoned_count || 0)
-  if (!draft && !abandoned) return ''
-  const parts = []
-  if (draft) parts.push(`${draft} 条学生草稿`)
-  if (abandoned) parts.push(`${abandoned} 条学生已放弃`)
-  return `另有 ${parts.join('、')}，未提交或已作废，不计入本次汇总。`
-})
 
 function exclusionText(item) {
   if (['competition_count_limit', 'competition_top_three_limit'].includes(item.exclusion_reason))

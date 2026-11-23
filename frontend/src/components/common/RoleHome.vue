@@ -7,7 +7,7 @@
       <template #description>
         <p>
           <strong class="action-count od-nowrap">{{ competitionSummary.pending_count || 0 }} 份竞赛材料待审核</strong>
-          <span class="compat-count"> · {{ combinedNonCompetitionPending }} 份非竞赛材料待审核</span>
+          <span v-if="!materialLoading && !materialError" class="compat-count"> · {{ materialSummary.pending_count || 0 }} 份非竞赛材料待审核</span>
         </p>
       </template>
       <template #action>
@@ -41,22 +41,17 @@
 </template>
 <script setup>
 import { useAuthStore } from '@/stores/auth.js'
-import { useApplicationsStore } from '@/stores/applications.js'
 import WelcomeHeader from '@/components/common/WelcomeHeader.vue'
 import WorkbenchAction from '@/components/common/WorkbenchAction.vue'
 import ApplicationPeriodPanel from '@/components/common/ApplicationPeriodPanel.vue'
-import { computed, onMounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import materialApi from '@/services/materialApi.js'
-import { isNonCompetitionCompatibilityApplication } from '@/services/teacherApplicationBoundary.js'
 const props = defineProps({ role: String })
 defineEmits(['navigate'])
 const auth = useAuthStore()
-const applicationsStore = useApplicationsStore()
 const isDemo = import.meta.env.MODE === 'demo'
 const competitionSummary = ref({}), competitionLoading = ref(props.role === 'teacher'), competitionError = ref('')
 const materialSummary = ref({}), materialLoading = ref(props.role === 'teacher'), materialError = ref('')
-const compatibilityPendingCount = computed(() => applicationsStore.pendingApplications.filter(isNonCompetitionCompatibilityApplication).length)
-const combinedNonCompetitionPending = computed(() => compatibilityPendingCount.value + Number(materialSummary.value.pending_count || 0))
 const adminItems = [
   { key: 'faculty-management', title: '学院管理', desc: '维护学院、系与专业' },
   { key: 'user-management', title: '用户管理', desc: '维护学生与教师账号' },

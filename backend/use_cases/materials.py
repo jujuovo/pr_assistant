@@ -92,7 +92,7 @@ def _latest_review_summaries(rows):
     return latest
 
 
-def competition_workbench_summary(user):
+def competition_workbench_summary(user, student_id=""):
     _package, context = competition_workflow_context(user)
     year = context["cycle"]["cycle_code"]
     query = MaterialRecord.query.filter_by(category="competition", year=year)
@@ -141,11 +141,16 @@ def competition_workbench_summary(user):
     if user.role == "teacher":
         item_rows = [row for row in rows if row.status in pending_statuses]
         # 已审记录不受「被取代」影响：退回过的旧版本仍需留在审核记录里。
-        reviewed_rows = history_query.filter(
+        reviewed_query = history_query.filter(
             MaterialRecord.status.in_(tuple(reviewed_statuses))
         ).order_by(
             MaterialRecord.updated_at.desc(), MaterialRecord.id.desc()
-        ).limit(50).all()
+        )
+        if student_id:
+            reviewed_query = reviewed_query.filter(MaterialRecord.student_id == student_id)
+        else:
+            reviewed_query = reviewed_query.limit(50)
+        reviewed_rows = reviewed_query.all()
         reviews.update(_latest_review_summaries(reviewed_rows))
     else:
         item_rows = rows

@@ -89,7 +89,7 @@
             <thead><tr><th v-for="[label] in reportColumns" :key="label" scope="col">{{ label }}</th></tr></thead>
             <tbody>
               <tr v-for="(row, index) in officialReportRows" :key="index">
-                <td v-for="(value, column) in row" :key="column">{{ value ?? '—' }}</td>
+                <td v-for="(value, column) in row" :key="column">{{ value }}</td>
               </tr>
               <tr v-if="!officialReportRows.length && !loading"><td :colspan="reportColumns.length">暂无数据</td></tr>
             </tbody>
@@ -305,7 +305,6 @@ import { useAuthStore } from '@/stores/auth.js'
 import * as XLSX from 'xlsx'
 import api from '@/services/api.js'
 import workflowApi from '@/services/workflowApi.js'
-import { scoreStatusText } from '@/services/scorePresentation.js'
 
 const applicationsStore = useApplicationsStore()
 const toastStore = useToastStore()
@@ -334,28 +333,21 @@ const officialReport = ref(null)
 const officialReportError = ref('')
 const reportColumns = [
   ['序号', 'sequence'], ['学院', 'faculty'], ['系', 'department'], ['专业', 'major'],
-  ['学号', 'student_id'], ['姓名', 'name'], ['性别', 'gender'], ['CET-4', 'cet4'],
-  ['CET-6', 'cet6'], ['推免绩点', 'gpa'], ['学业基础分', 'academic_base'],
-  ['学业成绩权重', 'academic_weight'], ['学术专长实际计分', 'academic_total'],
-  ['综合表现实际计分', 'comprehensive_total'], ['推免综合成绩', 'score'],
-  ['报表名次', 'report_rank'], ['报表排名人数', 'ranked_count'], ['正式成绩状态', 'snapshot_status'],
-  ['项目名称', 'title'], ['材料类别', 'category'], ['计分组', 'score_group'], ['获奖日期', 'award_date'],
-  ['奖项级别', 'level'], ['奖项', 'award'], ['参赛方式', 'participation'], ['本人排序', 'personal_rank'],
-  ['计分依据', 'rule_label'], ['材料计分状态', 'status'], ['候选分', 'candidate_score'],
-  ['逐项计入分', 'included_score'], ['计入状态', 'included'], ['排除原因', 'exclusion_reason']
+  ['学号', 'student_id'], ['姓名', 'name'], ['推免绩点', 'gpa'],
+  ['学业基础分', 'academic_base'], ['学业成绩权重', 'academic_weight'],
+  ['学术专长原始总分', 'academic_raw_total'], ['学术专长实际计入分', 'academic_total'],
+  ['综合表现原始总分', 'comprehensive_raw_total'], ['综合表现实际计入分', 'comprehensive_total'],
+  ['推免综合成绩', 'score'], ['报表名次', 'report_rank'], ['报表排名人数', 'ranked_count'],
+  ['正式成绩状态', 'snapshot_status']
 ]
-const officialReportRows = computed(() => (officialReport.value?.students || []).flatMap(
-  (student, index) => (student.items.length ? student.items : [{}]).map((item) => {
-    const values = {
-      ...student, ...item, sequence: index + 1,
-      snapshot_status: student.snapshot_status === 'no_authoritative_snapshot' ? '暂无正式成绩快照' : '正式成绩',
-      status: item.status ? scoreStatusText(item.status) : null,
-      score_group: { academic: '学术专长', comprehensive: '综合表现' }[item.score_group],
-      included: item.included == null ? null : item.included ? '已计入' : '未计入'
-    }
-    return reportColumns.map(([, key]) => values[key] ?? null)
-  })
-))
+const officialReportRows = computed(() => (officialReport.value?.students || []).map((student, index) => {
+  const values = {
+    ...student,
+    sequence: index + 1,
+    snapshot_status: student.snapshot_status === 'no_authoritative_snapshot' ? '暂无正式成绩快照' : '正式成绩'
+  }
+  return reportColumns.map(([, key]) => values[key] ?? null)
+}))
 
 // 学院列表
 const faculties = ref([])

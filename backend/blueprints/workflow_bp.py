@@ -143,54 +143,33 @@ def teacher_score_report():
     if not RecommendationCyclePolicy.query.filter_by(cycle_code=year).first():
         return jsonify(error="该年份没有对应的推免周期，请选择有效周期。"), 400
 
-    from material_models import MaterialRecord
-    from workflow_models import ScoreEntry
     students = Student.query.filter_by(**scope).order_by(Student.student_id).all()
-    materials = MaterialRecord.query.filter_by(faculty_id=user.faculty_id, year=year).filter(
-        MaterialRecord.student_id.in_([student.student_id for student in students])
-    ).all()
-    by_id = {str(material.id): material for material in materials}
-    score_groups = dict(db.session.query(ScoreEntry.id, ScoreEntry.score_group).filter(
-        ScoreEntry.faculty_id == user.faculty_id, ScoreEntry.year == year,
-        ScoreEntry.student_id.in_([student.student_id for student in students]),
-    ).all())
+    snapshots = StudentScoreSnapshot.query.filter_by(
+        faculty_id=user.faculty_id, year=year, status="current"
+    ).filter(
+        StudentScoreSnapshot.student_id.in_([student.student_id for student in students])
+    ).order_by(StudentScoreSnapshot.version).all()
+    by_student = {snapshot.student_id: snapshot for snapshot in snapshots}
     report = []
     for student in students:
-        score = explain_student_score(student.student_id, year)
-        items = []
-        for entry in score["entries"]:
-            source = entry["project_source"]
-            material = by_id.get(source["id"]) if source["type"] == "material" else None
-            if not material or material.student_id != student.student_id:
-                continue
-            facts = material.data or {}
-            items.append({
-                "title": source.get("name") or facts.get("project_name") or material.category,
-                "category": material.category,
-                "score_group": score_groups.get(entry["id"]),
-                "award_date": facts.get("award_date"),
-                "level": facts.get("level") or facts.get("award_level"),
-                "award": facts.get("award"),
-                "participation": facts.get("participation_mode"),
-                "personal_rank": facts.get("personal_rank"),
-                "candidate_score": entry["candidate_score"],
-                "included_score": entry["included_score"],
-                "included": entry["included"],
-                "exclusion_reason": entry.get("exclusion_reason"),
-                "rule_label": entry.get("rule_label"),
-                "status": entry["scoring_status"],
-            })
-        report.append({
+        snapshot = by_student.get(student.student_id)
+        row = {
             "student_id": student.student_id, "name": student.student_name,
             "faculty": student.faculty.name, "department": major.department.name, "major": major.name,
-            "gender": student.gender, "cet4": student.cet4_score, "cet6": student.cet6_score,
-            "gpa": student.gpa, "academic_base": score["base"]["academic_score"],
-            "academic_weight": score["base"]["academic_weight"],
-            "academic_total": score["categories"]["academic"]["effective_score"],
-            "comprehensive_total": score["categories"]["comprehensive"]["effective_score"],
-            "score": score["comprehensive_score"], "snapshot_status": score["status"],
-            "items": items,
-        })
+            "gpa": student.gpa,
+            "snapshot_status": snapshot.status if snapshot else "no_authoritative_snapshot",
+        }
+        for key, field in (
+            ("academic_base", "academic_base_score"),
+            ("academic_weight", "academic_weight"),
+            ("academic_raw_total", "specialty_raw_score"),
+            ("academic_total", "specialty_score"),
+            ("comprehensive_raw_total", "performance_raw_score"),
+            ("comprehensive_total", "performance_score"),
+            ("score", "comprehensive_score"),
+        ):
+            row[key] = str(getattr(snapshot, field)) if snapshot else None
+        report.append(row)
     scored = sorted((row for row in report if row["score"] is not None),
                     key=lambda row: Decimal(row["score"]), reverse=True)
     previous = None
