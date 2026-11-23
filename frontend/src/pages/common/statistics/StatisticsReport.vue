@@ -331,22 +331,55 @@ const reportReady = computed(() => Boolean(rankingScope.value))
 const reportHint = '请选择学院、系、专业和推免周期。'
 const officialReport = ref(null)
 const officialReportError = ref('')
-const reportColumns = [
+const studentReportColumns = [
   ['序号', 'sequence'], ['学院', 'faculty'], ['系', 'department'], ['专业', 'major'],
-  ['学号', 'student_id'], ['姓名', 'name'], ['推免绩点', 'gpa'],
+  ['学号', 'student_id'], ['姓名', 'name'], ['性别', 'gender'],
+  ['四级成绩', 'cet4'], ['六级成绩', 'cet6'], ['推免绩点', 'gpa'],
   ['学业基础分', 'academic_base'], ['学业成绩权重', 'academic_weight'],
   ['学术专长原始总分', 'academic_raw_total'], ['学术专长实际计入分', 'academic_total'],
   ['综合表现原始总分', 'comprehensive_raw_total'], ['综合表现实际计入分', 'comprehensive_total'],
   ['推免综合成绩', 'score'], ['报表名次', 'report_rank'], ['报表排名人数', 'ranked_count'],
   ['正式成绩状态', 'snapshot_status']
 ]
-const officialReportRows = computed(() => (officialReport.value?.students || []).map((student, index) => {
+const projectColumns = [
+  ['项目类型', 'category'], ['项目名称', 'name'], ['实际加分', 'score'], ['计入状态', 'status']
+]
+const reportColumns = [...studentReportColumns, ...projectColumns]
+const projectTypes = {
+  competition: '学业竞赛', competition_evidence: '其他竞赛',
+  research: '科研成果', research_paper: '科研论文', invention_patent: '发明专利',
+  innovation_training: '创新创业', volunteer: '志愿服务', social_practice: '社会实践',
+  student_work: '学生工作', arts_sports: '文体活动', certification: '能力认证',
+  language: '外语能力', honor: '荣誉称号', honor_title: '荣誉称号'
+}
+const projectReasons = {
+  competition_count_limit: '超出竞赛计入项目数上限',
+  competition_top_three_limit: '超出竞赛计入项目数上限',
+  max_count_exceeded: '超出计入项目数上限',
+  duplicate_fact: '重复项目',
+  rule_total_score_cap: '达到累计分数上限',
+  csp_lower_score: 'CSP 成绩仅计最高项',
+  icpc_ccpc_same_year_lower_score: '同年 ICPC 和 CCPC 仅计最高项',
+  same_event_lower_score: '同一赛事仅计最高项',
+  same_work_lower_score: '同一作品仅计最高项'
+}
+const officialReportRows = computed(() => (officialReport.value?.students || []).flatMap((student, index) => {
   const values = {
     ...student,
     sequence: index + 1,
     snapshot_status: student.snapshot_status === 'no_authoritative_snapshot' ? '暂无正式成绩快照' : '正式成绩'
   }
-  return reportColumns.map(([, key]) => values[key] ?? null)
+  const projects = student.projects?.length ? student.projects : [null]
+  return projects.map((project, projectIndex) => [
+    ...studentReportColumns.map(([, key]) =>
+      projectIndex === 0 ? values[key] ?? null : null
+    ),
+    project ? (projectTypes[project.category] || project.category) : null,
+    project ? project.name || '未记录项目名称' : null,
+    project?.score ?? null,
+    project ? Number(project.score) > 0 ? '已计入'
+      : projectReasons[project.exclusion_reason] || project.exclusion_reason || '未记录原因' : null
+  ])
 }))
 
 // 学院列表

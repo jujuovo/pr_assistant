@@ -143,6 +143,9 @@ def teacher_score_report():
     if not RecommendationCyclePolicy.query.filter_by(cycle_code=year).first():
         return jsonify(error="该年份没有对应的推免周期，请选择有效周期。"), 400
 
+    from material_models import MaterialRecord
+    from workflow_models import ScoreEntry
+
     students = Student.query.filter_by(**scope).order_by(Student.student_id).all()
     snapshots = StudentScoreSnapshot.query.filter_by(
         faculty_id=user.faculty_id, year=year, status="current"
@@ -150,13 +153,44 @@ def teacher_score_report():
         StudentScoreSnapshot.student_id.in_([student.student_id for student in students])
     ).order_by(StudentScoreSnapshot.version).all()
     by_student = {snapshot.student_id: snapshot for snapshot in snapshots}
+    projects_by_student = {}
+    entries = db.session.query(ScoreEntry, MaterialRecord).join(
+        MaterialRecord, MaterialRecord.id == ScoreEntry.material_record_id
+    ).filter(
+        ScoreEntry.faculty_id == user.faculty_id, ScoreEntry.year == year,
+        ScoreEntry.source_type == "material", ScoreEntry.status == "active",
+        ScoreEntry.student_id.in_(list(by_student)),
+        MaterialRecord.faculty_id == ScoreEntry.faculty_id,
+        MaterialRecord.year == ScoreEntry.year,
+        MaterialRecord.student_id == ScoreEntry.student_id,
+    ).order_by(ScoreEntry.category, ScoreEntry.id)
+    snapshot_scores = {
+        student_id: {item["entry_id"]: item["effective_score"] for item in snapshot.breakdown
+                     if "entry_id" in item}
+        for student_id, snapshot in by_student.items()
+    }
+    for entry, material in entries:
+        frozen_score = snapshot_scores[entry.student_id].get(entry.id)
+        if frozen_score is None and entry.included:
+            continue
+        facts = {**(material.data or {}), **(material.confirmed_terms or {})}
+        projects_by_student.setdefault(entry.student_id, []).append({
+            "category": entry.category,
+            "name": next((facts[key] for key in (
+                "project_name", "paper_title", "patent_title", "title", "competition_name", "name"
+            ) if isinstance(facts.get(key), str) and facts[key].strip()), None),
+            "score": frozen_score if frozen_score is not None else "0",
+            "exclusion_reason": entry.exclusion_reason,
+        })
     report = []
     for student in students:
         snapshot = by_student.get(student.student_id)
         row = {
             "student_id": student.student_id, "name": student.student_name,
             "faculty": student.faculty.name, "department": major.department.name, "major": major.name,
-            "gpa": student.gpa,
+            "gpa": student.gpa, "gender": student.gender,
+            "cet4": student.cet4_score, "cet6": student.cet6_score,
+            "projects": projects_by_student.get(student.student_id, []),
             "snapshot_status": snapshot.status if snapshot else "no_authoritative_snapshot",
         }
         for key, field in (

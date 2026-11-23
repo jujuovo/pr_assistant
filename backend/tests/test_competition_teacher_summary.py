@@ -97,3 +97,36 @@ def test_teacher_workbench_student_search_includes_older_records(env):
     assert len(matching) == 51
     assert row.id in {item["id"] for item in matching}
     assert competition_workbench_summary(teacher, "missing-student")["reviewed_items"] == []
+
+
+def test_teacher_report_returns_material_project_and_snapshot_score(env):
+    from conftest import login
+    from models import Student
+
+    row, teacher = _submitted_competition(env)
+    student = Student.query.filter_by(student_id=row.student_id).one()
+    student.year = 2028
+    student.cet4_score = 550
+    review_competition_material(teacher, row, _command(row))
+    admin = db.session.get(User, env[2]["admin"])
+    cycle, _ = create_cycle_policy(
+        admin, 2028, date(2025, 9, 1), date(2028, 8, 31), "2028 推免周期"
+    )
+    activate_cycle_policy(admin, cycle)
+    db.session.commit()
+
+    login(env[1], teacher.id)
+    response = env[1].get("/api/workflow/teacher/score-report", query_string={
+        "faculty_id": student.faculty_id,
+        "department_id": student.department_id,
+        "major_id": student.major_id,
+        "year": 2028,
+    })
+    assert response.status_code == 200
+    report_student, = response.json["students"]
+    assert report_student["cet4"] == 550
+    project, = report_student["projects"]
+    assert project["category"] == "competition"
+    assert project["name"] == "只读事实"
+    assert float(project["score"]) == float(report_student["academic_total"])
+    assert project["exclusion_reason"] is None
