@@ -41,13 +41,12 @@ import Sidebar from '@/components/common/Sidebar.vue'
 import UserManagement from '@/pages/admin/users/UserManagement.vue'
 import ApplicationManagement from '@/pages/admin/applications/ApplicationManagement.vue'
 import RuleManagement from '@/pages/admin/rules/RuleManagement.vue'
-import StatisticsReport from '@/pages/common/statistics/StatisticsReport.vue'
+import TeacherRanking from '@/pages/teacher/rankings/TeacherRanking.vue'
 import SystemSettings from '@/pages/admin/settings/SystemSettings.vue'
 import Profile from '@/pages/common/profile/Profile.vue'
 import FacultyManagement from '@/pages/admin/organization/FacultyManagement.vue'
 import ScoreManagement from '@/pages/admin/scores/ScoreManagement.vue'
 import GraduateFileManagement from '@/pages/admin/files/GraduateFileManagement.vue'
-import RankingBatch from '@/pages/common/statistics/RankingBatch.vue'
 import RankingPublication from '@/pages/admin/rankings/RankingPublication.vue'
 
 const router = useRouter()
@@ -69,7 +68,7 @@ const pageComponents = {
   'data-management': ApplicationManagement,
   'rule-management': RuleManagement,
   'faculty-management': FacultyManagement,
-  'statistics-report': StatisticsReport,
+  'statistics-report': TeacherRanking,
   'system-settings': SystemSettings,
   profile: Profile,
   'graduate-file-management': GraduateFileManagement,

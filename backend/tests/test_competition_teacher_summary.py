@@ -116,12 +116,14 @@ def test_teacher_report_returns_material_project_and_snapshot_score(env):
     db.session.commit()
 
     login(env[1], teacher.id)
-    response = env[1].get("/api/workflow/teacher/score-report", query_string={
+    endpoint = "/api/workflow/teacher/score-report"
+    scope = {
         "faculty_id": student.faculty_id,
         "department_id": student.department_id,
         "major_id": student.major_id,
         "year": 2028,
-    })
+    }
+    response = env[1].get(endpoint, query_string=scope)
     assert response.status_code == 200
     report_student, = response.json["students"]
     assert report_student["cet4"] == 550
@@ -130,3 +132,14 @@ def test_teacher_report_returns_material_project_and_snapshot_score(env):
     assert project["name"] == "只读事实"
     assert float(project["score"]) == float(report_student["academic_total"])
     assert project["exclusion_reason"] is None
+
+    login(env[1], admin.id)
+    admin_response = env[1].get(endpoint, query_string=scope)
+    assert admin_response.status_code == 200
+    assert admin_response.json == response.json
+    assert env[1].get(endpoint, query_string={**scope, "faculty_id": student.faculty_id + 1}).status_code == 403
+
+    login(env[1], env[2]["other"])
+    assert env[1].get(endpoint, query_string=scope).status_code == 403
+    login(env[1], env[2]["student"])
+    assert env[1].get(endpoint, query_string=scope).status_code == 403

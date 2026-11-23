@@ -129,8 +129,8 @@ def _student_score_response(user, student, year):
 @workflow_bp.get("/teacher/score-report")
 def teacher_score_report():
     user = actor()
-    if user.role != "teacher" or not user.faculty_id:
-        abort(403, description="仅所属学院教师可查看报表")
+    if user.role not in {"teacher", "admin"} or not user.faculty_id:
+        abort(403, description="仅所属学院教师和管理员可查看报表")
     scope = {key: request.args.get(key, type=int) for key in ("faculty_id", "department_id", "major_id", "year")}
     if any(value is None or value <= 0 for value in scope.values()):
         abort(400, description="请选择学院、系、专业和推免周期")

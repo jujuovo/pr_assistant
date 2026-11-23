@@ -54,6 +54,7 @@
               type="text"
               class="form-control"
               v-model="profile[field.key]"
+              :placeholder="field.placeholder"
               :disabled="!isEditing || field.editable !== true"
               :required="field.required"
             />
@@ -230,7 +231,7 @@ const formFieldsConfig = {
       ],
       [
         { key: 'faculty', label: '学院', editable: true, required: true },
-        { key: 'roleName', label: '角色', editable: true }
+        { key: 'roleName', label: '角色', editable: true, placeholder: '管理员' }
       ],
       [
         { key: 'email', label: '电子邮箱', editable: true },

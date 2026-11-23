@@ -7,9 +7,7 @@ import StatisticsReport from '../src/pages/common/statistics/StatisticsReport.vu
 const { writeFile } = vi.hoisted(() => ({ writeFile: vi.fn() }))
 vi.mock('xlsx', async (importOriginal) => ({ ...await importOriginal(), writeFile }))
 vi.mock('@/stores/auth.js', () => ({ useAuthStore: () => ({ user: { facultyId: 1 } }) }))
-vi.mock('@/stores/toast.js', () => ({ useToastStore: () => ({ error: vi.fn() }) }))
 vi.mock('@/services/api.js', () => ({ default: {
-  getSystemSettings: async () => ({ settings: { academicYear: '2028' } }),
   getFacultiesAdmin: async () => ({ faculties: [{ id: 1, name: '信息学院' }] }),
   getDepartmentsAdmin: async () => ({ departments: [{ id: 2, name: '计算机系' }] }),
   getMajorsAdmin: async () => ({ majors: [{ id: 3, name: '软件工程' }] })
@@ -33,8 +31,12 @@ vi.mock('@/services/workflowApi.js', () => ({ default: {
   }] })
 } }))
 
-test('teacher sees and exports the same official report columns and rows', async () => {
-  const view = mount(StatisticsReport, { props: { embedded: true } })
+test.each([
+  ['管理员独立报表', false],
+  ['教师嵌入报表', true]
+])('%s 展示并导出相同的正式报表列和项目明细', async (_mode, embedded) => {
+  writeFile.mockClear()
+  const view = mount(StatisticsReport, { props: { embedded } })
   await flushPromises()
   await view.findAll('select')[1].setValue('2')
   await flushPromises()
