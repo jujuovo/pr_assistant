@@ -125,12 +125,11 @@ test('我的材料显示文体活动草稿并可正式提交', async () => {
   mocks.api.listRecords.mockImplementation(async (category) => ({
     records: category === 'arts_sports' ? [structuredClone(BASE_ROW)] : []
   }))
-  const wrapper = mount(StudentMaterialsHub, {
-    global: { stubs: { ApplicationHistory: true } }
-  })
+  const wrapper = mount(StudentMaterialsHub)
   await flushPromises()
 
   expect(wrapper.text()).toContain('校运会田径比赛')
+  expect(wrapper.text()).not.toContain('历史兼容记录')
   const submit = wrapper.findAll('button').find((button) => button.text().includes('正式提交审核'))
   expect(submit).toBeTruthy()
   await submit.trigger('click')
@@ -217,4 +216,23 @@ test('教师人工核验默认汇总全部类别并可按类别筛选', async ()
   await flushPromises()
   expect(wrapper.text()).toContain('材料 #2')
   expect(wrapper.text()).not.toContain('材料 #1')
+})
+
+test('教师审核记录在 OCR 对照卡片左上角显示实际状态', async () => {
+  const rows = [
+    { ...BASE_ROW, status: 'scored', ocr_raw_terms: { fields: { project_name: '校运会' } } },
+    { ...BASE_ROW, id: 2, status: 'needs_correction', ocr_raw_terms: null }
+  ]
+  mocks.api.listRecords.mockImplementation(async (_category, { keyword }) => ({
+    records: keyword ? rows.slice(1) : rows
+  }))
+  const wrapper = mount(ManualMaterialReview, {
+    props: { history: true, compareEvidence: true, fixedCategory: 'arts_sports' }
+  })
+  await flushPromises()
+  expect(wrapper.findAll('article > .status-badge').map(badge => badge.text())).toEqual(['已计分', '待补正'])
+  await wrapper.setProps({ keyword: '校运会' })
+  await flushPromises()
+  expect(wrapper.get('article > .status-badge').text()).toBe('待补正')
+  wrapper.unmount()
 })

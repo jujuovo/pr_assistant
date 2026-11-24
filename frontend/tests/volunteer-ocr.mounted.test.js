@@ -65,8 +65,7 @@ let wrappers = []
 const render = (component, props = {}) => {
   const w = mount(component, {
     props,
-    attachTo: document.body,
-    global: { stubs: { ApplicationHistory: true } }
+    attachTo: document.body
   })
   wrappers.push(w)
   return w

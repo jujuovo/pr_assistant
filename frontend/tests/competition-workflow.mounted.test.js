@@ -81,8 +81,7 @@ const row = {
 let wrappers = []
 const render = (component = Form) => {
   const w = mount(component, {
-    attachTo: document.body,
-    global: { stubs: { ApplicationHistory: true } }
+    attachTo: document.body
   })
   wrappers.push(w)
   return w

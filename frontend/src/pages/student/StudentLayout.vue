@@ -47,8 +47,6 @@
               : currentPage
           "
           @switch-page="switchPage"
-          @edit-application="handleEditApplication"
-          :edit-application-id="editApplicationId"
         />
       </main>
     </div>

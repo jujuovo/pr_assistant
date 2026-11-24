@@ -26,6 +26,7 @@ from use_cases.materials import (
     competition_review_context,
     competition_workflow_context,
     competition_workbench_summary,
+    material_review_keyword,
     confirm_available_rule,
     create_correction_version,
     edit_material,
@@ -130,7 +131,10 @@ def estimate_competition_route():
 
 @material_bp.get('/competition/workbench-summary')
 def competition_workbench():
-    return jsonify(competition_workbench_summary(actor(), request.args.get("student_id", "").strip()))
+    return jsonify(competition_workbench_summary(
+        actor(), request.args.get("student_id", "").strip(),
+        keyword=request.args.get("keyword", "").strip(),
+    ))
 
 
 @material_bp.get('/student/summary')
@@ -276,7 +280,9 @@ def records(category):
         }
         statuses = ('verified','rejected','needs_correction','scored','verified_not_eligible') if request.args.get('reviewed') == '1' and category in reviewed_categories else ('submitted','under_review')
         query=query.filter_by(faculty_id=user.faculty_id).filter(MaterialRecord.status.in_(statuses))
-        from services.materials.ocr_schemas import MANUAL_TYPES
+        keyword = request.args.get("keyword", "").strip()
+        if keyword and request.args.get("reviewed") == "1" and category in reviewed_categories:
+            query = query.filter(material_review_keyword(keyword))
         if category == 'student_work':
             query = query.filter(or_(MaterialRecord.rule_version_id.isnot(None), MaterialRecord.ocr_raw_terms.isnot(None), MaterialRecord.analysis["manual_only"].as_boolean().is_(True)))
         elif category != 'competition' and category not in MANUAL_TYPES:
@@ -492,7 +498,9 @@ def competition_review_context_route(record_id):
 @material_bp.get('/competition/students/<student_id>/summary')
 def competition_student_summary_route(student_id):
     year = integer(int(request.args.get('year', '2028')), 'year', 2000, 2100)
-    return jsonify(teacher_competition_summary(actor(), student_id, year))
+    return jsonify(teacher_competition_summary(
+        actor(), student_id, year, reviewed_only=request.args.get("reviewed") == "1"
+    ))
 
 
 @material_bp.get('/competition/feedback')

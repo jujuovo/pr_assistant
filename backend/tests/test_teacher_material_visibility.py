@@ -56,3 +56,35 @@ def test_submitted_without_fixed_rule_is_not_reviewable(env, active_cycle):
     assert env[1].post(base + "/review", json={
         "version": 1, "decision": "verified", "comment": "无规则",
     }).status_code == 403
+
+
+def test_history_keyword_matches_names_and_student_suffix_before_pagination(env):
+    reviewer = teacher(env)
+    for status, name, student_id, faculty_id in (
+        ("verified", "其他项目", "sample2602", 1),
+        ("verified", "交互设计 100%", "sample2602", 1),
+        ("rejected", "交互设计 100%", "other2602", 1),
+        ("submitted", "交互设计 100%", "sample2602", 1),
+        ("verified", "交互设计 100%", "sample2602", 2),
+    ):
+        db.session.add(MaterialRecord(student_id=student_id, faculty_id=faculty_id,
+            category="arts_sports", year=2028, status=status, data={"project_name": name}, analysis={}))
+    db.session.commit()
+    client = env[1]
+    login(client, reviewer.id)
+    url = "/api/materials/arts_sports/records"
+
+    def search(term, **params):
+        response = client.get(url, query_string={"reviewed": "1", "keyword": term, **params})
+        assert response.status_code == 200
+        return response.json
+
+    first = search("交互设计", limit=1)
+    assert [row["status"] for row in first["records"]] == ["verified"]
+    second = search("交互设计", after_id=first["next_after_id"], limit=1)
+    assert [row["status"] for row in second["records"]] == ["rejected"]
+    assert second["next_after_id"] is None
+    assert len(search("2602")["records"]) == 3
+    assert len(search("SAMPLE2602")["records"]) == 2
+    assert len(search("100%")["records"]) == 2
+    assert search("%_")["records"] == []

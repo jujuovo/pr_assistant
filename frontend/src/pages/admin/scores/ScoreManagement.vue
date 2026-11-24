@@ -5,6 +5,20 @@
       <span>成绩管理</span>
     </div>
 
+    <section class="card academic-import-module" aria-labelledby="academic-import-title">
+      <h3 id="academic-import-title" class="card-title">批量导入学业成绩</h3>
+      <div class="card-body academic-import-body">
+        <button v-show="!academicImportOpen" class="btn btn-outline" type="button"
+          :aria-expanded="academicImportOpen" aria-controls="academic-import-panel" @click="academicImportOpen = true">
+          批量导入学业成绩
+        </button>
+        <div id="academic-import-panel" v-show="academicImportOpen">
+          <AcademicScoreImport v-if="academicImportOpen" @close="academicImportOpen = false"
+            @imported="loadScoresFromAPI" />
+        </div>
+      </div>
+    </section>
+
     <!-- 模块一：学院综合成绩比例设置 -->
     <div class="card">
       <!-- 加载状态指示器 -->
@@ -189,10 +203,10 @@
               <tr v-for="student in paginatedScores" :key="student.id">
                 <td>{{ student.student_id }}</td>
                 <td>{{ student.student_name }}</td>
-                <td>{{ student.cet4_score || '-' }}</td>
-                <td>{{ student.cet6_score || '-' }}</td>
-                <td>{{ student.gpa ? student.gpa.toFixed(4) : '-' }}</td>
-                <td>{{ student.academic_score ? student.academic_score.toFixed(4) : '-' }}</td>
+                <td>{{ student.cet4_score ?? '未录入' }}</td>
+                <td>{{ student.cet6_score ?? '未录入' }}</td>
+                <td>{{ student.gpa?.toFixed(4) ?? '未录入' }}</td>
+                <td>{{ student.academic_score?.toFixed(4) ?? '未录入' }}</td>
                 <td>{{ student.academic_specialty_total || '-' }}</td>
                 <td>{{ student.comprehensive_performance_total || '-' }}</td>
                 <td>{{ student.total_score || '-' }}</td>
@@ -511,6 +525,7 @@
 </template>
 
 <script>
+import AcademicScoreImport from './AcademicScoreImport.vue'
 import api from '@/services/api.js'
 import workflowApi from '@/services/workflowApi.js'
 import { buildStudentBaseUpdate } from '@/services/adminScorePresentation.js'
@@ -520,7 +535,7 @@ import { useAuthStore } from '@/stores/auth.js'
 
 export default {
   name: 'ScoreManagement',
-  components: {},
+  components: { AcademicScoreImport },
   setup() {
     return {
       toastStore: useToastStore(),
@@ -529,6 +544,7 @@ export default {
   },
   data() {
     return {
+      academicImportOpen: false,
       // 表格数据
       scores: [],
       total: 0,

@@ -98,6 +98,14 @@ def test_teacher_workbench_student_search_includes_older_records(env):
     assert row.id in {item["id"] for item in matching}
     assert competition_workbench_summary(teacher, "missing-student")["reviewed_items"] == []
 
+    from conftest import login
+    login(env[1], teacher.id)
+    result = env[1].get("/api/materials/competition/workbench-summary",
+                        query_string={"keyword": "读事实"})
+    assert result.status_code == 200
+    assert len(result.json["reviewed_items"]) == 51
+    assert row.id in {item["id"] for item in result.json["reviewed_items"]}
+
 
 def test_teacher_report_returns_material_project_and_snapshot_score(env):
     from conftest import login
@@ -143,3 +151,29 @@ def test_teacher_report_returns_material_project_and_snapshot_score(env):
     assert env[1].get(endpoint, query_string=scope).status_code == 403
     login(env[1], env[2]["student"])
     assert env[1].get(endpoint, query_string=scope).status_code == 403
+
+
+def test_history_summary_endpoint_excludes_pending_without_changing_default(env):
+    from conftest import login
+    from material_models import MaterialRecord
+
+    row, teacher = _submitted_competition(env)
+    review_competition_material(teacher, row, _command(row))
+    for status in ("submitted", "under_review", "draft", "needs_correction"):
+        db.session.add(MaterialRecord(
+            student_id=row.student_id, faculty_id=row.faculty_id,
+            year=row.year, category="competition", status=status, data={}, analysis={}
+        ))
+    db.session.commit()
+
+    client = env[1]
+    login(client, teacher.id)
+    url = f"/api/materials/competition/students/{row.student_id}/summary?year={row.year}"
+    history = client.get(url + "&reviewed=1")
+    assert history.status_code == 200
+    assert {item["status"] for item in history.json["items"]} == {"scored", "needs_correction"}
+    assert history.json["aggregate"]["pending_count"] == 0
+    assert client.get(url).json["aggregate"]["pending_count"] == 2
+
+    login(client, env[2]["other"])
+    assert client.get(url + "&reviewed=1").status_code == 403

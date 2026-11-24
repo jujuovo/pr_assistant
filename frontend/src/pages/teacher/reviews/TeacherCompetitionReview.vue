@@ -9,13 +9,15 @@
       ><button class="btn btn-outline" @click="load">重新加载</button></section
     >
     <p v-else-if="!displayItems.length" class="review-state review-category-empty" role="status">{{
-      historyMode ? '当前类别暂无核验记录。' : '当前类别暂无待核验材料。'
+      !historyMode
+        ? '当前类别暂无待核验材料。'
+        : keyword ? '暂无匹配的竞赛审核记录。' : '当前类别暂无核验记录。'
     }}</p>
     <div v-else class="pending-grid"
       ><article v-for="row in displayItems" :key="row.id" class="pending-card"
         ><div
-          ><span class="status-badge">{{ scoreStatusText(row.status) }}</span
-          ><h3>{{ row.project_name || row.competition_name }}</h3
+          ><ReviewStatusBadge :status="row.status" />
+          <h3>{{ row.project_name || row.competition_name }}</h3
           ><p>学生 {{ row.student_id }} · 版本 {{ row.version }}</p
           ><p v-if="historyMode && row.review" class="review-outcome"
             ><strong>{{ reviewDecisionText(row.review.decision) }}</strong
@@ -35,35 +37,6 @@
           historyMode ? '查看记录' : '核对材料'
         }}</button></article
       ></div
-    >
-    <section v-if="historyMode" class="summary-card"
-      ><div><h3>授权学生汇总</h3><p>按学号读取该生当前周期的竞赛计分反馈。</p></div
-      ><div class="summary-search"
-        ><label for="summary-student">学生学号</label
-        ><input id="summary-student" v-model.trim="studentId" class="form-control" /><button
-          class="btn btn-outline"
-          :disabled="!studentId"
-          @click="loadSummary"
-          >查看汇总</button
-        ></div
-      ><table v-if="summary"
-        ><thead
-          ><tr
-            ><th>项目</th><th>关键事实</th><th>状态</th><th>候选/计入</th><th>操作</th></tr
-          ></thead
-        ><tbody
-          ><tr v-for="item in summary.items" :key="item.record_id"
-            ><td>{{ item.project_name }}</td
-            ><td
-              ><code>{{ JSON.stringify(item.key_facts) }}</code></td
-            ><td>{{ item.status }}</td
-            ><td>{{ item.candidate_score }} / {{ item.effective_score ?? '-' }}</td
-            ><td
-              ><button class="btn btn-outline" @click="open(item.record_id)">查看审核详情</button></td
-            ></tr
-          ></tbody
-        ></table
-      ></section
     >
     <dialog v-if="context" open class="review-dialog" aria-labelledby="review-dialog-title"
       ><form method="dialog" class="dialog-shell" @submit.prevent
@@ -126,13 +99,13 @@
         ><p v-if="!canReview" class="review-state">该材料当前不可处理，页面保持只读。</p
         ><footer
           ><button
-            v-if="context.allowed_actions.includes('return')"
+            v-if="canReview && context.allowed_actions.includes('return')"
             class="btn btn-outline"
             :disabled="reviewing"
             @click="review('return')"
             >退回修改</button
           ><button
-            v-if="context.allowed_actions.includes('approve')"
+            v-if="canReview && context.allowed_actions.includes('approve')"
             class="btn btn-primary"
             :disabled="reviewing"
             @click="review('approve')"
@@ -157,9 +130,9 @@
 </template>
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
+import ReviewStatusBadge from '@/components/teacher/ReviewStatusBadge.vue'
 import materialApi from '@/services/materialApi.js'
 import {
-  scoreStatusText,
   formatScoreTime,
   materialEventText,
   reviewDecisionText
@@ -168,11 +141,9 @@ import MaterialFacts from '@/components/common/MaterialFacts.vue'
 import MaterialReviewComparison from '@/components/teacher/MaterialReviewComparison.vue'
 import OcrAssessment from '@/components/common/OcrAssessment.vue'
 const emit = defineEmits(['pending-count'])
-const props = defineProps({ mode: { type: String, default: 'pending' }, studentFilter: String })
+const props = defineProps({ mode: { type: String, default: 'pending' }, keyword: String })
 const workbench = ref({ pending_count: 0, items: [] }),
   context = ref(null),
-  summary = ref(null),
-  studentId = ref(''),
   comment = ref(''),
   commentError = ref(''),
   commentInput = ref(null),
@@ -180,7 +151,7 @@ const workbench = ref({ pending_count: 0, items: [] }),
   loading = ref(true),
   reviewing = ref(false)
 const canReview = computed(() =>
-  Boolean(context.value?.allowed_actions?.some((action) => ['approve', 'return'].includes(action)))
+  !historyMode.value && Boolean(context.value?.allowed_actions?.some((action) => ['approve', 'return'].includes(action)))
 )
 const ocrConfirmed = ref(false)
 const needsOcrConfirmation = computed(
@@ -189,10 +160,7 @@ const needsOcrConfirmation = computed(
 const historyMode = computed(() => props.mode === 'history')
 const displayItems = computed(() => {
   if (!historyMode.value) return workbench.value.items || []
-  const records = workbench.value.reviewed_items || []
-  return props.studentFilter
-    ? records.filter(row => String(row.student_id) === props.studentFilter)
-    : records
+  return workbench.value.reviewed_items || []
 })
 let loadVersion = 0
 async function load() {
@@ -200,10 +168,12 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const result = await materialApi.getCompetitionWorkbenchSummary(undefined, historyMode.value ? props.studentFilter : undefined)
+    const result = await materialApi.getCompetitionWorkbenchSummary(undefined, undefined, {
+      keyword: historyMode.value ? props.keyword : undefined
+    })
     if (version !== loadVersion) return
     workbench.value = result
-    emit('pending-count', workbench.value.pending_count)
+    emit('pending-count', historyMode.value ? displayItems.value.length : workbench.value.pending_count)
   } catch (cause) {
     if (version !== loadVersion) return
     emit('pending-count', null)
@@ -224,6 +194,7 @@ async function open(id) {
   }
 }
 async function review(decision) {
+  if (!canReview.value || !context.value.allowed_actions.includes(decision)) return
   if (decision === 'return' && !comment.value.trim()) {
     commentError.value = '退回修改时，请填写具体原因。'
     await nextTick()
@@ -248,24 +219,13 @@ async function review(decision) {
     )
     context.value = null
     await load()
-    if (summary.value) await loadSummary()
   } catch (e) {
     error.value = e.message || '审核操作失败'
   } finally {
     reviewing.value = false
   }
 }
-async function loadSummary() {
-  try {
-    summary.value = await materialApi.getTeacherCompetitionSummary(
-      studentId.value,
-      workbench.value.cycle_code
-    )
-  } catch (e) {
-    error.value = e.message || '学生汇总加载失败'
-  }
-}
-watch(() => props.studentFilter, load, { immediate: true })
+watch(() => props.keyword, load, { immediate: true })
 </script>
 <style scoped>
 .review-outcome {
@@ -342,14 +302,6 @@ watch(() => props.studentFilter, load, { immediate: true })
   display: grid;
   gap: 6px;
 }
-.status-badge {
-  width: max-content;
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: #fff2d3;
-  color: #805500;
-  font-size: 12px;
-}
 .review-state {
   display: flex;
   justify-content: space-between;
@@ -371,31 +323,12 @@ watch(() => props.studentFilter, load, { immediate: true })
 .summary-card p {
   margin: 0;
 }
-.summary-search {
-  display: flex;
-  align-items: end;
-  gap: 10px;
-}
-.summary-search label {
-  display: grid;
-  gap: 6px;
-}
 .form-control,
 textarea {
   min-height: 40px;
   padding: 9px 11px;
   border: 1px solid #b9c7d8;
   border-radius: 7px;
-}
-.summary-card table {
-  width: 100%;
-  border-collapse: collapse;
-}
-.summary-card th,
-.summary-card td {
-  padding: 10px;
-  border-top: 1px solid #e4ebf3;
-  text-align: left;
 }
 .review-dialog {
   position: fixed;
@@ -495,8 +428,7 @@ textarea {
 }
 @media (max-width: 700px) {
   .review-hero,
-  .pending-card,
-  .summary-search {
+  .pending-card {
     align-items: stretch;
     flex-direction: column;
   }

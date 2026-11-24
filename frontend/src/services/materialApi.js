@@ -43,8 +43,11 @@ export const materialApi = {
       timeoutMs: 60000
     })
   },
-  getCompetitionWorkbenchSummary: (signal, studentId) => {
-    const query = studentId ? `?${new URLSearchParams({ student_id: studentId })}` : ''
+  getCompetitionWorkbenchSummary: (signal, studentId, { keyword } = {}) => {
+    const params = new URLSearchParams()
+    if (studentId) params.set('student_id', studentId)
+    if (keyword) params.set('keyword', keyword)
+    const query = params.size ? `?${params}` : ''
     return requestJson(`${base}/competition/workbench-summary${query}`, { signal })
   },
   getStudentMaterialSummary: (signal) => requestJson(`${base}/student/summary`, { signal }),
@@ -58,16 +61,16 @@ export const materialApi = {
     requestJson(`${base}/competition/feedback?year=${positiveInteger(year)}`, { signal }),
   getCompetitionReviewContext: (id, signal) =>
     requestJson(`${recordPath('competition', id)}/review-context`, { signal }),
-  getTeacherCompetitionSummary: (studentId, year, signal) =>
+  getTeacherCompetitionSummary: (studentId, year, signal, { reviewedOnly = false } = {}) =>
     requestJson(
-      `${base}/competition/students/${encodeURIComponent(studentId)}/summary?year=${positiveInteger(year)}`,
+      `${base}/competition/students/${encodeURIComponent(studentId)}/summary?year=${positiveInteger(year)}${reviewedOnly ? '&reviewed=1' : ''}`,
       { signal }
     ),
   getTypes: (signal) => requestJson(`${base}/types`, { signal }),
   getOpenApi: (signal) => requestJson(`${base}/openapi.json`, { signal }),
   listRecords: (category, filters = {}, signal) => {
     const query = new URLSearchParams()
-    for (const key of ['year', 'student_id', 'status', 'limit', 'after_id', 'reviewed']) {
+    for (const key of ['year', 'student_id', 'status', 'limit', 'after_id', 'reviewed', 'keyword']) {
       const value = filters[key]
       if (value !== undefined && value !== null && value !== '' && value !== 'all')
         query.set(key, String(value))

@@ -12,7 +12,8 @@
     ><p v-if="error" role="alert">{{ error }} <button @click="load">重新加载</button></p
     ><p v-if="!loading && !error && !rows.length" class="review-category-empty" role="status">当前类别暂无{{ history ? '核验记录' : '待核验材料' }}。</p>
     <article v-for="row in rows" :key="row.id"
-      ><h3>学生 {{ row.student_id }} · 材料 #{{ row.id }}</h3
+      ><ReviewStatusBadge v-if="history && compareEvidence" :status="row.status" />
+      <h3>学生 {{ row.student_id }} · 材料 #{{ row.id }}</h3
       ><VolunteerOcrAssessment
         :assessment="row.volunteer_ocr"
         :appeal="row.appeal"
@@ -91,12 +92,13 @@
 import { ref, watch } from 'vue'
 import materialApi from '@/services/materialApi.js'
 import PolicyMaterialFields from './PolicyMaterialFields.vue'
+import ReviewStatusBadge from '@/components/teacher/ReviewStatusBadge.vue'
 import MaterialReviewComparison from '@/components/teacher/MaterialReviewComparison.vue'
 import MaterialFacts from './MaterialFacts.vue'
 import MaterialImagePreview from './MaterialImagePreview.vue'
 import VolunteerOcrAssessment from './VolunteerOcrAssessment.vue'
 import { manualReviewCategories } from '@/services/teacherReviewCategories.js'
-const props = defineProps({ history: Boolean, compareEvidence: Boolean, fixedCategory: String, studentFilter: String })
+const props = defineProps({ history: Boolean, compareEvidence: Boolean, fixedCategory: String, keyword: String })
 const emit = defineEmits(['pending-count'])
 const kinds = [['all', '全部类别'], ...manualReviewCategories]
 const decisions = [
@@ -119,7 +121,7 @@ function policy(row){return ['research_paper','invention_patent','innovation_tra
 let loadVersion = 0
 async function load() {
   const version = ++loadVersion
-  const studentId = props.history ? props.studentFilter : undefined
+  const keyword = props.history ? props.keyword : undefined
   rows.value=[]
   loading.value = true
   error.value = ''
@@ -136,12 +138,12 @@ async function load() {
         do {
           const page = await materialApi.listRecords(key, {
             reviewed: props.history ? '1' : '0',
-            student_id: studentId,
+            keyword,
             after_id: afterId
           })
           records.push(...(page.records || []))
           afterId = page.next_after_id
-        } while (studentId && afterId && version === loadVersion)
+        } while (keyword && afterId && version === loadVersion)
         return { records }
       })
     )
@@ -219,7 +221,7 @@ async function events(row) {
     error.value = e.message
   }
 }
-watch(() => props.studentFilter, load, { immediate: true })
+watch(() => props.keyword, load, { immediate: true })
 </script>
 <style scoped>
 .review-evidence-grid {

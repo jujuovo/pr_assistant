@@ -144,7 +144,7 @@ def review_competition_material(user, row, payload, *, fail_at=None):
     return result, False
 
 
-def teacher_competition_summary(user, student_id, year):
+def teacher_competition_summary(user, student_id, year, *, reviewed_only=False):
     if user is None or user.role != "teacher" or not user.faculty_id:
         raise MaterialUseCaseError("只有授权教师可以查看竞赛汇总", code="forbidden", status_code=403)
     student = Student.query.filter_by(student_id=student_id).first()
@@ -161,9 +161,12 @@ def teacher_competition_summary(user, student_id, year):
     hidden = {}
     for row in hidden_rows:
         hidden[row.status] = hidden.get(row.status, 0) + 1
-    rows = base.filter(
-        ~MaterialRecord.status.in_(("draft", "abandoned"))
-    ).order_by(MaterialRecord.id).all()
+    visible = (
+        MaterialRecord.status.in_(("verified", "rejected", "needs_correction", "scored", "verified_not_eligible"))
+        if reviewed_only
+        else ~MaterialRecord.status.in_(("draft", "abandoned"))
+    )
+    rows = base.filter(visible).order_by(MaterialRecord.id).all()
     superseded_by = {}
     if rows:
         for successor in MaterialRecord.query.filter(
