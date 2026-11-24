@@ -131,9 +131,11 @@ def estimate_competition_route():
 
 @material_bp.get('/competition/workbench-summary')
 def competition_workbench():
+    cursors = {key: integer(int(request.args.get(key, '0')), key, 0, 2_000_000_000)
+               for key in ('before_id', 'reviewed_before_id')}
     return jsonify(competition_workbench_summary(
         actor(), request.args.get("student_id", "").strip(),
-        keyword=request.args.get("keyword", "").strip(),
+        keyword=request.args.get("keyword", "").strip(), **cursors,
     ))
 
 

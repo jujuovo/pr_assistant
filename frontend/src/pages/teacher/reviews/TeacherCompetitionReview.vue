@@ -4,7 +4,7 @@
       <h2 id="competition-review-title">竞赛审核记录</h2>
     </header>
     <p v-if="loading" class="review-state" role="status">正在加载竞赛待审材料…</p>
-    <section v-else-if="error" class="review-state error" role="alert"
+    <section v-else-if="error && !displayItems.length" class="review-state error" role="alert"
       ><p>{{ error }}</p
       ><button class="btn btn-outline" @click="load">重新加载</button></section
     >
@@ -38,6 +38,13 @@
         }}</button></article
       ></div
     >
+    <p v-if="error && displayItems.length" class="review-state error" role="alert">{{ error }}
+      <button class="btn btn-outline" type="button" @click="load">重新加载</button>
+    </p>
+    <button v-if="nextCursor" class="btn btn-outline" type="button" data-test="load-more-competition"
+      :disabled="loadingMore || loading" @click="loadMore">
+      {{ loadingMore ? '正在加载…' : historyMode ? '加载更多审核记录' : '加载更多待审材料' }}
+    </button>
     <dialog v-if="context" open class="review-dialog" aria-labelledby="review-dialog-title"
       ><form method="dialog" class="dialog-shell" @submit.prevent
         ><header
@@ -158,6 +165,9 @@ const needsOcrConfirmation = computed(
   () => context.value?.ocr_assessment?.review_mode === 'manual_confirmation'
 )
 const historyMode = computed(() => props.mode === 'history')
+const loadingMore = ref(false)
+const nextCursor = computed(() => historyMode.value
+  ? workbench.value.reviewed_next_before_id : workbench.value.next_before_id)
 const displayItems = computed(() => {
   if (!historyMode.value) return workbench.value.items || []
   return workbench.value.reviewed_items || []
@@ -166,6 +176,7 @@ let loadVersion = 0
 async function load() {
   const version = ++loadVersion
   loading.value = true
+  loadingMore.value = false
   error.value = ''
   try {
     const result = await materialApi.getCompetitionWorkbenchSummary(undefined, undefined, {
@@ -180,6 +191,30 @@ async function load() {
     error.value = cause.message || '竞赛待审材料加载失败'
   } finally {
     if (version === loadVersion) loading.value = false
+  }
+}
+async function loadMore() {
+  if (loadingMore.value || !nextCursor.value) return
+  const version = loadVersion
+  const history = historyMode.value
+  loadingMore.value = true
+  error.value = ''
+  try {
+    const options = history ? { reviewedBeforeId: nextCursor.value } : { beforeId: nextCursor.value }
+    if (history && props.keyword) options.keyword = props.keyword
+    const result = await materialApi.getCompetitionWorkbenchSummary(undefined, undefined, options)
+    if (version !== loadVersion) return
+    const key = history ? 'reviewed_items' : 'items'
+    const existing = workbench.value[key] || []
+    const known = new Set(existing.map(row => row.id))
+    workbench.value = { ...workbench.value,
+      [key]: [...existing, ...(result[key] || []).filter(row => !known.has(row.id))],
+      [history ? 'reviewed_next_before_id' : 'next_before_id']:
+        result[history ? 'reviewed_next_before_id' : 'next_before_id'] }
+  } catch (cause) {
+    if (version === loadVersion) error.value = cause.message || '加载失败，请重试加载更多。'
+  } finally {
+    if (version === loadVersion) loadingMore.value = false
   }
 }
 async function open(id) {
@@ -225,7 +260,7 @@ async function review(decision) {
     reviewing.value = false
   }
 }
-watch(() => props.keyword, load, { immediate: true })
+watch([() => props.keyword, () => props.mode], load, { immediate: true })
 </script>
 <style scoped>
 .review-outcome {

@@ -43,10 +43,12 @@ export const materialApi = {
       timeoutMs: 60000
     })
   },
-  getCompetitionWorkbenchSummary: (signal, studentId, { keyword } = {}) => {
+  getCompetitionWorkbenchSummary: (signal, studentId, cursors = {}) => {
     const params = new URLSearchParams()
     if (studentId) params.set('student_id', studentId)
-    if (keyword) params.set('keyword', keyword)
+    if (cursors.keyword) params.set('keyword', cursors.keyword)
+    if (cursors.beforeId) params.set('before_id', cursors.beforeId)
+    if (cursors.reviewedBeforeId) params.set('reviewed_before_id', cursors.reviewedBeforeId)
     const query = params.size ? `?${params}` : ''
     return requestJson(`${base}/competition/workbench-summary${query}`, { signal })
   },

@@ -108,7 +108,7 @@ def material_review_keyword(keyword):
     ))
 
 
-def competition_workbench_summary(user, student_id="", *, keyword=""):
+def competition_workbench_summary(user, student_id="", *, keyword="", before_id=0, reviewed_before_id=0):
     _package, context = competition_workflow_context(user)
     year = context["cycle"]["cycle_code"]
     query = MaterialRecord.query.filter_by(category="competition", year=year)
@@ -154,21 +154,33 @@ def competition_workbench_summary(user, student_id="", *, keyword=""):
         }
     pending_statuses = {"submitted", "under_review"}
     reviewed_statuses = {"needs_correction", "scored", "verified", "verified_not_eligible"}
+    pending_next = reviewed_next = None
     if user.role == "teacher":
-        item_rows = [row for row in rows if row.status in pending_statuses]
+        pending_query = query.filter(MaterialRecord.status.in_(tuple(pending_statuses)))
+        if before_id:
+            pending_query = pending_query.filter(MaterialRecord.id < before_id)
+        pending_rows = pending_query.order_by(MaterialRecord.id.desc()).limit(51).all()
+        item_rows = pending_rows[:50]
+        pending_next = item_rows[-1].id if len(pending_rows) > 50 else None
+        reviews.update(_latest_review_summaries(item_rows))
         # 已审记录不受「被取代」影响：退回过的旧版本仍需留在审核记录里。
         reviewed_query = history_query.filter(
             MaterialRecord.status.in_(tuple(reviewed_statuses))
         ).order_by(
-            MaterialRecord.updated_at.desc(), MaterialRecord.id.desc()
+            MaterialRecord.id.desc()
         )
         if student_id:
             reviewed_query = reviewed_query.filter(MaterialRecord.student_id == student_id)
         if keyword:
             reviewed_query = reviewed_query.filter(material_review_keyword(keyword))
-        if not student_id and not keyword:
-            reviewed_query = reviewed_query.limit(50)
+        if not student_id:
+            if reviewed_before_id:
+                reviewed_query = reviewed_query.filter(MaterialRecord.id < reviewed_before_id)
+            reviewed_query = reviewed_query.limit(51)
         reviewed_rows = reviewed_query.all()
+        if not student_id and len(reviewed_rows) > 50:
+            reviewed_rows = reviewed_rows[:50]
+            reviewed_next = reviewed_rows[-1].id
         reviews.update(_latest_review_summaries(reviewed_rows))
     else:
         item_rows = rows
@@ -193,6 +205,8 @@ def competition_workbench_summary(user, student_id="", *, keyword=""):
         )),
         "items": [item(row) for row in item_rows],
         "reviewed_items": [item(row) for row in reviewed_rows],
+        "next_before_id": pending_next,
+        "reviewed_next_before_id": reviewed_next,
     }
 
 
@@ -235,7 +249,8 @@ def teacher_noncompetition_summary(user):
     if user.role not in {"teacher", "admin"} or not user.faculty_id:
         raise MaterialUseCaseError("仅本学院教师可读取非竞赛待审统计", code="forbidden", status_code=403)
     from services.materials.ocr_schemas import MANUAL_TYPES
-    categories = tuple(MANUAL_TYPES | {"volunteer", "student_work"})
+    from services.materials.schemas import RULE_SCORING_CATEGORIES
+    categories = tuple((MANUAL_TYPES | RULE_SCORING_CATEGORIES) - {"competition"})
     counts = dict(
         db.session.query(MaterialRecord.status, func.count(MaterialRecord.id))
         .filter(

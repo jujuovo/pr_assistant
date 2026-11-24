@@ -251,6 +251,7 @@ class ScoreEntry(db.Model):
             "ix_score_entry_recalculation_scope",
             "faculty_id", "year", "status", "student_id",
         ),
+        db.Index("ix_score_entry_material_status", "material_record_id", "status"),
     )
 
 

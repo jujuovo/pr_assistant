@@ -91,6 +91,7 @@ class MaterialAttachment(db.Model):
     sha256 = db.Column(db.String(64), nullable=False)
     size = db.Column(db.Integer, nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    __table_args__ = (db.Index('ix_material_attachment_record', 'record_id', 'id'),)
 
 
 class MaterialEvent(db.Model):
@@ -101,6 +102,7 @@ class MaterialEvent(db.Model):
     action = db.Column(db.String(32), nullable=False)
     details = db.Column(db.JSON, nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    __table_args__ = (db.Index('ix_material_event_record', 'record_id', 'id'),)
 
 
 class MaterialSource(db.Model):

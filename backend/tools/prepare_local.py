@@ -166,6 +166,7 @@ def main(database_file=None, competition_package_file=None):
                         if name not in existing:
                             connection.execute(text(f'ALTER TABLE "{table}" ADD COLUMN "{name}" {declaration}'))
             db.create_all()
+            ensure_material_read_indexes()
             from workflow_models import FacultyScoringPolicy
             for index in FacultyScoringPolicy.__table__.indexes:
                 index.create(db.engine, checkfirst=True)
@@ -208,6 +209,16 @@ def main(database_file=None, competition_package_file=None):
         if fresh:
             local.unlink(missing_ok=True)
         raise
+
+
+def ensure_material_read_indexes():
+    """create_all does not add indexes to tables in an existing local copy."""
+    from extensions import db
+    from material_models import MaterialEvent, MaterialAttachment
+    from workflow_models import ScoreEntry
+    for model in (MaterialEvent, MaterialAttachment, ScoreEntry):
+        for index in model.__table__.indexes:
+            index.create(db.engine, checkfirst=True)
 
 
 if __name__ == '__main__':

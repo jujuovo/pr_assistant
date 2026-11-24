@@ -103,8 +103,13 @@ def test_teacher_workbench_student_search_includes_older_records(env):
     result = env[1].get("/api/materials/competition/workbench-summary",
                         query_string={"keyword": "读事实"})
     assert result.status_code == 200
-    assert len(result.json["reviewed_items"]) == 51
-    assert row.id in {item["id"] for item in result.json["reviewed_items"]}
+    assert len(result.json["reviewed_items"]) == 50
+    following = env[1].get("/api/materials/competition/workbench-summary", query_string={
+        "keyword": "读事实", "reviewed_before_id": result.json["reviewed_next_before_id"]
+    })
+    assert following.status_code == 200
+    assert len(following.json["reviewed_items"]) == 1
+    assert row.id in {item["id"] for item in result.json["reviewed_items"] + following.json["reviewed_items"]}
 
 
 def test_teacher_report_returns_material_project_and_snapshot_score(env):
