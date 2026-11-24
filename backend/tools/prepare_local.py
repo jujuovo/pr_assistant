@@ -19,7 +19,7 @@ class LocalCompetitionPreparationError(RuntimeError):
 def ensure_local_competition_context(*, fresh, package_file=COMPETITION_PACKAGE):
     """Prepare the exact formal package required by the enabled local UI."""
     from extensions import db
-    from models import User
+    from models import Faculty, User
     from use_cases.competition_rules import load_current_competition_package
     from use_cases.cycles import (
         create_cycle_policy,
@@ -50,7 +50,20 @@ def ensure_local_competition_context(*, fresh, package_file=COMPETITION_PACKAGE)
             f'正式竞赛规则包校验失败（{error.code}）：{error}；'
             '请修复规则源后重新运行本地准备。'
         ) from error
-    admin = User.query.filter_by(username='admin001', role='admin', status='active').one()
+    admin = (
+        User.query.filter_by(username='Superadmin', role='admin', status='active').one_or_none()
+        or User.query.filter_by(username='admin001', role='admin', status='active').one_or_none()
+    )
+    if admin is None:
+        raise LocalCompetitionPreparationError(
+            '缺少可用管理员；请先创建 Superadmin，或显式运行 demo seed。'
+        )
+    if admin.faculty_id is None:
+        faculty = Faculty.query.filter_by(name="信息学院").one_or_none()
+        if faculty is None:
+            raise LocalCompetitionPreparationError('缺少信息学院，无法准备竞赛上下文。')
+        admin.faculty_id = faculty.id
+        db.session.flush()
     period = snapshot['evidence_period']
     policy, _created = create_cycle_policy(
         admin,
@@ -90,19 +103,26 @@ def ensure_local_competition_context(*, fresh, package_file=COMPETITION_PACKAGE)
 
 def ensure_faculty_policy_draft(admin, competition_snapshot):
     from extensions import db
+    from models import Faculty
     from workflow_models import FacultyScoringPolicy
 
     template_file = BACKEND / 'rules' / 'informatics_2028_policy.json'
     template = json.loads(template_file.read_text(encoding='utf-8'))
     if competition_snapshot['cycle_code'] != template['cycle_code']:
         return
+    faculty_id = admin.faculty_id
+    if faculty_id is None:
+        faculty = Faculty.query.filter_by(name="信息学院").one_or_none()
+        if faculty is None:
+            raise LocalCompetitionPreparationError('缺少信息学院，无法准备学院计分政策。')
+        faculty_id = faculty.id
     existing = FacultyScoringPolicy.query.filter_by(
-        faculty_id=admin.faculty_id, cycle_code=template['cycle_code'], title=template['title']
+        faculty_id=faculty_id, cycle_code=template['cycle_code'], title=template['title']
     ).first()
     if existing:
         return
     template['sections']['学科竞赛']['rule_package'] = competition_snapshot
-    row = FacultyScoringPolicy(faculty_id=admin.faculty_id, **template)
+    row = FacultyScoringPolicy(faculty_id=faculty_id, **template)
     db.session.add(row)
     return row
 
@@ -139,7 +159,7 @@ def ensure_local_research_rules(admin, cycle_code):
         publish_rule_version(rule, published_by=admin, cycle_code=cycle_code)
 
 
-def main(database_file=None, competition_package_file=None):
+def main(database_file=None, competition_package_file=None, skip_demo_accounts=False):
     local = Path(database_file).resolve() if database_file else LOCAL
     local.parent.mkdir(parents=True, exist_ok=True)
     fresh = not local.exists()
@@ -181,19 +201,23 @@ def main(database_file=None, competition_package_file=None):
             from models import SystemSettings
             if not SystemSettings.query.first():
                 db.session.add(SystemSettings())
-            from tools.seed_demo import seed_demo
-            seed_demo(
-                with_test_rule=True,
-                with_test_settings=fresh,
-                enforce_configured_active_cycle=fresh,
-                commit=False,
-            )
+            if not skip_demo_accounts:
+                from tools.seed_demo import seed_demo
+                seed_demo(
+                    with_test_rule=True,
+                    with_test_settings=fresh,
+                    enforce_configured_active_cycle=fresh,
+                    commit=False,
+                )
             package, package_created, competition_context = ensure_local_competition_context(
                 fresh=fresh,
                 package_file=competition_package_file or COMPETITION_PACKAGE,
             )
             print(f'本地数据库已准备：{local}')
-            print('共享三角色测试账号及信息学院测试规则已准备；已有业务数据保持不变。')
+            if skip_demo_accounts:
+                print('真实账号验收模式：未创建 student001/teacher001/admin001；已有业务数据保持不变。')
+            else:
+                print('共享三角色测试账号及信息学院测试规则已准备；已有业务数据保持不变。')
             print(
                 f'正式竞赛上下文已就绪：周期 {competition_context["cycle"]["cycle_code"]}，'
                 f'规则包 {package.package_id} v{package.version}，目录 '
@@ -226,5 +250,7 @@ if __name__ == '__main__':
     parser.add_argument('--database-file', type=Path, help='可选独立测试数据库路径')
     parser.add_argument('--competition-package-file', type=Path,
                         help='可选显式正式竞赛包来源；默认使用仓库内置 2028 包')
+    parser.add_argument('--skip-demo-accounts', action='store_true',
+                        help='不创建 student001/teacher001/admin001；用于真实账号验收环境')
     args = parser.parse_args()
-    main(args.database_file, args.competition_package_file)
+    main(args.database_file, args.competition_package_file, args.skip_demo_accounts)
