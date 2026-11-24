@@ -13,7 +13,7 @@
 
 from flask import Blueprint, request, jsonify, make_response, session
 from models import User, Faculty, Department, Major, Student, Captcha
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import pytz
 from extensions import db
 from utils.captcha import generate_captcha
@@ -33,8 +33,20 @@ from .organization_bp import (
 
 
 # 清理过期验证码的函数
+def _captcha_now():
+    """Return naive UTC for the timezone-naive Captcha datetime columns."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _captcha_expiry_as_utc(value):
+    """Normalize legacy aware values while keeping PostgreSQL values unchanged."""
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(timezone.utc).replace(tzinfo=None)
+
+
 def cleanup_expired_captchas():
-    current_time = datetime.now(pytz.timezone("Asia/Shanghai"))
+    current_time = _captcha_now()
     # 从数据库中删除所有过期的验证码
     expired_count = Captcha.query.filter(Captcha.expired_at < current_time).delete()
     db.session.commit()
@@ -66,12 +78,8 @@ def validate_captcha(captcha_input, captcha_token):
         return False, "验证码不存在，请刷新页面获取验证码"
 
     # 检查验证码是否过期
-    current_time = datetime.now(pytz.timezone("Asia/Shanghai"))
-    # 确保比较的是同类型的datetime对象（带时区的）
-    # 如果expired_at不带时区，将其转换为带上海时区的datetime
-    if captcha.expired_at.tzinfo is None:
-        captcha.expired_at = pytz.timezone("Asia/Shanghai").localize(captcha.expired_at)
-    if current_time > captcha.expired_at:
+    current_time = _captcha_now()
+    if current_time > _captcha_expiry_as_utc(captcha.expired_at):
         print("验证码已过期")
         # 清除过期的验证码
         db.session.delete(captcha)
@@ -109,7 +117,7 @@ def get_captcha():
         user_identifier = hashlib.sha256((ip_address + user_agent).encode()).hexdigest()[:32]
         
         # 删除同一用户的旧验证码
-        current_time = datetime.now(pytz.timezone("Asia/Shanghai"))
+        current_time = _captcha_now()
         old_captchas = Captcha.query.filter(
             Captcha.user_identifier == user_identifier,
             Captcha.expired_at > current_time
@@ -152,7 +160,7 @@ def get_captcha():
         captcha_token = str(uuid.uuid4())
 
         # 计算过期时间（5分钟后）
-        current_time = datetime.now(pytz.timezone("Asia/Shanghai"))
+        current_time = _captcha_now()
         expired_time = current_time + timedelta(minutes=5)
 
         # 创建验证码记录并存储到数据库
