@@ -5,7 +5,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends libgl1 libglib2
 COPY backend/requirements*.txt ./
 RUN --mount=type=cache,target=/root/.cache/pip \
     python -m pip install \
-      --index-url https://pypi.org/simple \
+      --index-url https://mirrors.aliyun.com/pypi/simple/ \
+      --trusted-host mirrors.aliyun.com \
       --retries 10 \
       --timeout 120 \
       --no-deps \
