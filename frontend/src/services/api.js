@@ -291,6 +291,12 @@ export default {
     const queryParams = params ? `?${params}` : ''
     return apiRequest(`/students${queryParams}`)
   },
+  importAcademicScores: (file, token) => {
+    const data = new FormData()
+    data.append('file', file)
+    if (token) data.append('token', token)
+    return apiRequest(`/students/academic-score-import/${token ? 'confirm' : 'preview'}`, 'POST', data)
+  },
   updateStudentAdmin: (studentId, data) => apiRequest(`/students/${studentId}`, 'PUT', data),
   // 综合成绩计算相关API
   recalculateComprehensiveScores: (params) => {

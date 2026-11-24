@@ -34,7 +34,7 @@ test('other scored categories route to their MaterialRecord workflows', () => {
 
 test('my materials renders history without a submission form or autofill wizard', () => {
   const source = read('../src/pages/student/applications/StudentMaterialsHub.vue')
-  assert.match(source, /<ApplicationHistory/)
+  assert.doesNotMatch(source, /ApplicationHistory|历史兼容记录/)
   assert.match(source, /workflow_state/)
   assert.match(source, /OCR队列中/)
   assert.doesNotMatch(source, /<CompetitionWorkflow|<OcrUploadPreview|type="file"/)

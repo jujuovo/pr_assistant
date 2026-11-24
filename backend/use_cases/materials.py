@@ -93,7 +93,22 @@ def _latest_review_summaries(rows):
     return latest
 
 
-def competition_workbench_summary(user, student_id=""):
+def material_review_keyword(keyword):
+    """Match a literal material-name fragment or a student identifier."""
+    student_id = func.lower(MaterialRecord.student_id)
+    term = keyword.lower()
+    student_match = student_id == term
+    if len(term) == 4 and term.isascii() and term.isdigit():
+        student_match = student_id.endswith(term)
+    fields = ("project_name", "competition_name", "title", "certification_name",
+              "honor_name", "team", "subject_name", "report_no")
+    return or_(student_match, *(
+        func.lower(MaterialRecord.data[field].as_string()).contains(term, autoescape=True)
+        for field in fields
+    ))
+
+
+def competition_workbench_summary(user, student_id="", *, keyword=""):
     _package, context = competition_workflow_context(user)
     year = context["cycle"]["cycle_code"]
     query = MaterialRecord.query.filter_by(category="competition", year=year)
@@ -149,7 +164,9 @@ def competition_workbench_summary(user, student_id=""):
         )
         if student_id:
             reviewed_query = reviewed_query.filter(MaterialRecord.student_id == student_id)
-        else:
+        if keyword:
+            reviewed_query = reviewed_query.filter(material_review_keyword(keyword))
+        if not student_id and not keyword:
             reviewed_query = reviewed_query.limit(50)
         reviewed_rows = reviewed_query.all()
         reviews.update(_latest_review_summaries(reviewed_rows))

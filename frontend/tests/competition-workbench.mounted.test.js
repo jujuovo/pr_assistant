@@ -32,6 +32,8 @@ vi.mock('@/stores/applications.js', () => ({
 
 import StudentHome from '../src/pages/student/home/Home.vue'
 import RoleHome from '../src/components/common/RoleHome.vue'
+import ManualMaterialReview from '../src/components/common/ManualMaterialReview.vue'
+import PendingReview from '../src/pages/teacher/reviews/PendingReview.vue'
 import TeacherCompetitionReview from '../src/pages/teacher/reviews/TeacherCompetitionReview.vue'
 
 beforeEach(() => {
@@ -141,8 +143,8 @@ describe('authoritative competition workbench projection', () => {
       }
     })
     await flushPromises()
-    expect(wrapper.text()).toContain('1 份竞赛材料待审核')
-    expect(wrapper.text()).toContain('0 份非竞赛材料待审核')
+    expect(wrapper.text()).toContain('1 份竞赛材料待审核。')
+    expect(wrapper.text()).not.toContain('非竞赛材料待审核')
   })
 
   it('renders student summary loading and actionable error states', async () => {
@@ -281,15 +283,15 @@ describe('authoritative competition workbench projection', () => {
 
   it('reloads review history with the submitted student ID and restores the default when cleared', async () => {
     const wrapper = mount(TeacherCompetitionReview, {
-      props: { mode: 'history', studentFilter: '' }
+      props: { mode: 'history', keyword: '' }
     })
     await flushPromises()
-    await wrapper.setProps({ studentFilter: 'student001' })
+    await wrapper.setProps({ keyword: 'student001' })
     await flushPromises()
-    expect(state.api.getCompetitionWorkbenchSummary).toHaveBeenLastCalledWith(undefined, 'student001')
-    await wrapper.setProps({ studentFilter: '' })
+    expect(state.api.getCompetitionWorkbenchSummary).toHaveBeenLastCalledWith(undefined, undefined, { keyword: 'student001' })
+    await wrapper.setProps({ keyword: '' })
     await flushPromises()
-    expect(state.api.getCompetitionWorkbenchSummary).toHaveBeenLastCalledWith(undefined, '')
+    expect(state.api.getCompetitionWorkbenchSummary).toHaveBeenLastCalledWith(undefined, undefined, { keyword: '' })
   })
 
   it('renders processed competition materials as read-only history', async () => {
@@ -380,4 +382,111 @@ it('approves without requiring review text', async () => {
     undefined
   )
   w.unmount()
+})
+
+it('filters existing history cards and restores them when the search is cleared', async () => {
+  const workbench = await state.api.getCompetitionWorkbenchSummary()
+  workbench.reviewed_items = [
+    ...workbench.reviewed_items,
+    ...['scored', 'needs_correction', 'needs_correction'].map((status, index) => ({
+      id: 10 + index, student_id: 'sample2612', status, version: 4,
+      project_name: `审核样本 ${index}`,
+      review: { decision: status === 'scored' ? 'approve' : 'return', comment: '审核意见样本' }
+    }))
+  ]
+  state.api.getCompetitionWorkbenchSummary.mockImplementation(async (_signal, _studentId, options) => ({
+    ...workbench,
+    reviewed_items: workbench.reviewed_items.filter(row =>
+      !options?.keyword || row.student_id.endsWith(options.keyword)
+    )
+  }))
+  const wrapper = mount(TeacherCompetitionReview, { props: { mode: 'history' } })
+  await flushPromises()
+  expect(wrapper.findAll('.pending-card')).toHaveLength(4)
+  await wrapper.setProps({ keyword: '2612' })
+  await flushPromises()
+  expect(state.api.getCompetitionWorkbenchSummary).toHaveBeenLastCalledWith(undefined, undefined, { keyword: '2612' })
+  expect(state.api.getTeacherCompetitionSummary).not.toHaveBeenCalled()
+  expect(wrapper.findAll('.pending-card')).toHaveLength(3)
+  expect(wrapper.text()).toContain('审核意见样本')
+  expect(wrapper.text()).not.toContain('已通过作品')
+  expect(wrapper.text()).not.toContain('竞赛作品')
+  expect(wrapper.find('table').exists()).toBe(false)
+  await wrapper.get('.pending-card button').trigger('click')
+  await flushPromises()
+  expect(state.api.getCompetitionReviewContext).toHaveBeenCalledWith(10)
+  const buttons = wrapper.get('dialog').findAll('button').map((button) => button.text())
+  expect(buttons).not.toContain('审核通过')
+  expect(buttons).not.toContain('退回修改')
+  await wrapper.setProps({ keyword: 'missing-student' })
+  await flushPromises()
+  expect(wrapper.findAll('.pending-card')).toHaveLength(0)
+  expect(wrapper.text()).toContain('暂无匹配的竞赛审核记录。')
+  await wrapper.setProps({ keyword: '' })
+  await flushPromises()
+  expect(wrapper.findAll('.pending-card')).toHaveLength(4)
+  wrapper.unmount()
+})
+
+it('keeps each history search scoped to its own group', async () => {
+  const wrapper = mount(PendingReview, {
+    props: { history: true },
+    global: { stubs: { ManualMaterialReview: true, TeacherCompetitionReview: true } }
+  })
+  expect(wrapper.find('#review-history-student').exists()).toBe(false)
+  const groups = wrapper.findAll('details')
+  expect(groups).toHaveLength(5)
+  for (const group of groups) {
+    const input = group.get('input[type="search"]')
+    await input.setValue('student001')
+    await group.get('form').trigger('submit')
+    expect(group.findAll('manual-material-review-stub').every(
+      (item) => item.attributes('keyword') === 'student001'
+    )).toBe(true)
+    await input.setValue('')
+    expect(group.findAll('manual-material-review-stub').every(
+      (item) => item.attributes('keyword') === ''
+    )).toBe(true)
+  }
+  await groups[0].get('input[type="search"]').setValue('student002')
+  await groups[0].get('form').trigger('submit')
+  expect(wrapper.getComponent(TeacherCompetitionReview).props('keyword')).toBe('student002')
+  expect(groups[0].get('manual-material-review-stub').attributes('keyword')).toBe('student002')
+  expect(groups[1].get('manual-material-review-stub').attributes('keyword')).toBe('')
+  wrapper.unmount()
+})
+
+it('hides empty search categories and reports an entirely empty group only after success', async () => {
+  const wrapper = mount(PendingReview, {
+    props: { history: true },
+    global: { stubs: { ManualMaterialReview: true, TeacherCompetitionReview: true } }
+  })
+  for (const group of wrapper.findAll('details')) {
+    group.element.open = true
+    const input = group.get('input[type="search"]')
+    await input.setValue('sample2602')
+    await group.get('form').trigger('submit')
+    const categories = group.findAll('.review-category')
+    const children = [...group.findAllComponents(TeacherCompetitionReview),
+      ...group.findAllComponents(ManualMaterialReview)]
+    expect(children).toHaveLength(categories.length)
+    const emitCount = (count) => children.forEach(child => child.vm.$emit('pending-count', count))
+    const visible = () => categories.filter(category => category.element.style.display !== 'none')
+    expect(group.find('.review-category-empty').exists()).toBe(false)
+    emitCount(0)
+    children.at(-1).vm.$emit('pending-count', 1)
+    await wrapper.vm.$nextTick()
+    expect(visible()).toHaveLength(1)
+    expect(group.find('.review-category-empty').exists()).toBe(false)
+    emitCount(null)
+    await wrapper.vm.$nextTick()
+    expect(group.find('.review-category-empty').exists()).toBe(false)
+    emitCount(0)
+    await wrapper.vm.$nextTick()
+    expect(visible()).toHaveLength(0)
+    expect(group.get('.review-category-empty').text()).toBe('本栏目暂无匹配的审核记录。')
+    await input.setValue('')
+    expect(visible()).toHaveLength(categories.length)
+  }
+  wrapper.unmount()
 })

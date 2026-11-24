@@ -1,2 +1,11 @@
 /* 引入共享样式 */
 @import '@/assets/styles/shared/content.css';
+
+.academic-import-module .card-title {
+  margin: 0;
+}
+
+.academic-import-body {
+  padding: 16px 20px;
+  min-width: 0;
+}

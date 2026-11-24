@@ -5,9 +5,10 @@
       :subtitle="role === 'teacher' ? 'TEACHER DASHBOARD' : 'ADMIN DASHBOARD'"
     /><WorkbenchAction v-if="role === 'teacher'" title="有材料需要你审核" aria-label="待审核材料">
       <template #description>
-        <p>
-          <strong class="action-count od-nowrap">{{ competitionSummary.pending_count || 0 }} 份竞赛材料待审核</strong>
-          <span v-if="!materialLoading && !materialError" class="compat-count"> · {{ materialSummary.pending_count || 0 }} 份非竞赛材料待审核</span>
+        <p v-if="competitionLoading || materialLoading" role="status">正在读取待审核材料数量…</p>
+        <p v-else-if="competitionError || materialError" role="alert">暂时无法获取待审核材料总数。</p>
+        <p v-else>
+          <strong class="action-count od-nowrap">{{ pendingCount }} 份竞赛材料待审核。</strong>
         </p>
       </template>
       <template #action>
@@ -15,7 +16,7 @@
           去审核 <span aria-hidden="true">→</span>
         </button>
       </template>
-    </WorkbenchAction><p v-if="role === 'teacher' && competitionLoading" role="status" class="home-note">正在读取权威竞赛待审数…</p><p v-if="role === 'teacher' && competitionError" role="alert" class="home-note">{{ competitionError }}</p><p v-if="role === 'teacher' && materialLoading" role="status" class="home-note">正在读取非竞赛新材料待审数…</p><p v-if="role === 'teacher' && materialError" role="alert" class="home-note">{{ materialError }}</p>
+    </WorkbenchAction>
     <ApplicationPeriodPanel v-if="role === 'teacher'" hide-action />
     <template v-if="role === 'admin'"
       ><ApplicationPeriodPanel
@@ -44,7 +45,7 @@ import { useAuthStore } from '@/stores/auth.js'
 import WelcomeHeader from '@/components/common/WelcomeHeader.vue'
 import WorkbenchAction from '@/components/common/WorkbenchAction.vue'
 import ApplicationPeriodPanel from '@/components/common/ApplicationPeriodPanel.vue'
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import materialApi from '@/services/materialApi.js'
 const props = defineProps({ role: String })
 defineEmits(['navigate'])
@@ -52,6 +53,9 @@ const auth = useAuthStore()
 const isDemo = import.meta.env.MODE === 'demo'
 const competitionSummary = ref({}), competitionLoading = ref(props.role === 'teacher'), competitionError = ref('')
 const materialSummary = ref({}), materialLoading = ref(props.role === 'teacher'), materialError = ref('')
+const pendingCount = computed(() =>
+  (competitionSummary.value.pending_count ?? 0) + (materialSummary.value.pending_count ?? 0)
+)
 const adminItems = [
   { key: 'faculty-management', title: '学院管理', desc: '维护学院、系与专业' },
   { key: 'user-management', title: '用户管理', desc: '维护学生与教师账号' },

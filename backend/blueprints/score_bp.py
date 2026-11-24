@@ -9,6 +9,9 @@
 - 学生统计数据更新
 """
 
+from hashlib import sha256
+from json import dumps
+
 from flask import Blueprint, request, jsonify, current_app
 from models import (
     User,
@@ -23,6 +26,8 @@ from models import (
 from extensions import db
 from sqlalchemy import func
 from services.actors import actor
+from services.academic_score_import import plan_score_rows, read_score_rows
+from itsdangerous import BadData, URLSafeTimedSerializer
 
 
 DERIVED_STUDENT_FIELDS = frozenset({
@@ -479,6 +484,43 @@ def get_all_students():
         ),
         200,
     )
+
+
+@score_bp.post("/students/academic-score-import/<mode>")
+def import_academic_scores(mode):
+    user = actor()
+    if user.role != "admin" or not user.faculty_id:
+        return jsonify({"error": "仅本学院管理员可导入学业成绩"}), 403
+    if mode not in {"preview", "confirm"}:
+        return jsonify({"error": "未知导入操作"}), 404
+    try:
+        rows, updates = plan_score_rows(read_score_rows(request.files.get("file")), user.faculty_id)
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+
+    digest = sha256(dumps(rows, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    approval = [user.id, user.faculty_id, digest]
+    signer = URLSafeTimedSerializer(current_app.secret_key, salt="academic-score-import")
+    if mode == "preview":
+        return jsonify({"rows": rows, "ready_count": len(updates), "token": signer.dumps(approval)})
+
+    conflict = {"error": "预览已过期或成绩已变化，请重新预览后确认", "code": "stale_preview"}
+    try:
+        approved = signer.loads(request.form.get("token", ""), max_age=1800)
+    except BadData:
+        return jsonify(conflict), 409
+    if approved != approval:
+        return jsonify(conflict), 409
+
+    for student_id, previous, score in sorted(updates):
+        changed = Student.query.filter_by(
+            id=student_id, faculty_id=user.faculty_id, academic_score=previous
+        ).update({Student.academic_score: score}, synchronize_session=False)
+        if changed != 1:
+            db.session.rollback()
+            return jsonify(conflict), 409
+    db.session.commit()
+    return jsonify({"imported_count": len(updates), "skipped_count": len(rows) - len(updates)})
 
 
 # 更新学生信息接口

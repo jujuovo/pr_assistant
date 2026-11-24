@@ -4,176 +4,169 @@
       <h1>我的材料</h1>
       <button class="btn btn-outline" :disabled="loading" @click="load">刷新状态</button>
     </header>
-    <nav class="history-switch" aria-label="材料历史类型">
-      <button class="btn" :class="{ 'btn-outline': legacy }" :aria-pressed="!legacy" @click="legacy = false">材料记录</button>
-      <button class="btn" :class="{ 'btn-outline': !legacy }" :aria-pressed="legacy" @click="legacy = true">历史兼容记录</button>
-    </nav>
-    <ApplicationHistory v-if="legacy" @edit-application="$emit('edit-application', $event)" />
-    <template v-else>
-      <label class="history-filter"
-        >筛选状态<select v-model="filter"
-          ><option value="">全部</option
-          ><option v-for="option in statusFilters" :key="option.value" :value="option.value">{{
-            option.label
-          }}</option></select
-        ></label
+    <label class="history-filter"
+      >筛选状态<select v-model="filter"
+        ><option value="">全部</option
+        ><option v-for="option in statusFilters" :key="option.value" :value="option.value">{{
+          option.label
+        }}</option></select
+      ></label
+    >
+    <p v-if="loading" role="status">正在加载材料记录…</p
+    ><p v-if="error" role="alert">{{ error }} <span v-if="!filtered.length && error.startsWith('以下类别未能加载')">当前结果中暂无符合条件的记录，请重试以获取完整列表。</span> <button class="btn btn-outline" @click="load">重试</button></p>
+    <p v-if="!loading && !error && !filtered.length" class="empty">{{ filter ? '暂无符合条件的材料记录。' : '暂无材料记录，可从“提交材料”入口申报。' }}</p>
+    <article v-for="row in filtered" :key="row.category + '-' + row.id" class="history-card">
+      <header class="material-heading">
+        <div class="material-title-row">
+          <h2>{{
+            row.data?.project_name ||
+            row.data?.competition_name ||
+            row.data?.certification_name ||
+            categoryNames[row.category] ||
+            '证明材料'
+          }}</h2>
+          <span class="badge">{{ states[row.workflow_state] || states[row.status] || '处理中' }}</span>
+        </div>
+        <small>{{ row.year }} 年 · 材料 #{{ row.id }}</small>
+      </header>
+      <p
+        v-if="row.last_review"
+        class="review-banner"
+        :class="reviewOutcomes[row.last_review.decision]?.tone"
+        role="note"
       >
-      <p v-if="loading" role="status">正在加载材料记录…</p
-      ><p v-if="error" role="alert">{{ error }} <span v-if="!filtered.length && error.startsWith('以下类别未能加载')">当前结果中暂无符合条件的记录，请重试以获取完整列表。</span> <button class="btn btn-outline" @click="load">重试</button></p>
-      <p v-if="!loading && !error && !filtered.length" class="empty">{{ filter ? '暂无符合条件的材料记录。' : '暂无材料记录，可从“提交材料”入口申报。' }}</p>
-      <article v-for="row in filtered" :key="row.category + '-' + row.id" class="history-card">
-        <header class="material-heading">
-          <div class="material-title-row">
-            <h2>{{
-              row.data?.project_name ||
-              row.data?.competition_name ||
-              row.data?.certification_name ||
-              categoryNames[row.category] ||
-              '证明材料'
-            }}</h2>
-            <span class="badge">{{ states[row.workflow_state] || states[row.status] || '处理中' }}</span>
-          </div>
-          <small>{{ row.year }} 年 · 材料 #{{ row.id }}</small>
-        </header>
-        <p
-          v-if="row.last_review"
-          class="review-banner"
-          :class="reviewOutcomes[row.last_review.decision]?.tone"
-          role="note"
+        <strong>{{ reviewOutcomes[row.last_review.decision]?.label || '教师审核意见' }}：</strong>
+        <span>{{ row.last_review.comment?.trim() || '未填写审核意见' }}</span>
+        <small v-if="row.last_review.actor"
+          >（{{ row.last_review.actor.name }} · {{ formatScoreTime(row.last_review.at) }}）</small
         >
-          <strong>{{ reviewOutcomes[row.last_review.decision]?.label || '教师审核意见' }}：</strong>
-          <span>{{ row.last_review.comment?.trim() || '未填写审核意见' }}</span>
-          <small v-if="row.last_review.actor"
-            >（{{ row.last_review.actor.name }} · {{ formatScoreTime(row.last_review.at) }}）</small
-          >
-        </p>
-        <OcrAssessment v-if="row.category === 'competition'" :advice="row.ocr_assessment" concise-estimate :ready-to-submit="canSubmit(row)" />
-        <p v-else-if="row.bonus_result">候选分 {{row.bonus_result.candidate_score}} · 同类取舍后 {{row.bonus_result.included_score}} 分。{{row.bonus_result.reason}} 分组封顶结果见加分统计。</p>
-        <p v-else-if="row.manual_only">此项通过人工通道核验，不自动计分。</p
-        ><p v-else>根据该类别的现行规则审核计分。</p>
-        <p v-if="row.category === 'volunteer' && row.analysis?.submitted_hours">
-          本次有效工时 {{ row.analysis.submitted_hours.effective_hours }} 小时。
-          审核通过后计入周期累计；最终得分请查看加分统计。
-        </p>
-        <details
-          ><summary>申报信息与原件</summary
-          ><MaterialFacts
-            :data="row.data"
-            :highlighted-fields="differenceFields(row)"
-            :labels="
-              row.category === 'volunteer'
-                ? { award_date: '服务记录日期' }
-                : row.category === 'arts_sports'
-                  ? { award_date: '获得时间' }
-                  : {}
-            " /><MaterialImagePreview :attachments="row.attachments || []" /><h3
-            v-if="row.ocr_raw_terms"
-            >OCR识别结果</h3
-          ><MaterialFacts
-            v-if="row.ocr_raw_terms && row.category !== 'volunteer'"
-            :data="row.ocr_raw_terms?.report?.fields || row.ocr_raw_terms?.fields || {}"
-            :highlighted-fields="differenceFields(row, true)"
-        /></details>
-        <VolunteerOcrAssessment
-          :assessment="row.volunteer_ocr"
-          :appeal="row.appeal"
-          :priority="row.priority_review"
-          :reports="row.ocr_raw_terms?.reports || []"
-        />
-        <form v-if="appealOpen === row.id" class="appeal-form" @submit.prevent="appeal(row)">
-          <label :for="'appeal-' + row.id"
-            >申诉理由<textarea
-              :id="'appeal-' + row.id"
-              v-model="appealReasons[row.id]"
-              maxlength="2000"
-              required
-              placeholder="说明识别错误或无法识别的原因，教师将结合原件重点核验。"
-            />
-          </label>
-          <button class="btn btn-primary" :disabled="busy">提交申诉并转人工审核</button>
-          <button type="button" class="btn btn-outline" :disabled="busy" @click="appealOpen = null"
-            >取消</button
-          >
-        </form>
-        <div class="actions">
-          <button
-            v-if="row.allowed_actions?.includes('recognize')"
-            class="btn btn-outline"
-            :disabled="busy"
-            @click="retryOcr(row)"
-            >重新识别</button
-          >
-          <button
-            v-if="row.allowed_actions?.includes('appeal')"
-            class="btn btn-outline"
-            :disabled="busy"
-            @click="appealOpen = row.id"
-            >提出申诉</button
-          >
-          <button
-            v-if="row.allowed_actions?.includes('edit')"
-            class="btn btn-outline"
-            :disabled="busy"
-            @click="edit(row)"
-            >编辑草稿</button
-          >
-          <button
-            v-if="
-              row.category === 'competition' &&
-              ['failed', 'stale'].includes(row.ocr_assessment?.job?.status) &&
-              row.allowed_actions?.includes('edit')
-            "
-            class="btn btn-outline"
-            :disabled="busy"
-            @click="retryOcr(row)"
-            >重新识别</button
-          >
-          <button
-            v-if="canSubmit(row)"
-            class="btn btn-primary"
-            :disabled="busy"
-            @click="command(row, 'submit')"
-            >正式提交审核</button
-          >
-          <span v-if="['ocr_queued', 'ocr_running'].includes(row.workflow_state)"
-            >识别完成后可查看评估再正式提交；可继续申报其他项目。</span
-          >
-          <button
-            v-if="row.allowed_actions?.includes('withdraw')"
-            class="btn btn-outline"
-            :disabled="busy"
-            @click="command(row, 'withdraw')"
-            >撤回为草稿</button
-          >
-          <button
-            v-if="row.allowed_actions?.includes('create_correction')"
-            class="btn btn-outline"
-            :disabled="busy"
-            @click="correct(row)"
-            >补正材料</button
-          >
-          <button
-            v-if="row.status === 'rule_reconfirmation_required'"
-            class="btn btn-primary"
-            :disabled="busy"
-            @click="reconfirm(row)"
-            >确认新规则并重提</button
-          >
-          <button
-            v-if="row.allowed_actions?.includes('abandon')"
-            class="btn btn-danger"
-            :disabled="busy"
-            @click="command(row, 'abandon')"
-            >{{ row.status === 'draft' ? '删除草稿' : '放弃材料' }}</button
-          >
-        </div></article
-      >
-      <button v-if="hasMore" class="btn btn-outline" :disabled="loading" @click="loadMore"
-        >加载更多历史记录</button
-      >
-      <p v-if="notice" role="status">{{ notice }}</p>
-    </template></section
-  >
+      </p>
+      <OcrAssessment v-if="row.category === 'competition'" :advice="row.ocr_assessment" concise-estimate :ready-to-submit="canSubmit(row)" />
+      <p v-else-if="row.bonus_result">候选分 {{row.bonus_result.candidate_score}} · 同类取舍后 {{row.bonus_result.included_score}} 分。{{row.bonus_result.reason}} 分组封顶结果见加分统计。</p>
+      <p v-else-if="row.manual_only">此项通过人工通道核验，不自动计分。</p
+      ><p v-else>根据该类别的现行规则审核计分。</p>
+      <p v-if="row.category === 'volunteer' && row.analysis?.submitted_hours">
+        本次有效工时 {{ row.analysis.submitted_hours.effective_hours }} 小时。
+        审核通过后计入周期累计；最终得分请查看加分统计。
+      </p>
+      <details
+        ><summary>申报信息与原件</summary
+        ><MaterialFacts
+          :data="row.data"
+          :highlighted-fields="differenceFields(row)"
+          :labels="
+            row.category === 'volunteer'
+              ? { award_date: '服务记录日期' }
+              : row.category === 'arts_sports'
+                ? { award_date: '获得时间' }
+                : {}
+          " /><MaterialImagePreview :attachments="row.attachments || []" /><h3
+          v-if="row.ocr_raw_terms"
+          >OCR识别结果</h3
+        ><MaterialFacts
+          v-if="row.ocr_raw_terms && row.category !== 'volunteer'"
+          :data="row.ocr_raw_terms?.report?.fields || row.ocr_raw_terms?.fields || {}"
+          :highlighted-fields="differenceFields(row, true)"
+      /></details>
+      <VolunteerOcrAssessment
+        :assessment="row.volunteer_ocr"
+        :appeal="row.appeal"
+        :priority="row.priority_review"
+        :reports="row.ocr_raw_terms?.reports || []"
+      />
+      <form v-if="appealOpen === row.id" class="appeal-form" @submit.prevent="appeal(row)">
+        <label :for="'appeal-' + row.id"
+          >申诉理由<textarea
+            :id="'appeal-' + row.id"
+            v-model="appealReasons[row.id]"
+            maxlength="2000"
+            required
+            placeholder="说明识别错误或无法识别的原因，教师将结合原件重点核验。"
+          />
+        </label>
+        <button class="btn btn-primary" :disabled="busy">提交申诉并转人工审核</button>
+        <button type="button" class="btn btn-outline" :disabled="busy" @click="appealOpen = null"
+          >取消</button
+        >
+      </form>
+      <div class="actions">
+        <button
+          v-if="row.allowed_actions?.includes('recognize')"
+          class="btn btn-outline"
+          :disabled="busy"
+          @click="retryOcr(row)"
+          >重新识别</button
+        >
+        <button
+          v-if="row.allowed_actions?.includes('appeal')"
+          class="btn btn-outline"
+          :disabled="busy"
+          @click="appealOpen = row.id"
+          >提出申诉</button
+        >
+        <button
+          v-if="row.allowed_actions?.includes('edit')"
+          class="btn btn-outline"
+          :disabled="busy"
+          @click="edit(row)"
+          >编辑草稿</button
+        >
+        <button
+          v-if="
+            row.category === 'competition' &&
+            ['failed', 'stale'].includes(row.ocr_assessment?.job?.status) &&
+            row.allowed_actions?.includes('edit')
+          "
+          class="btn btn-outline"
+          :disabled="busy"
+          @click="retryOcr(row)"
+          >重新识别</button
+        >
+        <button
+          v-if="canSubmit(row)"
+          class="btn btn-primary"
+          :disabled="busy"
+          @click="command(row, 'submit')"
+          >正式提交审核</button
+        >
+        <span v-if="['ocr_queued', 'ocr_running'].includes(row.workflow_state)"
+          >识别完成后可查看评估再正式提交；可继续申报其他项目。</span
+        >
+        <button
+          v-if="row.allowed_actions?.includes('withdraw')"
+          class="btn btn-outline"
+          :disabled="busy"
+          @click="command(row, 'withdraw')"
+          >撤回为草稿</button
+        >
+        <button
+          v-if="row.allowed_actions?.includes('create_correction')"
+          class="btn btn-outline"
+          :disabled="busy"
+          @click="correct(row)"
+          >补正材料</button
+        >
+        <button
+          v-if="row.status === 'rule_reconfirmation_required'"
+          class="btn btn-primary"
+          :disabled="busy"
+          @click="reconfirm(row)"
+          >确认新规则并重提</button
+        >
+        <button
+          v-if="row.allowed_actions?.includes('abandon')"
+          class="btn btn-danger"
+          :disabled="busy"
+          @click="command(row, 'abandon')"
+          >{{ row.status === 'draft' ? '删除草稿' : '放弃材料' }}</button
+        >
+      </div></article
+    >
+    <button v-if="hasMore" class="btn btn-outline" :disabled="loading" @click="loadMore"
+      >加载更多历史记录</button
+    >
+    <p v-if="notice" role="status">{{ notice }}</p>
+  </section>
 </template>
 <script setup>
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
@@ -184,9 +177,7 @@ import MaterialFacts from '@/components/common/MaterialFacts.vue'
 import MaterialImagePreview from '@/components/common/MaterialImagePreview.vue'
 import OcrAssessment from '@/components/common/OcrAssessment.vue'
 import VolunteerOcrAssessment from '@/components/common/VolunteerOcrAssessment.vue'
-import ApplicationHistory from './ApplicationHistory.vue'
 import { buildCompetitionFacts } from '@/services/competitionMaterial.js'
-defineEmits(['edit-application'])
 const router = useRouter(),
   records = ref([]),
   loading = ref(false),
@@ -194,7 +185,6 @@ const router = useRouter(),
   busy = ref(false),
   filter = ref(''),
   notice = ref(''),
-  legacy = ref(false),
   cursors = ref({})
 const appealOpen = ref(null),
   appealReasons = ref({})
@@ -411,7 +401,7 @@ async function reconfirm(row) {
   }
 }
 async function refreshActive() {
-  if (!alive || legacy.value || busy.value || loading.value) return
+  if (!alive || busy.value || loading.value) return
   const pending = records.value.filter((row) =>
     ['ocr_queued', 'ocr_running'].includes(row.workflow_state)
   )

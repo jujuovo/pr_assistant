@@ -29,14 +29,19 @@ beforeEach(() => {
   mocks.api.getTeacherMaterialSummary.mockResolvedValue({ pending_count: 0 })
 })
 
-test('教师主页显示本学院新材料待审份数', async () => {
-  mocks.api.getTeacherMaterialSummary.mockResolvedValue({ pending_count: 1 })
-  const wrapper = mount(RoleHome, { props: { role: 'teacher' }, global: { stubs } })
-  await flushPromises()
+test.each([[1, 6, 7], [0, 1, 1], [1, 0, 1], [0, 0, 0]])(
+  '教师主页合并两类待审数量 %i 和 %i',
+  async (competition, material, total) => {
+    mocks.api.getCompetitionWorkbenchSummary.mockResolvedValue({ pending_count: competition })
+    mocks.api.getTeacherMaterialSummary.mockResolvedValue({ pending_count: material })
+    const wrapper = mount(RoleHome, { props: { role: 'teacher' }, global: { stubs } })
+    await flushPromises()
 
-  expect(wrapper.text()).toContain('0 份竞赛材料待审核')
-  expect(wrapper.text()).toContain('1 份非竞赛材料待审核')
-})
+    expect(wrapper.get('.action-count').text()).toBe(`${total} 份竞赛材料待审核。`)
+    expect(wrapper.text()).not.toContain('非竞赛材料待审核')
+    wrapper.unmount()
+  }
+)
 
 test('教师主页不计入旧兼容申请', async () => {
   mocks.store.pendingApplications = [
@@ -46,5 +51,5 @@ test('教师主页不计入旧兼容申请', async () => {
   const wrapper = mount(RoleHome, { props: { role: 'teacher' }, global: { stubs } })
   await flushPromises()
 
-  expect(wrapper.text()).toContain('1 份非竞赛材料待审核')
+  expect(wrapper.text()).toContain('1 份竞赛材料待审核。')
 })

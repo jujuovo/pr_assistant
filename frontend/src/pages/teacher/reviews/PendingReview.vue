@@ -3,21 +3,24 @@
     <div class="page-title">
       <h1>{{ history ? '审核记录' : '待审核申请' }}</h1>
     </div>
-    <form v-if="history" class="review-student-filter" @submit.prevent="studentFilter = studentInput">
-      <label for="review-history-student">查找学号</label>
-      <input id="review-history-student" v-model.trim="studentInput" class="form-control" type="search" @input="clearStudentFilter" />
-      <button class="btn btn-outline" type="submit">查询</button>
-    </form>
     <details v-for="group in groups" :key="group.label" class="request-group">
       <summary class="request-group-header">
         <span class="request-group-title">{{ group.label }}</span>
         <span v-if="!history" class="request-group-count">{{ groupStatus(group.keys) }}</span>
       </summary>
       <div class="request-group-body">
-        <section v-for="key in group.keys" :key="key" class="review-category">
+        <form v-if="history" class="review-student-filter" @submit.prevent="setKeyword(group, inputs[group.keys[0]]?.trim() || '')">
+          <label :for="'history-student-' + group.keys[0]">搜索审核记录</label>
+          <input :id="'history-student-' + group.keys[0]" v-model="inputs[group.keys[0]]" class="form-control" type="search" placeholder="学号、后四位或材料名称" @input="clearKeyword(group, $event)" />
+          <button class="btn btn-outline" type="submit">查看汇总</button>
+        </form>
+        <p v-if="history && filters[group.keys[0]] && group.keys.every(key => counts[key] === 0)"
+          class="review-category-empty" role="status">本栏目暂无匹配的审核记录。</p>
+        <section v-for="key in group.keys" v-show="!history || !filters[group.keys[0]] || counts[key] !== 0"
+          :key="key" class="review-category">
           <h2 v-if="group.keys.length > 1 || key === 'certification'">{{ categoryLabels[key] }}</h2>
-          <TeacherCompetitionReview v-if="key === 'competition'" :mode="history ? 'history' : 'pending'" :student-filter="studentFilter" @pending-count="counts[key] = $event" />
-          <ManualMaterialReview v-else :fixed-category="key" :history="history" :student-filter="studentFilter" compare-evidence @pending-count="counts[key] = $event" />
+          <TeacherCompetitionReview v-if="key === 'competition'" :mode="history ? 'history' : 'pending'" :keyword="filters[group.keys[0]]" @pending-count="counts[key] = $event" />
+          <ManualMaterialReview v-else :fixed-category="key" :history="history" :keyword="filters[group.keys[0]]" compare-evidence @pending-count="counts[key] = $event" />
         </section>
       </div>
     </details>
@@ -25,17 +28,24 @@
 </template>
 
 <script setup>
-import { reactive, ref } from 'vue'
+import { reactive } from 'vue'
 import ManualMaterialReview from '@/components/common/ManualMaterialReview.vue'
 import { manualReviewCategories } from '@/services/teacherReviewCategories.js'
 import TeacherCompetitionReview from './TeacherCompetitionReview.vue'
 
 defineProps({ history: Boolean })
-const studentInput = ref('')
-const studentFilter = ref('')
+const inputs = reactive({})
+const filters = reactive({})
 
-function clearStudentFilter(event) {
-  if (!event.target.value.trim()) studentFilter.value = ''
+function setKeyword(group, studentId) {
+  const key = group.keys[0]
+  if ((filters[key] ?? '') === studentId) return
+  for (const category of group.keys) delete counts[category]
+  filters[key] = studentId
+}
+
+function clearKeyword(group, event) {
+  if (!event.target.value.trim()) setKeyword(group, '')
 }
 
 const groups = [

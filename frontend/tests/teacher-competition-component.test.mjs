@@ -9,7 +9,7 @@ test('competition reviewer exposes evidence sections and only approve/return act
   for (const forbidden of ['override_score','override_reason','rule_id','final_score','type="number"']) assert(!source.includes(forbidden))
 })
 
-test('teacher summary supports material navigation without edit or merge controls', () => {
-  assert(source.includes('getTeacherCompetitionSummary')); assert(source.includes('open(item.record_id)'))
+test('teacher history cards support material navigation without edit or merge controls', () => {
+  assert(source.includes('reviewed_items')); assert(source.includes('open(row.id)'))
   assert(!source.includes('编辑')); assert(!source.includes('合并')); assert(!source.includes('改分'))
 })
