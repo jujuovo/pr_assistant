@@ -138,6 +138,55 @@ function button(w, text) {
 }
 
 describe('single upload submission', () => {
+  it('refreshes the selected competition schema without losing entered facts or valid awards', async () => {
+    const w = render()
+    await flushPromises()
+    await fill(w)
+    state.api.getCompetitionContext.mockResolvedValue({
+      cycle: { cycle_code: 2028 }, catalog: { items: [item] },
+      field_schema: { required: schema.required }, allowed_actions: ['create_draft']
+    })
+    await w.get('[data-test="refresh-records"]').trigger('click')
+    await flushPromises()
+    expect(state.api.getCompetitionCatalogItem).toHaveBeenLastCalledWith('c09')
+    expect(w.get('#level').element.value).toBe('national')
+    expect(w.get('#award').element.value).toBe('first_or_above')
+    expect(w.findAll('#level option')).toHaveLength(3)
+    expect(w.get('#project-name').element.value).toBe(facts.project_name)
+    await w.get('#level').setValue('provincial')
+    expect(w.findAll('#award option').map(x => x.element.value)).toEqual(['', 'first_or_above', 'second'])
+  })
+  it('keeps options on refresh failure and recovers on retry', async () => {
+    const w = render()
+    await flushPromises()
+    await fill(w)
+    state.api.getCompetitionCatalogItem.mockRejectedValueOnce({ status: 503 })
+    await w.get('[data-test="refresh-records"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[role="alert"]').exists()).toBe(true)
+    expect(w.get('#award').element.value).toBe('first_or_above')
+    await w.get('[data-test="refresh-records"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-state="backend-unavailable"]').exists()).toBe(false)
+    expect(w.get('#level').element.value).toBe('national')
+  })
+  it('preserves unsaved draft edits and clears awards removed by the refreshed schema', async () => {
+    state.route.query.editId = '7'
+    const w = render()
+    await flushPromises()
+    await w.get('#project-name').setValue('unsaved draft edit')
+    state.api.getCompetitionCatalogItem.mockResolvedValue({
+      competition: item,
+      field_schema: { ...schema, awards_by_level: { national: ['second'] } }
+    })
+    await w.get('[data-test="refresh-records"]').trigger('click')
+    await flushPromises()
+    expect(state.api.getRecord).toHaveBeenCalledTimes(1)
+    expect(w.get('#project-name').element.value).toBe('unsaved draft edit')
+    expect(w.get('#level').element.value).toBe('national')
+    expect(w.get('#award').element.value).toBe('')
+    expect(w.findAll('#award option').map(x => x.element.value)).toEqual(['', 'second'])
+  })
   it('renders one manual form and one original upload without OCR autofill or history', async () => {
     const w = render()
     await flushPromises()

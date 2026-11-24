@@ -398,13 +398,22 @@
       <div class="modal-content">
         <div class="modal-header">
           <h3>导入用户</h3>
-          <button class="close-btn" @click="closeImportDialog">
+          <button class="close-btn" :disabled="importLoading" @click="closeImportDialog">
             <font-awesome-icon icon="fa-times" />
           </button>
         </div>
 
         <div class="modal-body">
-          <div class="form-group" v-if="!importResult">
+          <div v-if="importLoading" class="import-progress" role="status" aria-live="polite">
+            <div class="import-progress-title">正在导入用户</div>
+            <div class="import-progress-track" role="progressbar" aria-label="用户导入处理中">
+              <div class="import-progress-bar"></div>
+            </div>
+            <p>正在校验表格并创建账号，请勿刷新或关闭页面。</p>
+            <p class="import-progress-time">已用时 {{ importElapsedText }}</p>
+          </div>
+
+          <div class="form-group" v-else-if="!importResult">
             <!-- 文件上传区域 -->
             <div class="upload-demo">
               <input
@@ -470,7 +479,7 @@
               <!-- 导入示例图片 -->
               <div>
                 <img
-                  src="/images/导入用户示例.png"
+                  :src="'/images/导入用户示例.png'"
                   alt="导入用户示例"
                   style="max-width: 100%; border: 1px solid #eee; border-radius: 4px"
                 />
@@ -524,16 +533,18 @@
             </div>
           </div>
 
-          <div class="form-actions">
+          <div v-if="!importLoading && !importResult" class="form-actions">
             <button class="btn btn-outline" @click="closeImportDialog">关闭</button>
             <button
               class="btn btn-primary"
               @click="confirmImport"
-              :loading="importLoading"
-              :disabled="!importFile || importResult"
+              :disabled="!importFile"
             >
               确认导入
             </button>
+          </div>
+          <div v-else-if="importResult" class="form-actions import-result-actions">
+            <button class="btn btn-primary" @click="closeImportDialog">确定</button>
           </div>
         </div>
       </div>
@@ -542,7 +553,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { useToastStore } from '@/stores/toast.js'
 import api from '@/services/api.js'
@@ -954,6 +965,20 @@ const importFile = ref(null)
 const importLoading = ref(false)
 const importResult = ref(null)
 const importErrors = ref([])
+const importElapsedSeconds = ref(0)
+let importElapsedTimer = null
+const importElapsedText = computed(() => {
+  const minutes = Math.floor(importElapsedSeconds.value / 60)
+  const seconds = importElapsedSeconds.value % 60
+  return minutes > 0 ? `${minutes}分${String(seconds).padStart(2, '0')}秒` : `${seconds}秒`
+})
+
+const stopImportTimer = () => {
+  if (importElapsedTimer !== null) {
+    window.clearInterval(importElapsedTimer)
+    importElapsedTimer = null
+  }
+}
 
 // 打开导入对话框
 const importUsers = () => {
@@ -961,6 +986,7 @@ const importUsers = () => {
   importFile.value = null
   importResult.value = null
   importErrors.value = []
+  importElapsedSeconds.value = 0
 }
 
 // 打开文件选择对话框
@@ -1006,6 +1032,11 @@ const confirmImport = async () => {
   }
 
   importLoading.value = true
+  importElapsedSeconds.value = 0
+  stopImportTimer()
+  importElapsedTimer = window.setInterval(() => {
+    importElapsedSeconds.value += 1
+  }, 1000)
 
   try {
     const formData = new FormData()
@@ -1034,16 +1065,20 @@ const confirmImport = async () => {
     console.error('导入用户失败:', error)
     toastStore.error('导入失败，请检查网络连接')
   } finally {
+    stopImportTimer()
     importLoading.value = false
   }
 }
 
 // 关闭导入对话框
 const closeImportDialog = () => {
+  if (importLoading.value) return
+  stopImportTimer()
   importDialogVisible.value = false
   importFile.value = null
   importResult.value = null
   importErrors.value = []
+  importElapsedSeconds.value = 0
 }
 
 const editUser = (user) => {
@@ -1491,6 +1526,10 @@ onMounted(async () => {
   } catch (error) {
     console.error('初始化数据加载失败:', error)
   }
+})
+
+onUnmounted(() => {
+  stopImportTimer()
 })
 
 // 监听activeTab变化

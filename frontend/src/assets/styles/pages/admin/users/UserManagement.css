@@ -10,3 +10,71 @@
   font-size: 12px;
   font-weight: 500;
 }
+
+.import-progress {
+  padding: 32px 20px;
+  text-align: center;
+}
+
+.import-progress-title {
+  margin-bottom: 18px;
+  color: #1f2937;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.import-progress-track {
+  position: relative;
+  width: 100%;
+  height: 12px;
+  margin-bottom: 18px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e5e7eb;
+}
+
+.import-progress-bar {
+  position: absolute;
+  width: 38%;
+  height: 100%;
+  border-radius: inherit;
+  background: #2563eb;
+  animation: import-progress-moving 1.4s ease-in-out infinite;
+}
+
+.import-progress p {
+  margin: 6px 0;
+  color: #4b5563;
+}
+
+.import-progress-time {
+  font-variant-numeric: tabular-nums;
+}
+
+.import-result-actions {
+  justify-content: flex-end;
+}
+
+.close-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+@keyframes import-progress-moving {
+  0% {
+    left: -38%;
+  }
+  50% {
+    left: 62%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .import-progress-bar {
+    width: 100%;
+    animation: none;
+  }
+}

@@ -10,7 +10,7 @@
         class="btn btn-outline"
         type="button"
         data-test="refresh-records"
-        :disabled="!context || savingDraft"
+        :disabled="!context || savingDraft || pageState.kind === 'loading'"
         @click="retry"
         >刷新申报目录</button
       ></header
@@ -496,19 +496,31 @@ async function retry() {
   try {
     const d = await materialApi.getCompetitionContext()
     if (!alive) return
-    context.value = d
-    catalog.value = d.catalog?.items || []
-    schema.value = d.field_schema
-    if (route.query.editId) {
+    let nextSchema = d.field_schema
+    let nextSelected = null
+    if (route.query.editId && !editingRecord.value) {
       const row = await materialApi.getRecord('competition', route.query.editId)
       if (!row.allowed_actions?.includes('edit'))
         throw { status: 409, message: '该材料已不可编辑，请返回我的材料查看最新状态。' }
       editingRecord.value = row
       const entry = await materialApi.getCompetitionCatalogItem(row.data.competition_id)
-      selected.value = entry.competition
-      schema.value = entry.field_schema
+      nextSelected = entry.competition
+      nextSchema = entry.field_schema
       Object.assign(form, row.data)
+    } else if (form.competition_id) {
+      const entry = await materialApi.getCompetitionCatalogItem(form.competition_id)
+      nextSelected = entry.competition
+      nextSchema = entry.field_schema
     }
+    if (!alive) return
+    context.value = d
+    catalog.value = d.catalog?.items || []
+    selected.value = nextSelected
+    schema.value = nextSchema
+    const refreshedOptions = legalCompetitionOptions(nextSchema, form.level)
+    if (!refreshedOptions.levels.includes(form.level)) form.level = ''
+    if (!legalCompetitionOptions(nextSchema, form.level).awards.includes(form.award)) form.award = ''
+    estimate.value = null
     pageState.value = { kind: 'ready', message: '' }
   } catch (e) {
     fail(e)
