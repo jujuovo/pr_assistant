@@ -3,6 +3,12 @@ ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 WORKDIR /app/backend
 RUN apt-get update && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 libgomp1 && rm -rf /var/lib/apt/lists/*
 COPY backend/requirements*.txt ./
-RUN pip install --no-cache-dir -r requirements-ocr.txt gunicorn==23.0.0
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -m pip install \
+      --index-url https://pypi.org/simple \
+      --retries 10 \
+      --timeout 120 \
+      -r requirements-ocr.txt \
+      gunicorn==23.0.0
 COPY backend/ ./
 CMD ["gunicorn", "--bind", "0.0.0.0:5001", "--workers", "2", "--timeout", "900", "--access-logfile", "-", "app:app"]
