@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { flushPromises, mount } from '@vue/test-utils'
 import { expect, test, vi } from 'vitest'
-import { utils } from 'xlsx'
+import { read, utils, write } from 'xlsx'
 import StatisticsReport from '../src/pages/common/statistics/StatisticsReport.vue'
 
 const { writeFile } = vi.hoisted(() => ({ writeFile: vi.fn() }))
@@ -23,11 +23,17 @@ vi.mock('@/services/workflowApi.js', () => ({ default: {
     score: '87.0000', cet4: 550, cet6: 510,
     projects: [
       { category: 'competition', name: '竞赛项目', score: '8.0000' },
-      { category: 'innovation_training', name: '创新项目', score: '0', exclusion_reason: 'max_count_exceeded' }
+      { category: 'innovation_training', name: '创新项目', score: '0', exclusion_reason: 'max_count_exceeded' },
+      { category: 'research_paper', name: '论文项目', score: '1.0000' },
+      { category: 'volunteer', name: '志愿项目', score: '0.5000' },
+      { category: 'arts_sports', name: '文体项目', score: '0.5000' }
     ], academic_raw_total: '10.0000', academic_total: '8.0000',
     comprehensive_raw_total: '3.0000', comprehensive_total: '2.0000'
   }, {
-    student_id: 'S2', name: '无快照学生', snapshot_status: 'no_authoritative_snapshot'
+    student_id: 'S2', name: '单项目学生',
+    projects: [{ category: 'competition', name: '独立项目', score: '2.0000' }]
+  }, {
+    student_id: 'S3', name: '无快照学生', snapshot_status: 'no_authoritative_snapshot'
   }] })
 } }))
 
@@ -44,16 +50,31 @@ test.each([
   await flushPromises()
   expect(view.text()).not.toContain('查看完整明细')
   const table = view.get('.official-report-table')
-  expect(table.findAll('tbody tr')).toHaveLength(3)
+  expect(table.findAll('tbody tr')).toHaveLength(7)
   expect(table.text()).toContain('项目名称')
   await view.findAll('button').find(button => button.text() === '导出统计报表').trigger('click')
   const [workbook, filename] = writeFile.mock.calls[0]
   expect(filename).toMatch(/\.xlsx$/)
-  const [headers, firstExcel, projectExcel, nextExcel] = utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {
+  const exported = read(write(workbook, { bookType: 'xlsx', type: 'array' }), { type: 'array' })
+  const sheet = exported.Sheets[exported.SheetNames[0]]
+  const [headers, firstExcel, projectExcel, ...remaining] = utils.sheet_to_json(sheet, {
     header: 1, defval: null
   })
+  const columnCount = headers.indexOf('项目类型')
+  expect(sheet['!merges']).toEqual(Array.from({ length: columnCount }, (_, column) => ({
+    s: { r: 1, c: column }, e: { r: 5, c: column }
+  })))
+  expect(utils.encode_range(sheet['!merges'][headers.indexOf('姓名')])).toBe('F2:F6')
+  expect(remaining.map(row => row[headers.indexOf('实际加分')])).toEqual([
+    '1.0000', '0.5000', '0.5000', '2.0000', null
+  ])
+  expect(remaining.at(-2)[headers.indexOf('姓名')]).toBe('单项目学生')
+  expect(remaining.at(-1)[headers.indexOf('姓名')]).toBe('无快照学生')
+  const nextExcel = remaining.at(-1)
   expect(table.findAll('thead th').map(cell => cell.text())).toEqual(headers)
-  const [firstRow, projectRow, nextRow] = table.findAll('tbody tr').map(row => row.findAll('td').map(cell => cell.text()))
+  const rows = table.findAll('tbody tr').map(row => row.findAll('td').map(cell => cell.text()))
+  const [firstRow, projectRow] = rows
+  const nextRow = rows.at(-1)
   for (const [label, expected] of [
     ['学号', 'S1'], ['四级成绩', 550], ['六级成绩', 510], ['推免综合成绩', '87.0000'], ['报表名次', 1],
     ['学术专长原始总分', '10.0000'], ['学术专长实际计入分', '8.0000'],

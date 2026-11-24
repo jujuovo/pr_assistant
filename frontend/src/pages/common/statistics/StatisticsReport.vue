@@ -168,7 +168,7 @@ const projectReasons = {
   same_event_lower_score: '同一赛事仅计最高项',
   same_work_lower_score: '同一作品仅计最高项'
 }
-const officialReportRows = computed(() => (officialReport.value?.students || []).flatMap((student, index) => {
+const officialReportGroups = computed(() => (officialReport.value?.students || []).map((student, index) => {
   const values = {
     ...student,
     sequence: index + 1,
@@ -186,6 +186,8 @@ const officialReportRows = computed(() => (officialReport.value?.students || [])
       : projectReasons[project.exclusion_reason] || scoreExclusionText(project.exclusion_reason) || '未记录原因' : null
   ])
 }))
+
+const officialReportRows = computed(() => officialReportGroups.value.flat())
 
 // 学院列表
 const faculties = ref([])
@@ -271,6 +273,18 @@ function exportCurrentTable() {
   if (!officialReportRows.value.length || loading.value) return
   const workbook = XLSX.utils.book_new()
   const sheet = XLSX.utils.aoa_to_sheet([reportColumns.map(([label]) => label), ...officialReportRows.value])
+  const merges = []
+  let firstRow = 1 // SheetJS uses zero-based coordinates. Row 0 is the header.
+  for (const rows of officialReportGroups.value) {
+    if (rows.length > 1) {
+      const lastRow = firstRow + rows.length - 1
+      studentReportColumns.forEach((_, column) => {
+        merges.push({ s: { r: firstRow, c: column }, e: { r: lastRow, c: column } })
+      })
+    }
+    firstRow += rows.length
+  }
+  sheet['!merges'] = merges
   XLSX.utils.book_append_sheet(workbook, sheet, '正式成绩报表')
   XLSX.writeFile(workbook, `统计报表_${officialReport.value.year}届.xlsx`)
 }
