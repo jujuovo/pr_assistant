@@ -3,10 +3,13 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 const source = readFileSync(new URL('../src/pages/teacher/reviews/TeacherCompetitionReview.vue', import.meta.url), 'utf8')
 
+const evidence = readFileSync(new URL('../src/pages/teacher/reviews/CompetitionReviewEvidence.vue', import.meta.url), 'utf8')
+
 test('competition reviewer exposes evidence sections and only approve/return actions', () => {
-  for (const heading of ['证明原件','OCR 原文（仅辅助）','学生确认事实','固定规则依据','后端候选分']) assert(source.includes(heading))
-  assert(source.includes("review('approve')")); assert(source.includes("review('return')"))
-  for (const forbidden of ['override_score','override_reason','rule_id','final_score','type="number"']) assert(!source.includes(forbidden))
+  assert(evidence.includes('ReviewEvidenceLayout'))
+  for (const heading of ['OCR 原文（仅辅助）','固定规则依据','后端候选分']) assert(evidence.includes(heading))
+  assert(evidence.includes("review('approve')")); assert(evidence.includes("review('return')"))
+  for (const forbidden of ['override_score','override_reason','rule_id','final_score','type="number"']) assert(!(source + evidence).includes(forbidden))
 })
 
 test('teacher history cards support material navigation without edit or merge controls', () => {

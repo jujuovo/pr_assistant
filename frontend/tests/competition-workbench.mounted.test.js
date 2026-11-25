@@ -177,22 +177,27 @@ describe('authoritative competition workbench projection', () => {
     expect(wrapper.text()).not.toContain('竞赛材料待审工作台')
     expect(wrapper.text()).not.toContain('授权学生汇总')
     expect(wrapper.text()).toContain('竞赛作品')
-    await wrapper.get('.pending-card button').trigger('click')
-    await flushPromises()
+    expect(wrapper.get('.material-review-card > h3').text()).toBe('学生 student001 · 材料 #1')
     expect(wrapper.text()).toContain('证明原件')
-    const preview = wrapper.get('.evidence-file img')
+    const preview = wrapper.get('.review-evidence-grid .thumbnail img')
     expect(preview.attributes('src')).toBe('/proof?inline=1')
     expect(preview.attributes('alt')).toContain('proof.jpg')
-    expect(wrapper.get('.evidence-file a').text()).toBe('下载原件')
-    expect(wrapper.text()).toContain('后端候选分 3.333')
+    expect(wrapper.get('.review-evidence-grid .attachment-downloads a').text()).toBe('下载原件')
+    const details = wrapper.get('.competition-review-details')
+    expect(details.element.open).toBe(false)
+    expect(details.get('summary').text()).toBe('计分依据与 OCR 详情')
+    details.element.open = true
+    expect(details.text()).toContain('后端候选分 3.333')
+    expect(wrapper.get('.material-review-actions').findAll('button').map(button => button.text()))
+      .toEqual(['核验通过', '退回补充'])
     expect(wrapper.text()).toContain('历史意见与状态')
     expect(wrapper.text()).toContain('首次提交')
-    expect(wrapper.text()).toContain('退回修改')
-    expect(wrapper.text()).toContain('审核通过')
-    await wrapper.get('#review-comment').setValue('请修改后重提')
+    expect(wrapper.text()).toContain('退回补充')
+    expect(wrapper.text()).toContain('核验通过')
+    await wrapper.get('#review-comment-1').setValue('请修改后重提')
     await wrapper
-      .findAll('.review-dialog footer button')
-      .find((button) => button.text().includes('退回修改'))
+      .findAll('.competition-evidence .material-review-actions button')
+      .find((button) => button.text().includes('退回补充'))
       .trigger('click')
     await flushPromises()
     expect(state.api.reviewCompetition).toHaveBeenCalledWith(
@@ -206,12 +211,10 @@ describe('authoritative competition workbench projection', () => {
 
     const approve = mount(TeacherCompetitionReview)
     await flushPromises()
-    await approve.get('.pending-card button').trigger('click')
-    await flushPromises()
-    await approve.get('#review-comment').setValue('材料核验通过')
+    await approve.get('#review-comment-1').setValue('材料核验通过')
     await approve
-      .findAll('.review-dialog footer button')
-      .find((button) => button.text().includes('审核通过'))
+      .findAll('.competition-evidence .material-review-actions button')
+      .find((button) => button.text().includes('核验通过'))
       .trigger('click')
     await flushPromises()
     expect(state.api.reviewCompetition).toHaveBeenCalledWith(
@@ -227,17 +230,15 @@ describe('authoritative competition workbench projection', () => {
   it('requires a reason when returning material and focuses the field', async () => {
     const wrapper = mount(TeacherCompetitionReview, { attachTo: document.body })
     await flushPromises()
-    await wrapper.get('.pending-card button').trigger('click')
-    await flushPromises()
     await wrapper
-      .findAll('.review-dialog footer button')
-      .find((button) => button.text().includes('退回修改'))
+      .findAll('.competition-evidence .material-review-actions button')
+      .find((button) => button.text().includes('退回补充'))
       .trigger('click')
     await flushPromises()
 
-    expect(wrapper.get('#review-comment-error').text()).toContain('退回修改时，请填写具体原因')
-    expect(wrapper.get('#review-comment').attributes('aria-invalid')).toBe('true')
-    expect(wrapper.get('#review-comment').element).toBe(document.activeElement)
+    expect(wrapper.get('#review-comment-1-error').text()).toContain('退回修改时，请填写具体原因')
+    expect(wrapper.get('#review-comment-1').attributes('aria-invalid')).toBe('true')
+    expect(wrapper.get('#review-comment-1').element).toBe(document.activeElement)
     expect(state.api.reviewCompetition).not.toHaveBeenCalled()
     wrapper.unmount()
   })
@@ -264,10 +265,8 @@ describe('authoritative competition workbench projection', () => {
     })
     const processed = mount(TeacherCompetitionReview)
     await flushPromises()
-    await processed.get('.pending-card button').trigger('click')
-    await flushPromises()
     expect(processed.text()).toContain('当前不可处理')
-    expect(processed.findAll('button').some((b) => b.text() === '审核通过')).toBe(false)
+    expect(processed.findAll('button').some((b) => b.text() === '核验通过')).toBe(false)
   })
 
   it('renders a successful empty teacher workbench', async () => {
@@ -315,7 +314,7 @@ describe('authoritative competition workbench projection', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('材料核验通过')
     expect(wrapper.text()).toContain('该材料当前不可处理')
-    expect(wrapper.findAll('button').some((b) => b.text() === '审核通过')).toBe(false)
+    expect(wrapper.findAll('button').some((b) => b.text() === '核验通过')).toBe(false)
   })
 })
 
@@ -339,15 +338,10 @@ it('requires explicit manual OCR confirmation before teacher approves', async ()
   })
   const w = mount(TeacherCompetitionReview)
   await flushPromises()
-  await w
-    .findAll('button')
-    .find((b) => b.text() === '核对材料')
-    .trigger('click')
-  await flushPromises()
   await w.get('textarea').setValue('核对原件与申报分数')
   await w
     .findAll('button')
-    .find((b) => b.text() === '审核通过')
+    .find((b) => b.text() === '核验通过')
     .trigger('click')
   await flushPromises()
   expect(state.api.reviewCompetition).not.toHaveBeenCalled()
@@ -355,7 +349,7 @@ it('requires explicit manual OCR confirmation before teacher approves', async ()
   await w.get('input[type=checkbox]').setValue(true)
   await w
     .findAll('button')
-    .find((b) => b.text() === '审核通过')
+    .find((b) => b.text() === '核验通过')
     .trigger('click')
   await flushPromises()
   expect(state.api.reviewCompetition.mock.calls[0].at(-1)).toBe(true)
@@ -365,12 +359,10 @@ it('requires explicit manual OCR confirmation before teacher approves', async ()
 it('approves without requiring review text', async () => {
   const w = mount(TeacherCompetitionReview)
   await flushPromises()
-  await w.get('.pending-card button').trigger('click')
-  await flushPromises()
-  expect(w.get('#review-comment').attributes('required')).toBeUndefined()
+  expect(w.get('#review-comment-1').attributes('required')).toBeUndefined()
   await w
-    .findAll('.review-dialog footer button')
-    .find((b) => b.text() === '审核通过')
+    .findAll('.competition-evidence .material-review-actions button')
+    .find((b) => b.text() === '核验通过')
     .trigger('click')
   await flushPromises()
   expect(state.api.reviewCompetition).toHaveBeenCalledWith(
@@ -416,8 +408,8 @@ it('filters existing history cards and restores them when the search is cleared'
   await flushPromises()
   expect(state.api.getCompetitionReviewContext).toHaveBeenCalledWith(10)
   const buttons = wrapper.get('dialog').findAll('button').map((button) => button.text())
-  expect(buttons).not.toContain('审核通过')
-  expect(buttons).not.toContain('退回修改')
+  expect(buttons).not.toContain('核验通过')
+  expect(buttons).not.toContain('退回补充')
   await wrapper.setProps({ keyword: 'missing-student' })
   await flushPromises()
   expect(wrapper.findAll('.pending-card')).toHaveLength(0)
@@ -488,5 +480,56 @@ it('hides empty search categories and reports an entirely empty group only after
     await input.setValue('')
     expect(visible()).toHaveLength(categories.length)
   }
+  wrapper.unmount()
+})
+
+it('loads each pending card independently and compares the stored OCR fields inline', async () => {
+  state.api.getCompetitionWorkbenchSummary.mockResolvedValue({
+    pending_count: 2,
+    items: [
+      { id: 11, version: 3, status: 'submitted', student_id: 'S1', project_name: '第一份作品' },
+      { id: 12, version: 7, status: 'submitted', student_id: 'S2', project_name: '第二份作品' }
+    ]
+  })
+  let retry = false
+  state.api.getCompetitionReviewContext.mockImplementation(async (id) => {
+    if (id === 12 && !retry) throw new Error('第二份详情加载失败')
+    return {
+      record_id: id,
+      material_version: id === 11 ? 3 : 7,
+      attachments: [],
+      confirmed_terms: { project_name: id === 11 ? '第一份作品' : '第二份作品' },
+      ocr_raw_terms: id === 11 ? { report: { fields: { project_name: 'OCR 第一份', award_date: '2027-05-02' } } } : null,
+      ocr_assessment: id === 11 ? {
+        differences: [{ field: 'project_name', declared: '第一份作品', recognized: 'OCR 第一份' }]
+      } : null,
+      rule_basis: { competition_name: '设计竞赛', category: 'A', package_version: 1 },
+      allowed_actions: ['approve', 'return']
+    }
+  })
+  const wrapper = mount(TeacherCompetitionReview, { props: { detailsActive: false } })
+  await flushPromises()
+  expect(state.api.getCompetitionReviewContext).not.toHaveBeenCalled()
+  await wrapper.setProps({ detailsActive: true })
+  await flushPromises()
+  const [first, second] = wrapper.findAll('.pending-card')
+  expect(first.get('table').text()).toContain('OCR 第一份')
+  expect(first.get('table').text()).toContain('2027-05-02')
+  expect(first.get('table').text()).toContain('不一致')
+  expect(second.get('[role="alert"]').text()).toContain('第二份详情加载失败')
+  expect(wrapper.find('dialog').exists()).toBe(false)
+
+  await first.get('textarea').setValue('第一份独立意见')
+  retry = true
+  await second.get('button').trigger('click')
+  await flushPromises()
+  expect(second.text()).toContain('暂无 OCR 结果')
+  await second.get('textarea').setValue('第二份退回理由')
+  await second.findAll('.material-review-actions button').find(button => button.text() === '退回补充').trigger('click')
+  await flushPromises()
+  expect(state.api.reviewCompetition).toHaveBeenCalledWith(
+    12, 7, 'return', '第二份退回理由', expect.any(String), undefined
+  )
+  expect(first.get('textarea').element.value).toBe('第一份独立意见')
   wrapper.unmount()
 })
