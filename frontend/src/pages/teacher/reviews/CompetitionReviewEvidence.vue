@@ -102,6 +102,7 @@ import ReviewCommentForm from '@/components/teacher/ReviewCommentForm.vue'
 import ReviewEvidenceLayout from '@/components/teacher/ReviewEvidenceLayout.vue'
 import MaterialReviewComparison from '@/components/teacher/MaterialReviewComparison.vue'
 import OcrAssessment from '@/components/common/OcrAssessment.vue'
+import { randomUuid } from '@/utils/uuid.js'
 
 const props = defineProps({
   recordId: { type: Number, required: true },
@@ -167,7 +168,7 @@ async function review(decision) {
       context.value.material_version,
       decision,
       comment.value,
-      crypto.randomUUID(),
+      randomUuid(),
       needsOcrConfirmation.value ? ocrConfirmed.value : undefined
     )
     context.value = { ...context.value, allowed_actions: [] }
