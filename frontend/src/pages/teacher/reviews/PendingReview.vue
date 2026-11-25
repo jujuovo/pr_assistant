@@ -3,7 +3,7 @@
     <div class="page-title">
       <h1>{{ history ? '审核记录' : '待审核申请' }}</h1>
     </div>
-    <details v-for="group in groups" :key="group.label" class="request-group">
+    <details v-for="group in groups" :key="group.label" class="request-group" @toggle="markExpanded(group.keys[0], $event)">
       <summary class="request-group-header">
         <span class="request-group-title">{{ group.label }}</span>
         <span v-if="!history" class="request-group-count">{{ groupStatus(group.keys) }}</span>
@@ -19,7 +19,7 @@
         <section v-for="key in group.keys" v-show="!history || !filters[group.keys[0]] || counts[key] !== 0"
           :key="key" class="review-category">
           <h2 v-if="group.keys.length > 1 || key === 'certification'">{{ categoryLabels[key] }}</h2>
-          <TeacherCompetitionReview v-if="key === 'competition'" :mode="history ? 'history' : 'pending'" :keyword="filters[group.keys[0]]" @pending-count="counts[key] = $event" />
+          <TeacherCompetitionReview v-if="key === 'competition'" :mode="history ? 'history' : 'pending'" :details-active="Boolean(expanded[group.keys[0]])" :keyword="filters[group.keys[0]]" @pending-count="counts[key] = $event" />
           <ManualMaterialReview v-else :fixed-category="key" :history="history" :keyword="filters[group.keys[0]]" compare-evidence @pending-count="counts[key] = $event" />
         </section>
       </div>
@@ -35,6 +35,11 @@ import TeacherCompetitionReview from './TeacherCompetitionReview.vue'
 
 defineProps({ history: Boolean })
 const inputs = reactive({})
+const expanded = reactive({})
+
+function markExpanded(key, event) {
+  if (event.target.open) expanded[key] = true
+}
 const filters = reactive({})
 
 function setKeyword(group, studentId) {

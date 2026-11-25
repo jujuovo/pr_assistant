@@ -10,7 +10,9 @@ test('legacy teacher review excludes competition applications and rules', () => 
 })
 
 test('competition teacher page uses only material APIs and authority-free payload', () => {
-  const source = readFileSync(new URL('../src/pages/teacher/reviews/TeacherCompetitionReview.vue', import.meta.url), 'utf8')
+  const source = ['TeacherCompetitionReview', 'CompetitionReviewEvidence']
+    .map(name => readFileSync(new URL(`../src/pages/teacher/reviews/${name}.vue`, import.meta.url), 'utf8'))
+    .join('\n')
   assert.match(source, /materialApi\.reviewCompetition/)
   for (const forbidden of ['getRules', '/rules', 'rule_id', 'self_score', 'final_score', 'dynamic_coefficients', 'override_score', 'override_reason']) assert(!source.includes(forbidden))
 })

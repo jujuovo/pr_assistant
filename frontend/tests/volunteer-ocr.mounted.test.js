@@ -182,7 +182,7 @@ test('teacher sees priority appeal before ordinary material and may approve with
   mocks.api.listRecords.mockResolvedValue({
     records: [{ ...appeal, id: 32, priority_review: false, appeal: null }, appeal]
   })
-  const w = render(Review)
+  const w = render(Review, { compareEvidence: true })
   await flushPromises()
   await w.get('select').setValue('volunteer')
   await flushPromises()
@@ -190,6 +190,10 @@ test('teacher sees priority appeal before ordinary material and may approve with
   expect(w.text()).toContain('申诉材料 · 重点核验')
   expect(w.text()).toContain('请重点核对图片中的202小时')
   expect(w.text()).toContain('普通志愿服务工时与申报信息不一致')
+  expect(w.get('.volunteer-assessment tbody').text()).toContain('200')
+  expect(w.text()).toContain('证明原件')
+  expect(w.text()).not.toContain('学生申报与 OCR 对照')
+  expect(w.text()).not.toContain('暂无 OCR 结果')
   await button(w.findAll('article')[0], '核验通过').trigger('click')
   await flushPromises()
   expect(mocks.api.review).toHaveBeenCalledWith('volunteer', 31, 4, 'verified', '')
