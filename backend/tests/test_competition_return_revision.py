@@ -53,6 +53,10 @@ def test_returned_material_creates_new_version_and_preserves_original_history(en
     assert original.status == 'needs_correction'
     assert original.competition_duplicate_digest is None
     assert any(event.details.get('comment') == '请核对作品名称' for event in original.events)
+    correction_event = MaterialEvent.query.filter_by(
+        record_id=corrected.id, action='competition_correction_version_created'
+    ).one()
+    assert correction_event.details['supersedes_record_id'] == original.id
 
 
 def test_returned_material_can_be_abandoned_without_deleting_history(env):
