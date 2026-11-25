@@ -77,17 +77,15 @@ migrate = Migrate(app, db)
 session.init_app(app)
 
 # 先创建数据库对象，再导入模型
-from models import User, Application, Rule
+from models import User, Rule
 import ocr_models  # 注册分类OCR任务
 import material_models  # 五类结构化材料接口
-import certificate_models  # 注册独立证书识别任务
 import automation_models  # 注册新增材料、任务、去重、政策及审计表
 import workflow_models  # 注册材料到排名工作流的版本化领域模型
 
 # 导入并注册蓝图
 from blueprints.auth_bp import auth_bp
 from blueprints.user_bp import user_bp
-from blueprints.application_bp import application_bp
 from blueprints.rule_bp import rule_bp
 from blueprints.admin_bp import admin_bp
 from blueprints.public_bp import public_bp
@@ -254,7 +252,6 @@ def uploaded_app_file(filename):
 app.register_blueprint(public_bp, url_prefix='/api/public')  # 公开接口蓝图，无需认证
 app.register_blueprint(auth_bp, url_prefix='/api')
 app.register_blueprint(user_bp, url_prefix='/api')
-app.register_blueprint(application_bp)  # application_bp 已经在定义时设置了 url_prefix='/api'
 app.register_blueprint(rule_bp, url_prefix='/api')
 app.register_blueprint(admin_bp)
 app.register_blueprint(score_bp)  # score_bp 已经在定义时设置了 url_prefix='/api'
@@ -262,8 +259,6 @@ app.register_blueprint(organization_bp)  # organization_bp 已经在定义时设
 app.register_blueprint(system_bp)  # system_bp 已经在定义时设置了 url_prefix='/api/system'
 app.register_blueprint(workflow_bp)
 app.register_blueprint(main_bp, url_prefix='/api')
-from blueprints.certificate_bp import certificate_bp
-app.register_blueprint(certificate_bp)
 from blueprints.material_bp import material_bp
 app.register_blueprint(material_bp)
 from blueprints.ocr_bp import ocr_bp

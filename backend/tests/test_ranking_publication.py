@@ -4,7 +4,8 @@ from decimal import Decimal
 import pytest
 
 from extensions import db
-from models import Application, Student, User
+from models import Student, User
+from material_models import MaterialRecord
 from use_cases.ranking import (
     RankingUseCaseError, create_successor_draft, freeze_ranking_batch, generate_ranking_draft,
     publish_ranking_batch, withdraw_ranking_batch,
@@ -40,14 +41,10 @@ def test_freeze_blocks_permission_stale_and_reconciliation(env):
     with pytest.raises(RankingUseCaseError): freeze_ranking_batch(admin,batch,batch.version)
 
 
-def test_freeze_automatically_blocks_unmapped_historical_application(env):
+def test_freeze_automatically_blocks_unconfirmed_material(env):
     student,batch,admin=_draft(env)
-    db.session.add(Application(
-        student_id=student.student_id, student_name=student.student_name,
-        faculty_id=student.faculty_id, department_id=student.department_id,
-        major_id=student.major_id, application_type="academic",
-        project_name="无法证明周期的历史项目", status="approved", final_score=2,
-    ))
+    db.session.add(MaterialRecord(student_id=student.student_id, faculty_id=student.faculty_id,
+        category="honor", year=batch.year, status="submitted", data={}, analysis={}))
     db.session.commit()
     with pytest.raises(RankingUseCaseError) as error:
         freeze_ranking_batch(admin,batch,1)

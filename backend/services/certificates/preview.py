@@ -8,7 +8,8 @@ from pathlib import Path
 import pytz
 from flask import abort, current_app
 from extensions import db
-from models import Application, Student, Rule, SystemSettings
+from legacy_models import Application
+from models import Student, Rule, SystemSettings
 from certificate_models import CertificateAssessment
 from automation_models import utcnow
 from services.actors import actor

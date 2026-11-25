@@ -3,7 +3,8 @@ from datetime import date
 from certificate_models import CertificateAssessment
 from conftest import login
 from extensions import db
-from models import Application, Rule, User
+from legacy_models import Application
+from models import Rule, User
 from use_cases.cycles import activate_cycle_policy, create_cycle_policy
 from use_cases.rule_versions import publish_rule_version
 from workflow_models import ScoreEntry, ScoreOverrideAudit, StudentScoreSnapshot

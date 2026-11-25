@@ -2,7 +2,7 @@
 from flask import Blueprint, abort, current_app, jsonify, request, send_file
 from werkzeug.exceptions import HTTPException
 from extensions import db
-from models import Application
+from legacy_models import Application
 from certificate_models import CertificateAssessment
 from services.actors import actor
 from services.certificates.service import (CATALOG, authorize_application, enqueue, view,

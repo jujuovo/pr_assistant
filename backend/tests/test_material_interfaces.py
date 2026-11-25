@@ -7,7 +7,8 @@ import pytest
 
 pytestmark = pytest.mark.usefixtures("active_honor_rule")
 from extensions import db
-from models import Student, Application, User
+from legacy_models import Application
+from models import Student, User
 from material_models import MaterialRecord, MaterialSource, MaterialAttachment
 from automation_models import AutomationBatch
 from certificate_models import CertificateAssessment
@@ -211,8 +212,14 @@ def test_application_link_projects_authoritative_score_and_prevents_delete(env):
                             department_id=student.department_id,major_id=student.major_id,
                             application_type='academic',project_name='材料测试',status='pending',self_score=3)
     db.session.add(application); db.session.commit()
-    row=create(env,application_id=application.id)
-    assert row['application_id']==application.id
+    login(env[1], env[2]['student'])
+    blocked = env[1].post('/api/materials/honor/records', json={
+        'year': 2026, 'data': SAMPLES['honor'], 'application_id': application.id})
+    assert blocked.status_code == 409 and MaterialRecord.query.count() == 0
+    row = create(env)
+    # Seed a historical association directly, as it existed before retirement.
+    db.session.get(MaterialRecord, row['id']).application_id = application.id
+    db.session.commit()
     assert env[1].post(endpoint(row,'submit'),json={'version':1}).status_code==200
     login(env[1],env[2]['admin'])
     assert env[1].post(endpoint(row,'review'),json={'version':2,'decision':'verified','comment':'人工核验'}).status_code==200

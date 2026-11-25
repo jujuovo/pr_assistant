@@ -1,12 +1,22 @@
 """旧管理删除入口的材料保护：数据库成功提交后才清理普通申请附件。"""
 import os
 from pathlib import Path
-from flask import current_app, jsonify
-from sqlalchemy import or_
+from flask import abort, current_app, jsonify
+from sqlalchemy import inspect, or_
 from sqlalchemy.exc import IntegrityError
 from extensions import db
 from models import Student
 from automation_models import AutomationBatch, AutomationFingerprint, AutomationPolicy, AutomationReview
+
+
+def archived_rows_for_deletion(**scope):
+    """Preserve legacy attachments if an installation has not finished upgrading."""
+    if not inspect(db.session.connection()).has_table("application"):
+        return []
+    if "application" not in db.metadata.tables:
+        abort(409, description="该数据库尚未完成旧申请迁移，暂不能删除关联账号或组织")
+    from legacy_models import Application
+    return Application.query.filter_by(**scope).all()
 
 
 def automation_deletion_conflict(students=(), users=(), *, faculty_id=None, applications=()):

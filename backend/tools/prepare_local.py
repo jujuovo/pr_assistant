@@ -171,7 +171,6 @@ def main(database_file=None, competition_package_file=None, skip_demo_accounts=F
     additions = {'system_settings': {'avatar_file_size_limit':'INTEGER DEFAULT 2'},
                  'rule': {'faculty_id':'INTEGER REFERENCES faculty(id)', 'calculation_formula':'JSON',
                           'total_score_cap':'NUMERIC(12, 4)'},
-                 'application': {'dynamic_coefficients':'JSON'},
                  'ocr_job': {'material_record_id':'INTEGER REFERENCES material_record(id)',
                              'material_version':'INTEGER', 'attachment_id':'INTEGER REFERENCES material_attachment(id)'}}
     try:
@@ -224,7 +223,7 @@ def main(database_file=None, competition_package_file=None, skip_demo_accounts=F
                 f'{competition_context["catalog"]["count"]} 项，'
                 f'{"新建" if package_created else "复用"} current 包。'
             )
-            print('证书表已创建；识别结果不会修改申请分数。')
+            print('材料申报与 OCR 队列已就绪。')
     except Exception:
         with app.app_context():
             db.session.rollback()

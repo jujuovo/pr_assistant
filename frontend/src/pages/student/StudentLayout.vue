@@ -21,7 +21,6 @@
           v-else-if="sectionPages.includes(currentPage)"
           :page="currentPage"
           @navigate="switchPage"
-          @edit="handleEditApplication"
         />
         <ApplicationCategories
           v-else-if="currentPage === 'application-categories'"
@@ -30,12 +29,6 @@
         />
         <AcademicPerformance
           v-else-if="currentPage === 'academic-performance'"
-          @back-to-categories="backToApplicationCategories"
-        />
-        <ApplicationForm
-          v-else-if="currentPage === 'application-form'"
-          :edit-application-id="editApplicationId"
-          :selected-category="selectedCategory"
           @back-to-categories="backToApplicationCategories"
         />
         <component
@@ -58,15 +51,13 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 import { useToastStore } from '@/stores/toast.js'
-import { useApplicationsStore } from '@/stores/applications.js'
 import Header from '@/components/common/Header.vue'
 import StudentNavigation from '@/components/student/StudentNavigation.vue'
 import Home from '@/pages/student/home/Home.vue'
 import HomeSections from '@/pages/student/home/HomeSections.vue'
 import ApplicationCategories from '@/pages/student/applications/ApplicationCategories.vue'
 import AcademicPerformance from '@/pages/student/applications/AcademicPerformance.vue'
-const sectionPages = ['regulations', 'my-forms', 'submit-revision', 'feedback']
-import ApplicationForm from '@/pages/student/applications/ApplicationForm.vue'
+const sectionPages = ['regulations', 'feedback']
 import StudentMaterialsHub from '@/pages/student/applications/StudentMaterialsHub.vue'
 import Statistics from '@/pages/student/statistics/Statistics.vue'
 import Profile from '@/pages/common/profile/Profile.vue'
@@ -78,11 +69,13 @@ const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 const toastStore = useToastStore()
-const applicationsStore = useApplicationsStore()
 
-const currentPage = ref(route.query.page || 'home')
-const editApplicationId = ref(null)
-const selectedCategory = ref(null)
+function resolvePage(page) {
+  if (page === 'application-form') return 'application-categories'
+  if (page === 'my-forms' || page === 'submit-revision') return 'application-record'
+  return page || 'home'
+}
+const currentPage = ref(resolvePage(route.query.page))
 
 const pageComponents = {
   'application-record': StudentMaterialsHub,
@@ -118,14 +111,7 @@ const handleSidebarToggle = (isOpen) => {
 
 // 切换页面
 const switchPage = (page) => {
-  if (page === 'application-form') {
-    editApplicationId.value = null
-    selectedCategory.value = null
-    if (currentPage.value === 'application-categories') return
-    currentPage.value = 'application-categories'
-    router.push({ query: { page: 'application-categories' } })
-    return
-  }
+  page = resolvePage(page)
   if (page === currentPage.value) return
   currentPage.value = page
   router.push({ query: { page } })
@@ -134,13 +120,11 @@ const switchPage = (page) => {
 watch(
   () => route.query.page,
   (page) => {
-    if (page) currentPage.value = page
+    currentPage.value = resolvePage(page)
   }
 )
 
 const openApplicationForm = (category) => {
-  selectedCategory.value = category
-  editApplicationId.value = null
   const query = submissionQuery(category.key)
   currentPage.value = query.page
   if (route.query.page === query.page && route.query.category === query.category) return
@@ -148,8 +132,6 @@ const openApplicationForm = (category) => {
 }
 
 const backToApplicationCategories = () => {
-  selectedCategory.value = null
-  editApplicationId.value = null
   currentPage.value = 'application-categories'
   router.replace({ query: { page: 'application-categories' } })
 }
@@ -161,25 +143,11 @@ const goToProfile = () => {
   router.push({ query: { ...route.query, page: 'profile' } })
 }
 
-// 处理编辑申请
-const handleEditApplication = (applicationId) => {
-  editApplicationId.value = applicationId
-  selectedCategory.value = null
-  if (currentPage.value === 'application-form' && route.query.page === 'application-form') return
-  currentPage.value = 'application-form'
-  router.push({ query: { ...route.query, page: 'application-form' } })
-}
-
 // 权限验证和数据加载
 onMounted(() => {
   if (authStore.role !== 'student') {
     toastStore.error('您没有权限访问学生端')
     router.push('/login')
-  } else {
-    // 确保数据已加载
-    if (applicationsStore.applications.length === 0) {
-      applicationsStore.fetchApplications()
-    }
   }
 })
 </script>

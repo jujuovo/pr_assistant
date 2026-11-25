@@ -18,7 +18,8 @@ def test_legacy_exit_gate_blocks_until_every_condition_is_clear():
 
 def test_legacy_fields_and_compatibility_endpoints_remain_present():
     from pathlib import Path
-    from models import Application, Student
+    from legacy_models import Application
+    from models import Student
 
     assert "final_score" in Application.__table__.c
     assert {"academic_specialty_total", "comprehensive_performance_total",

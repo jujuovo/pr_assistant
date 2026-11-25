@@ -564,8 +564,8 @@ def score_verified_material(row, review_key, *, actor=None, override_score=None,
         ))
     snapshot, _created = rebuild_student_snapshot(row.student_id, row.year)
     student = Student.query.filter_by(student_id=row.student_id).one()
-    if version.snapshot.get("total_score_cap") is None and row.application_id:
-        from models import Application
+    if version.snapshot.get("total_score_cap") is None and getattr(row, "application_id", None):
+        from legacy_models import Application
         application = db.session.get(Application, row.application_id)
         if application:
             application.status = "approved"

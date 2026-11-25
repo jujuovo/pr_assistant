@@ -29,7 +29,7 @@ async function verifyScore(studentId, recordId, expected) {
   assert.equal(entry.group, 'academic')
   assert.equal(Number(entry.candidateScore), expected)
   assert.equal(Number(entry.includedScore), expected)
-  assert.ok(dto.faculty_scoring_policy?.title)
+  assert.equal(Boolean(dto.faculty_scoring_policy?.title), config.publishedPolicy)
   assert.equal(Number(dto.categories.academic.effective_score), expected)
   assert.equal(Number(dto.comprehensive_score), Number((60.8 + expected).toFixed(4)))
   return dto
@@ -117,7 +117,9 @@ if (config.phase === 'matrix') {
   for (const sample of samples) {
     const student = report.students.find(s => s.student_id === config.students[sample.role])
     assert.equal(Number(student.academic_total), sample.expected)
-    assert.equal(Number(student.items[0].included_score), sample.expected)
+    assert.equal(student.projects.length, 1)
+    assert.equal(student.projects[0].category, 'competition')
+    assert.equal(Number(student.projects[0].score), sample.expected)
   }
   identity = 'work'
   const work = await materialApi.createManualRecord('student_work', 2028, {

@@ -8,7 +8,7 @@ from sqlalchemy import delete, func, select
 
 from extensions import db
 from material_models import CompetitionOcrJob, MaterialAttachment, MaterialEvent, MaterialRecord
-from models import Application, Rule
+from models import Rule
 from use_cases.competition_rules import load_current_competition_package
 from workflow_models import CompetitionRulePackage, ScoreEntry
 
@@ -32,6 +32,7 @@ def _competition_material_ids():
 
 
 def _legacy_competition_application_ids():
+    from legacy_models import Application
     return (
         select(Application.id)
         .join(Rule, Application.rule_id == Rule.id)
@@ -41,7 +42,7 @@ def _legacy_competition_application_ids():
 
 def preview_competition_reset():
     material_ids = _competition_material_ids()
-    legacy_ids = _legacy_competition_application_ids()
+    legacy_ids = _legacy_competition_application_ids() if "application" in db.metadata.tables else None
     return {
         "competition_ocr_jobs": db.session.scalar(
             select(func.count()).select_from(CompetitionOcrJob).where(
@@ -69,10 +70,8 @@ def preview_competition_reset():
             )
         ),
         "legacy_competition_applications": db.session.scalar(
-            select(func.count()).select_from(Application).where(
-                Application.id.in_(legacy_ids)
-            )
-        ),
+            select(func.count()).select_from(legacy_ids.subquery())
+        ) if legacy_ids is not None else 0,
         "competition_rule_packages": db.session.scalar(
             select(func.count()).select_from(CompetitionRulePackage)
         ),
@@ -127,7 +126,9 @@ def reset_and_initialize_competition_2028(
     db.session.execute(delete(MaterialAttachment).where(MaterialAttachment.record_id.in_(material_ids)))
     db.session.execute(delete(ScoreEntry).where(ScoreEntry.category == "competition"))
     db.session.execute(delete(MaterialRecord).where(MaterialRecord.category == "competition"))
-    db.session.execute(delete(Application).where(Application.id.in_(_legacy_competition_application_ids())))
+    if preview["legacy_competition_applications"]:
+        from legacy_models import Application
+        db.session.execute(delete(Application).where(Application.id.in_(_legacy_competition_application_ids())))
     db.session.execute(delete(CompetitionRulePackage))
     package, created = load_current_competition_package(actor, desired)
     db.session.flush()

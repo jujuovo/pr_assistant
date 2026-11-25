@@ -4,7 +4,8 @@ import pytest
 
 from extensions import db
 from material_models import MaterialRecord
-from models import Application, Rule, User
+from legacy_models import Application
+from models import Rule, User
 from use_cases.cycles import (
     CycleUseCaseError,
     activate_cycle_policy,

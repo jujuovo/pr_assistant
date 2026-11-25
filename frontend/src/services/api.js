@@ -160,21 +160,6 @@ export default {
   },
   changePassword: (data) => apiRequest('/user/change-password', 'POST', data),
 
-  // 申请相关
-  getApplications: (filters) => {
-    const filteredParams = { ...filters }
-    // 排除值为'all'的参数
-    Object.keys(filteredParams).forEach((key) => {
-      if (filteredParams[key] === 'all') {
-        delete filteredParams[key]
-      }
-    })
-    const queryParams = new URLSearchParams(filteredParams).toString()
-    return apiRequest(`/applications?${queryParams}`)
-  },
-  createApplication: (data) => apiRequest('/applications', 'POST', data),
-  updateApplication: (id, data) => apiRequest(`/applications/${id}`, 'PUT', data),
-
   getStatistics: (studentId) => apiRequest(`/students/statistics?studentId=${studentId}`),
 
   // 规则管理相关

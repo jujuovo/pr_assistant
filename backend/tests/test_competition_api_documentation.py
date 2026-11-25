@@ -7,7 +7,8 @@ def test_competition_contract_documents_new_authority_and_legacy_boundary():
     operations = (root / "docs/competition-2028-operations.md").read_text(encoding="utf-8")
     assert "MaterialRecord -> CompetitionRulePackage -> ScoreEntry" in api
     assert "competition_material_route_required" in api
-    assert "尚未迁移类别" in api and "退出条件" in api
+    assert "已下线 `/api/applications`" in api
+    assert "docs/legacy-application-exit.md" in api
     assert "RESET-COMPETITION-2028" in operations
     assert "SQLite 结果不得替代 PostgreSQL" in operations
 
