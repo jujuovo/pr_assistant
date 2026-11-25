@@ -358,6 +358,7 @@ import { ref, reactive, computed, watch } from 'vue'
 import CertificateReport from './CertificateReport.vue'
 import { useToastStore } from '@/stores/toast.js'
 import { getFileFullUrl } from '@/services/api.js'
+import { randomUuid } from '@/utils/uuid.js'
 
 const toastStore = useToastStore()
 
@@ -1125,7 +1126,7 @@ const onPreviewImageLoad = () => {
 const approveApplication = () => {
   emit('approve', {
     approveComment: reviewData.approveComment,
-    idempotencyKey: crypto.randomUUID(),
+    idempotencyKey: randomUuid(),
     applicationId: props.application.id
   })
 }

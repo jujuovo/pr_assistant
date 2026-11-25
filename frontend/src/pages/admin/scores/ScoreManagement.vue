@@ -532,6 +532,7 @@ import { buildStudentBaseUpdate } from '@/services/adminScorePresentation.js'
 import { useApplicationsStore } from '@/stores/applications.js'
 import { useToastStore } from '@/stores/toast.js'
 import { useAuthStore } from '@/stores/auth.js'
+import { randomUuid } from '@/utils/uuid.js'
 
 export default {
   name: 'ScoreManagement',
@@ -1042,7 +1043,7 @@ export default {
           scope: preview.scope,
           preview_digest: preview.preview_digest,
           preview_expires_at: preview.preview_expires_at,
-          idempotency_key: crypto.randomUUID()
+          idempotency_key: randomUuid()
         })
         await this.loadScoresFromAPI()
         this.toastStore.success('综合成绩重算完成')
