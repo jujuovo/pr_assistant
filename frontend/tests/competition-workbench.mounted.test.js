@@ -143,7 +143,7 @@ describe('authoritative competition workbench projection', () => {
       }
     })
     await flushPromises()
-    expect(wrapper.text()).toContain('1 份竞赛材料待审核。')
+    expect(wrapper.text()).toContain('1份材料待审核')
     expect(wrapper.text()).not.toContain('非竞赛材料待审核')
   })
 

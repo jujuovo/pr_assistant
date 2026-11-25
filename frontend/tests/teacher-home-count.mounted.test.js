@@ -37,7 +37,7 @@ test.each([[1, 6, 7], [0, 1, 1], [1, 0, 1], [0, 0, 0]])(
     const wrapper = mount(RoleHome, { props: { role: 'teacher' }, global: { stubs } })
     await flushPromises()
 
-    expect(wrapper.get('.action-count').text()).toBe(`${total} 份竞赛材料待审核。`)
+    expect(wrapper.get('.action-count').text()).toBe(`${total}份材料待审核`)
     expect(wrapper.text()).not.toContain('非竞赛材料待审核')
     wrapper.unmount()
   }
@@ -51,5 +51,5 @@ test('教师主页不计入旧兼容申请', async () => {
   const wrapper = mount(RoleHome, { props: { role: 'teacher' }, global: { stubs } })
   await flushPromises()
 
-  expect(wrapper.text()).toContain('1 份竞赛材料待审核。')
+  expect(wrapper.text()).toContain('1份材料待审核')
 })

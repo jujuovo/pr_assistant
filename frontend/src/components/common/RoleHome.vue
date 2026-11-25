@@ -8,7 +8,7 @@
         <p v-if="competitionLoading || materialLoading" role="status">正在读取待审核材料数量…</p>
         <p v-else-if="competitionError || materialError" role="alert">暂时无法获取待审核材料总数。</p>
         <p v-else>
-          <strong class="action-count od-nowrap">{{ pendingCount }} 份竞赛材料待审核。</strong>
+          <strong class="action-count od-nowrap">{{ pendingCount }}份材料待审核</strong>
         </p>
       </template>
       <template #action>
