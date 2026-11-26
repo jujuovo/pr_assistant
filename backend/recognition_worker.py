@@ -15,12 +15,10 @@ def main():
     with app.app_context():
         while True:
             try:
-                from services.certificates.worker import run_one_certificate
-                certificate_processed = run_one_certificate(app, provider)
                 volunteer_processed = run_one(app, provider)
                 from services.competition_ocr.worker import run_one_ocr
                 ocr_processed = run_one_ocr(app, provider)
-                processed = certificate_processed or volunteer_processed or ocr_processed
+                processed = volunteer_processed or ocr_processed
             except Exception:
                 db.session.rollback()
                 app.logger.exception("识别工作进程异常，任务租约到期后可恢复")

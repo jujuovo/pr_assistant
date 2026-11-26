@@ -19,7 +19,6 @@ from models import (
     Department,
     Major,
     Student,
-    Application,
     SystemSettings,
     FacultyScoreSettings,
 )
@@ -50,6 +49,7 @@ def update_student_statistics(student_id, commit=True):
     :return: 更新后的统计数据
     """
     # 查询学生的所有已通过申请
+    from legacy_models import Application
     applications = Application.query.filter_by(
         student_id=student_id, status="approved"
     ).all()
@@ -293,27 +293,32 @@ def get_students_ranking():
                     student.major_ranking = i + 1
                 student.total_students = total_students
 
-        # 获取所有学生的加分申请
-        student_applications = {}
-        for student in students:
-            # 获取该学生通过的学术专长申请
-            academic_applications = Application.query.filter_by(
-                student_id=student.student_id,
-                application_type="academic",
-                status="approved",
-            ).all()
+        from collections import defaultdict
+        from material_models import MaterialRecord
+        from workflow_models import ScoreEntry
+        from use_cases.cycles import current_cycle_policy
 
-            # 获取该学生通过的综合表现申请
-            comprehensive_applications = Application.query.filter_by(
-                student_id=student.student_id,
-                application_type="comprehensive",
-                status="approved",
-            ).all()
-
-            student_applications[student.id] = {
-                "academic": academic_applications,
-                "comprehensive": comprehensive_applications,
-            }
+        items = defaultdict(list)
+        cycle = current_cycle_policy(required=False)
+        if cycle and students:
+            results = db.session.query(ScoreEntry, MaterialRecord).join(
+                MaterialRecord, ScoreEntry.material_record_id == MaterialRecord.id
+            ).filter(
+                ScoreEntry.year == cycle.cycle_code, ScoreEntry.status == "active",
+                ScoreEntry.student_id.in_([student.student_id for student in students]),
+                MaterialRecord.student_id == ScoreEntry.student_id,
+                MaterialRecord.faculty_id == ScoreEntry.faculty_id,
+            ).order_by(ScoreEntry.id)
+            for entry, record in results:
+                facts = record.data or {}
+                items[(entry.student_id, entry.score_group)].append({
+                    "project_name": facts.get("project_name") or facts.get("competition_name") or facts.get("honor_name") or record.category,
+                    "award_time": facts.get("award_date"),
+                    "self_eval_score": None,
+                    "score_basis": facts.get("description"),
+                    "college_approved_score": float(entry.adjusted_score),
+                    "total_score": float(entry.effective_score) if entry.included else 0,
+                })
 
         # 按学生ID分组统计
         student_stats = {}
@@ -360,37 +365,9 @@ def get_students_ranking():
                 "final_score": student.comprehensive_score or 0.0,
                 "sequence": 0,
                 # 添加加分项目信息
-                "academicItems": [],
-                "comprehensiveItems": [],
+                "academicItems": items[(student.student_id, "academic")],
+                "comprehensiveItems": items[(student.student_id, "comprehensive")],
             }
-
-            # 添加学术专长申请数据
-            for app in student_applications[student_id]["academic"]:
-                academic_item = {
-                    "project_name": app.project_name,
-                    "award_time": (
-                        app.award_date.isoformat() if app.award_date else None
-                    ),
-                    "self_eval_score": app.self_score,
-                    "score_basis": app.description,
-                    "college_approved_score": app.final_score,
-                    "total_score": app.final_score,
-                }
-                student_info["academicItems"].append(academic_item)
-
-            # 添加综合表现申请数据
-            for app in student_applications[student_id]["comprehensive"]:
-                comprehensive_item = {
-                    "project_name": app.project_name,
-                    "award_time": (
-                        app.award_date.isoformat() if app.award_date else None
-                    ),
-                    "self_eval_score": app.self_score,
-                    "score_basis": app.description,
-                    "college_approved_score": app.final_score,
-                    "total_score": app.final_score,
-                }
-                student_info["comprehensiveItems"].append(comprehensive_item)
 
             student_stats[student_id] = student_info
 
@@ -628,10 +605,11 @@ def get_student_statistics():
         ranking = "-"
         major_total_students = 0
 
-    # 查询学生的所有已通过申请
-    applications = Application.query.filter_by(
-        student_id=student_id, status="approved"
-    ).all()
+    from material_models import MaterialRecord
+    approved_count = MaterialRecord.query.filter(
+        MaterialRecord.student_id == student_id,
+        MaterialRecord.status.in_(("scored", "verified", "verified_not_eligible")),
+    ).count()
 
     # 构建响应数据
     # 注意：这里使用下划线命名以匹配前端期望的格式
@@ -645,7 +623,7 @@ def get_student_statistics():
         "comprehensive_score": round(comprehensive_score, 2),
         "ranking": ranking,
         "major_total_students": major_total_students,
-        "approved_count": len(applications),
+        "approved_count": approved_count,
         "faculty_id": student.faculty_id if student else None,
     }
 

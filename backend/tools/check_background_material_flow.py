@@ -17,7 +17,8 @@ def run(database, real_ocr=False):
     main(database)
     from app import app
     from extensions import db
-    from models import User, Application
+    from models import User
+    from sqlalchemy import inspect
     from material_models import MaterialRecord
     from workflow_models import ScoreEntry
     from services.competition_ocr.worker import run_one_ocr
@@ -59,7 +60,7 @@ def run(database, real_ocr=False):
         with client.session_transaction() as session:session['user_id']=admin.id
         admin_result=client.get(path)
         assert admin_result.status_code==200 and admin_result.json['workflow_state']=='approved'
-        assert MaterialRecord.query.count()==ScoreEntry.query.count()==1 and Application.query.count()==0
+        assert MaterialRecord.query.count()==ScoreEntry.query.count()==1 and not inspect(db.engine).has_table("application")
         result={'database':str(database),'real_ocr':real_ocr,'api_journey':['single_upload:201','queue_persisted','worker_completed','ready_to_submit','submit:200','teacher_context:200','teacher_approve:200','admin_read:200'],'record_id':row['id'],'score_entries':1,'legacy_applications':0,'assessment':ready['ocr_assessment'],'recognized_fields':ready['ocr_raw_terms']['report']['fields'],'browser_verified':False}
         output=database.with_suffix('.json');output.write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8')
         print('Fresh API journey passed; evidence:',output)

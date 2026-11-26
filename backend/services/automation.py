@@ -9,7 +9,7 @@ from flask import abort, session
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import defer, joinedload, selectinload
 from extensions import db
-from models import User, Application, Student, Rule
+from models import User, Student, Rule
 from workflow_models import RuleVersion
 from automation_models import (AutomationBatch, AutomationItem, AutomationPolicy,
                                AutomationFingerprint, AutomationReview)
@@ -390,6 +390,7 @@ def preview(batch, item_ids=None):
         if "final_score" in snapshot:
             final_score = round_score(Decimal(snapshot["final_score"]))
         else:
+            from legacy_models import Application
             application = db.session.get(Application, batch.application_id)
             if application and application.final_score is not None:
                 final_score = round_score(Decimal(str(application.final_score)))
@@ -424,6 +425,7 @@ def recalculate_year(batch):
     ).filter_by(student_id=batch.student_id, faculty_id=batch.faculty_id,
                 year=batch.year, status="approved").order_by(AutomationBatch.id).all()
     # 用关联查询而非不断增长的 IN 参数表，大量历史批次也不会触及绑定参数上限。
+    from legacy_models import Application
     applications = {application.id: application for application in Application.query.join(
         AutomationBatch, AutomationBatch.application_id == Application.id
     ).filter(AutomationBatch.student_id == batch.student_id, AutomationBatch.faculty_id == batch.faculty_id,
@@ -464,6 +466,7 @@ def review_batch(batch, data):
     if not isinstance(data, dict):
         abort(400, description="审核数据必须是对象")
     claim_transition(batch, data.get("version"), ("submitted", "approved"))
+    from legacy_models import Application
     application = db.session.get(Application, batch.application_id)
     decision = data.get("status")
     if decision not in ("approved", "rejected"):

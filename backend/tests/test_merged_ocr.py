@@ -12,7 +12,8 @@ from sqlalchemy import inspect
 from automation_models import utcnow
 from conftest import login
 from extensions import db
-from models import Application, User
+from legacy_models import Application
+from models import User
 from ocr_models import OCRJob
 from services.competition_ocr.jobs import job_root
 from services.competition_ocr.worker import run_one_ocr

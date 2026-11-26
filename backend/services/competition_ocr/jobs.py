@@ -7,7 +7,7 @@ from flask import abort, current_app
 from extensions import db
 from ocr_models import OCRJob
 from services.actors import actor
-from services.certificates.service import contained
+from services.private_paths import contained
 from .catalog import category, IMAGE_EXTENSIONS
 from .service import MAX_BYTES, _decode
 
@@ -54,7 +54,7 @@ def job_view(row):
             "mapping": None if row.category == "volunteer" else suggestions(row.category, row.report, package),
             "material_record_id": material.id if material else None,
             "material_url": f"/api/materials/{material.category}/records/{material.id}" if material else None,
-            "application_id": material.application_id if material else None,
+            "application_id": getattr(material, "application_id", None),
             "result_url": f"/api/ocr/jobs/{row.id}",
             "artifact_urls": {key: f"/api/ocr/jobs/{row.id}/images/{key}"
                               for key in (row.report or {}).get("images", {})}}

@@ -5,7 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from services.competition_ocr.mapping import TARGETS
 from extensions import db
 from services.actors import actor
-from services.certificates.service import contained
+from services.private_paths import contained
 from services.competition_ocr.catalog import CATEGORIES
 from services.competition_ocr.paths import file_sha256
 from services.competition_ocr.jobs import authorized_job, enqueue, job_root, job_view

@@ -1,7 +1,8 @@
 from datetime import date
 
 from extensions import db
-from models import Application, Rule, Student
+from legacy_models import Application
+from models import Rule, Student
 from use_cases.migration import legacy_reconciliation_report
 from use_cases.scoring import adapt_legacy_application
 from workflow_models import RuleVersion

@@ -4,7 +4,8 @@ from pathlib import Path
 
 from extensions import db
 from material_models import MaterialAttachment, MaterialRecord
-from models import Application, Rule, User
+from legacy_models import Application
+from models import Rule, User
 from conftest import login
 from use_cases.competition_rules import load_current_competition_package
 from use_cases.cycles import activate_cycle_policy, create_cycle_policy

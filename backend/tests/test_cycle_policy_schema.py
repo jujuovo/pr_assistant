@@ -1,6 +1,6 @@
 from extensions import db
 from material_models import MaterialRecord
-from models import Application
+from legacy_models import Application
 from workflow_models import ScoreEntry, StudentScoreSnapshot
 
 

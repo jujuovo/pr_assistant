@@ -9,23 +9,19 @@ vi.mock('@/stores/auth.js', () => ({
 }))
 import legacy from '../src/services/api.js'
 import material from '../src/services/materialApi.js'
-import certificate from '../src/services/certificateApi.js'
 import ocr from '../src/services/ocrApi.js'
 import workflow from '../src/services/workflowApi.js'
 import rulePackages from '../src/services/competitionRulePackageApi.js'
 import structured from '../src/services/structuredRuleApi.js'
-import review from '../src/services/applicationReviewApi.js'
 
 const manifest = process.env.API_ROUTE_MANIFEST
 const modules = {
   legacy,
   material,
-  certificate,
   ocr,
   workflow,
   rulePackages,
-  structured,
-  review
+  structured
 }
 const uuid = '01234567-1234-1234-1234-1234567890ab'
 const data = {
@@ -154,6 +150,7 @@ test.skipIf(!manifest)(
         process.env.API_AUDIT_OUTPUT,
         JSON.stringify({ methods, calls, failures }, null, 2)
       )
+    expect(routes.some(({ path }) => path.startsWith('/api/applications') || path.startsWith('/api/certificates/applications'))).toBe(false)
     expect(failures).toEqual([])
     expect(methods.length).toBeGreaterThan(100)
     console.log(

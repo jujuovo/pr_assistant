@@ -244,12 +244,14 @@ def ranking_freeze_blockers(batch, *, unresolved_differences=0):
         if missing_rules:
             blockers.append({"type": "rule_version", "student_id": entry.student_id,
                              "reason": "rule_version_not_bound", "rule_version_ids": missing_rules})
-    from use_cases.migration import legacy_reconciliation_report
-    reconciliation = legacy_reconciliation_report(batch.year, faculty_id=batch.faculty_id)
-    if unresolved_differences or reconciliation["release_blocks"]:
-        blockers.append({"type": "reconciliation", "reason": "unresolved_legacy_differences",
-                         "count": unresolved_differences + len(reconciliation["release_blocks"]),
-                         "items": reconciliation["release_blocks"]})
+    from use_cases.material_reconciliation import material_issues
+    issues, _ = material_issues(batch.year, batch.faculty_id)
+    if unresolved_differences or issues:
+        items = [{"code": "structured_material_unresolved", **row["affected_ranking_scope"],
+                  "material_record_id": row["material_record_id"], "reasons": row["issues"]}
+                 for row in issues]
+        blockers.append({"type": "reconciliation", "reason": "unresolved_material_differences",
+                         "count": unresolved_differences + len(items), "items": items})
     return blockers
 
 

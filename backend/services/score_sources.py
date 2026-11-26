@@ -2,7 +2,6 @@
 from pathlib import Path
 from zoneinfo import ZoneInfo
 from urllib.parse import quote
-from models import Application
 from material_models import MaterialRecord
 from services.materials.service import record_at, view
 from use_cases.scoring import ScoringUseCaseError, explain_student_score
@@ -46,7 +45,8 @@ def score_source_detail(user, student, year, source_type, source_id):
         return {'title':matched['project_source'].get('name') or '项目材料', 'status':row.status,
                 'data':row.data,'attachments':material['attachments'],'ocr_raw_terms':row.ocr_raw_terms,
                 'history':history,'updated_at':material['updated_at']}
-    if source_type in {'legacy_application','volunteer_automation'}:
+    if source_type in {'legacy_application','volunteer_automation'} and 'application' in MaterialRecord.metadata.tables:
+        from legacy_models import Application
         row=Application.query.filter_by(id=source_id,student_id=student.student_id,faculty_id=student.faculty_id).one_or_none()
         if row is None:raise ScoringUseCaseError('原申请记录不存在',code='score_source_not_found')
         data={'project_name':row.project_name,'award_date':row.award_date.isoformat() if row.award_date else None,

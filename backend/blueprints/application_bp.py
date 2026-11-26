@@ -13,7 +13,8 @@
 """
 
 from flask import Blueprint, request, jsonify, current_app
-from models import Application, Student, Rule, Department, Major, SystemSettings
+from legacy_models import Application
+from models import Student, Rule, Department, Major, SystemSettings
 from datetime import datetime
 import pytz
 import json

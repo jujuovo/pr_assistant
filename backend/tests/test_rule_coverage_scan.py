@@ -1,7 +1,8 @@
 from conftest import login
 from extensions import db
 from material_models import MaterialEvent, MaterialRecord
-from models import Application, User
+from legacy_models import Application
+from models import User
 from workflow_models import ScoreEntry, StudentScoreSnapshot
 
 from test_structured_rule_admin_api import payload

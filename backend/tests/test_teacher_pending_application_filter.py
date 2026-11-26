@@ -1,7 +1,8 @@
 from conftest import login
 from extensions import db
 from material_models import MaterialRecord
-from models import Application, Student, User
+from legacy_models import Application
+from models import Student, User
 from test_material_rule_submission import MATERIAL_TERMS, version
 
 

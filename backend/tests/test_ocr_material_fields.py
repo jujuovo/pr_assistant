@@ -13,7 +13,8 @@ from sqlalchemy import inspect
 from conftest import login
 from extensions import db
 from material_models import MaterialRecord, MaterialAttachment
-from models import Application, Student, User
+from legacy_models import Application
+from models import Student, User
 from ocr_models import OCRJob, OCRMaterialLink
 from services.competition_ocr.jobs import job_root
 from services.competition_ocr.mapping import suggestions, raw_suggestions
@@ -228,7 +229,7 @@ def test_recognize_material_attachment_queues_without_auto_confirmation(env):
 
 
 @pytest.mark.parametrize("state", ["draft", "pending", "other_owner", "other_faculty"])
-def test_only_own_faculty_draft_application_can_be_linked(env, state):
+def test_ocr_confirmation_rejects_all_legacy_application_links(env, state):
     job_id, _ = prepared_job(env)
     student = Student.query.filter_by(student_id="S1").one()
     application = Application(student_id="S1", student_name="张三", faculty_id=student.faculty_id,
@@ -243,12 +244,9 @@ def test_only_own_faculty_draft_application_can_be_linked(env, state):
     db.session.add(application)
     db.session.commit()
     response = env[1].post(confirm_url(job_id), json={"year": 2026, "application_id": application.id, "data": completed_data("csp", CSP)})
-    if state == "draft":
-        assert response.status_code == 201, response.json
-        assert response.json["material"]["application_id"] == application.id
-    else:
-        assert response.status_code == (409 if state == "pending" else 403), response.json
-        assert MaterialRecord.query.count() == 0
+    assert response.status_code == 409, response.json
+    assert response.json["code"] == "material_route_required"
+    assert MaterialRecord.query.count() == OCRMaterialLink.query.count() == 0
     db.session.refresh(application)
     assert application.self_score == 2 and application.final_score is None
 

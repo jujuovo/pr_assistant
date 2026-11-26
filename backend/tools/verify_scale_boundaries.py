@@ -67,7 +67,7 @@ def run(folder):
                     'volunteer','student_work','research_paper','invention_patent','innovation_training']
         grouped=Counter(r.status for r in MaterialRecord.query.filter(
             MaterialRecord.faculty_id==environment['faculty_id'],MaterialRecord.category.in_(categories),
-            MaterialRecord.application_id.is_(None),MaterialRecord.status!='abandoned').all())
+            MaterialRecord.status!='abandoned').all())
         for role in ['teacher','admin']:
             response=clients[role].get('/api/materials/teacher/summary')
             body=response.get_json() or {}

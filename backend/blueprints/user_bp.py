@@ -13,14 +13,14 @@
 """
 
 from flask import Blueprint, request, jsonify, current_app, session
-from models import User, Faculty, Department, Major, Student, Application
+from models import User, Faculty, Department, Major, Student
 import os
 import uuid
 from PIL import Image
 from io import BytesIO
 from werkzeug.utils import secure_filename
 from extensions import db
-from services.deletion import automation_deletion_conflict, protected_deletion_response, commit_deletion
+from services.deletion import archived_rows_for_deletion, automation_deletion_conflict, protected_deletion_response, commit_deletion
 import openpyxl
 from openpyxl.utils import get_column_letter
 
@@ -317,7 +317,7 @@ def delete_user(user_id):
 
     # 即使账号角色后来改变，学生外键关联的材料仍需保留。
     student = user.student
-    applications = Application.query.filter_by(student_id=student.student_id).all() if student else []
+    applications = archived_rows_for_deletion(student_id=student.student_id) if student else []
     conflict = automation_deletion_conflict([student] if student else [], [user], applications=applications)
     if conflict:
         return protected_deletion_response(conflict)

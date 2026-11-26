@@ -2897,10 +2897,6 @@
             "minimum": 2000,
             "maximum": 2100
           },
-          "application_id": {
-            "type": "integer",
-            "minimum": 1
-          },
           "data": {
             "oneOf": [
               {
