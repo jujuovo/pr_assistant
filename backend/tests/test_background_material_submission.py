@@ -1,3 +1,4 @@
+from conftest import prepare_final_stage
 """Single-upload/background workflow against real Flask routes and the leased worker."""
 import copy
 import io
@@ -150,7 +151,9 @@ def test_teacher_must_acknowledge_ocr_uncertainty_and_audit_is_preserved(env):
     path=f"/api/materials/competition/records/{row['id']}"
     submitted=env[1].post(path+'/submit',json={'version':row['version']}).json
     teacher=User(username='reviewer',password='test',name='教师',role='teacher',status='active',faculty_id=row['faculty_id'])
-    db.session.add(teacher);db.session.commit();login(env[1],teacher.id)
+    db.session.add(teacher);db.session.commit()
+    prepare_final_stage()
+    login(env[1],teacher.id)
     command={'version':submitted['version'],'decision':'approve','comment':'','idempotency_key':'new-ocr-review'}
     denied=env[1].post(path+'/review',json=command)
     assert denied.status_code==409 and denied.json['code']=='ocr_manual_confirmation_required'
@@ -197,7 +200,9 @@ def test_manual_approval_without_comment_but_rejections_need_reason(env):
     row=created.json;path=f"/api/materials/social_practice/records/{row['id']}"
     submitted=env[1].post(path+'/submit',json={'version':row['version']}).json
     teacher=User(username='manual_reviewer',password='test',name='教师',role='teacher',status='active',faculty_id=row['faculty_id'])
-    db.session.add(teacher);db.session.commit();login(env[1],teacher.id)
+    db.session.add(teacher);db.session.commit()
+    prepare_final_stage()
+    login(env[1],teacher.id)
     for decision in ['needs_correction','rejected']:
         denied=env[1].post(path+'/review',json={'version':submitted['version'],'decision':decision,'comment':' '})
         assert denied.status_code==400,denied.json

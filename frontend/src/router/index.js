@@ -7,11 +7,12 @@ import Teacher from '@/pages/teacher/TeacherLayout.vue'
 import Admin from '@/pages/admin/AdminLayout.vue'
 
 const routes = [
+  ...['reviewer_level1', 'reviewer_level2'].map(role => ({ path: `/${role}`, component: Teacher, meta: { requiresAuth: true, role } })),
   {
     path: '/',
     redirect: () => {
       const auth = useAuthStore()
-      return auth.isAuthenticated && ['student', 'teacher', 'admin'].includes(auth.role)
+      return auth.isAuthenticated && ['student', 'teacher', 'admin', 'reviewer_level1', 'reviewer_level2'].includes(auth.role)
         ? `/${auth.role}` : '/login'
     }
   },
@@ -39,7 +40,7 @@ const routes = [
     path: '/:pathMatch(.*)*',
     redirect: () => {
       const auth = useAuthStore()
-      return auth.isAuthenticated && ['student', 'teacher', 'admin'].includes(auth.role)
+      return auth.isAuthenticated && ['student', 'teacher', 'admin', 'reviewer_level1', 'reviewer_level2'].includes(auth.role)
         ? `/${auth.role}` : '/login'
     }
   }

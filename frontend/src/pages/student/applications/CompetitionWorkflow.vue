@@ -491,6 +491,14 @@ async function selectCompetition() {
     fail(e)
   }
 }
+function editRecordId(value) {
+  if (typeof value !== 'number' && (typeof value !== 'string' || !/^[1-9]\d*$/.test(value)))
+    throw new TypeError('材料编号无效，请返回“我的材料”重新打开补正稿。')
+  const id = Number(value)
+  if (!Number.isSafeInteger(id) || id <= 0)
+    throw new TypeError('材料编号无效，请返回“我的材料”重新打开补正稿。')
+  return id
+}
 async function retry() {
   pageState.value = { kind: 'loading', message: '' }
   try {
@@ -499,7 +507,7 @@ async function retry() {
     let nextSchema = d.field_schema
     let nextSelected = null
     if (route.query.editId && !editingRecord.value) {
-      const row = await materialApi.getRecord('competition', route.query.editId)
+      const row = await materialApi.getRecord('competition', editRecordId(route.query.editId))
       if (!row.allowed_actions?.includes('edit'))
         throw { status: 409, message: '该材料已不可编辑，请返回我的材料查看最新状态。' }
       editingRecord.value = row

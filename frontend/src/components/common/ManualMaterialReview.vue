@@ -58,6 +58,8 @@
         <select v-if="options[key]" v-model="a[key]"><option v-for="[v,l] in options[key]" :key="v" :value="v">{{l}}</option></select>
         <input v-else v-model="a[key]" :type="key==='proof_date'?'date':['academic_year','assessment_score'].includes(key)?'number':'text'" /></label>
         <button type="button" @click="facts[row.id].assessments.push({appointment_index:a.appointment_index})">为此任职增加学年</button></fieldset></template>
+      <p v-if="['submitted', 'under_review'].includes(row.status)">当前阶段：{{ row.review_stage_label || ({1: '一级审核', 2: '二级审核', 3: '教师终审'}[row.review_stage]) }}</p>
+      <ReviewTimeline :events="row.review_history" />
       <ReviewCommentForm v-if="!history && row.allowed_actions?.includes('review')"
         :comment-id="'comment-' + row.id" v-model="comments[row.id]">
         <button v-for="[decision, label] in decisions" :key="decision"
@@ -74,6 +76,7 @@
   >
 </template>
 <script setup>
+import ReviewTimeline from '@/components/common/ReviewTimeline.vue'
 import { ref, watch } from 'vue'
 import materialApi from '@/services/materialApi.js'
 import PolicyMaterialFields from './PolicyMaterialFields.vue'
@@ -162,7 +165,7 @@ async function load() {
                 'needs_correction',
                 'scored',
                 'verified_not_eligible'
-              ].includes(row.status)
+              ].includes(row.status) || row.review_history?.some(e => e.action === 'stage_reviewed')
             : ['submitted','under_review'].includes(row.status))
       )
     if (failures.length) error.value = '以下类别未能加载，请重试：' + failures.join('、')
@@ -203,7 +206,7 @@ async function review(row, decision) {
 async function events(row) {
   try {
     audit.value[row.id] = (await materialApi.getEvents(row.category, row.id)).events.filter(
-      (e) => e.action === 'reviewed'
+      (e) => ['reviewed', 'stage_reviewed'].includes(e.action)
     )
   } catch (e) {
     error.value = e.message

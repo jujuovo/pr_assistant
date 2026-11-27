@@ -350,6 +350,15 @@ def update_user(user_id):
 
     data = request.get_json()
 
+    from domain.review_stages import ACCOUNT_ROLES, REVIEWER_ROLES, ROLE_LABELS
+    role = data.get('role', user.role)
+    if role not in ACCOUNT_ROLES:
+        return jsonify({'message': '账号角色无效'}), 400
+    if role in REVIEWER_ROLES and not db.session.get(Faculty, data.get('facultyId', user.faculty_id) or 0):
+        return jsonify({'message': '审核员必须关联有效学院'}), 400
+    if role in REVIEWER_ROLES and 'roleName' not in data:
+        user.role_name = ROLE_LABELS[role]
+
     # 更新用户信息
     if "name" in data:
         user.name = data["name"]
@@ -398,6 +407,14 @@ def create_user():
     for field in required_fields:
         if field not in data or not data[field]:
             return jsonify({"message": f"{field}是必填字段"}), 400
+
+    from domain.review_stages import ACCOUNT_ROLES, REVIEWER_ROLES, ROLE_LABELS
+    if data['role'] not in ACCOUNT_ROLES:
+        return jsonify({'message': '账号角色无效'}), 400
+    if data['role'] in REVIEWER_ROLES:
+        if not db.session.get(Faculty, data.get('facultyId') or 0):
+            return jsonify({'message': '审核员必须关联有效学院'}), 400
+        data['roleName'] = ROLE_LABELS[data['role']]
 
     # 检查用户名是否已存在
     existing_user = User.query.filter_by(username=data["username"]).first()
@@ -983,6 +1000,15 @@ def import_users():
                     errors.append(f"第{row}行：用户名、姓名、角色和状态为必填字段")
                     continue
 
+                if role not in {'student', 'teacher', 'admin', 'reviewer_level1', 'reviewer_level2'}:
+                    error_count += 1
+                    errors.append(f'第{row}行：账号角色无效')
+                    continue
+                if role in {'reviewer_level1', 'reviewer_level2'} and not faculty_name:
+                    error_count += 1
+                    errors.append(f'第{row}行：审核员必须填写所属学院')
+                    continue
+
                 # 检查用户名是否已存在
                 existing_user = User.query.filter_by(username=username).first()
                 if existing_user:
@@ -1085,7 +1111,7 @@ def import_users():
                     continue
 
                 # 验证角色
-                valid_roles = ["admin", "teacher", "student"]
+                valid_roles = ["admin", "teacher", "student", "reviewer_level1", "reviewer_level2"]
                 if role not in valid_roles:
                     error_count += 1
                     errors.append(

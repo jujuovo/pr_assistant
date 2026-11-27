@@ -1,3 +1,5 @@
+from conftest import approve_pending_preliminaries
+from material_models import MaterialRecord
 from datetime import date
 from io import BytesIO
 import json
@@ -39,8 +41,9 @@ def test_student_work_review(env):
         url = base + "/" + str(created.json["id"])
         submitted = client.post(url+"/submit", json=dict(version=created.json["version"]))
         assert submitted.status_code == 200, submitted.json
+        approve_pending_preliminaries(client)
         login(client, teacher.id)
-        command = dict(decision="verified", version=submitted.json["version"], idempotency_key="accept",
+        command = dict(decision="verified", version=db.session.get(MaterialRecord, submitted.json["id"]).version, idempotency_key="accept",
                        comment="核对岗位、学年、考核表", verified_facts={"assessments":[fact]})
         incomplete = dict(fact)
         incomplete.pop("assessment_score")
@@ -68,8 +71,9 @@ def test_student_work_review(env):
     uploaded = client.post(successor+"/attachments", data=dict(version=str(corrected.json["version"]),
                            files=(BytesIO(b"%PDF-1.4\nnew"), "new.pdf")))
     submitted = client.post(successor+"/submit", json=dict(version=uploaded.json["version"]))
+    approve_pending_preliminaries(client)
     login(client, teacher.id)
-    rejected = client.post(successor+"/review", json=dict(version=submitted.json["version"], decision="rejected",
+    rejected = client.post(successor+"/review", json=dict(version=db.session.get(MaterialRecord, submitted.json["id"]).version, decision="rejected",
                            idempotency_key="reject", comment="原最高项证明撤销"))
     assert rejected.status_code == 200, rejected.json
     assert db.session.get(ScoreEntry, high["scoring"]["score_entry_id"]).status == "invalidated"
@@ -79,8 +83,9 @@ def test_student_work_review(env):
     assert run_one_ocr(env[0], Provider(hours="240"))
     submitted = submit(env, refresh(env, volunteer))
     assert submitted.status_code == 200, submitted.json
+    approve_pending_preliminaries(client)
     login(client, teacher.id)
-    result = client.post(path(volunteer)+"/review", json=dict(version=submitted.json["version"],
+    result = client.post(path(volunteer)+"/review", json=dict(version=db.session.get(MaterialRecord, submitted.json["id"]).version,
                          decision="verified", comment="核对240普通工时", idempotency_key="volunteer"))
     assert result.status_code == 200, result.json
     assert float(current().performance_score) == 2.9
@@ -95,6 +100,7 @@ def test_student_work_review(env):
                           files=(BytesIO(b"%PDF-1.4\nannual"), "annual.pdf")))
     url = base + "/" + str(created.json["id"])
     submitted = client.post(url+"/submit", json=dict(version=created.json["version"]))
+    approve_pending_preliminaries(client)
     login(client, teacher.id)
     historical = ScoreEntry(student_id="S1", faculty_id=admin.faculty_id, year=2028, category="student_work",
         score_group="comprehensive", source_type="legacy_application", source_id="old-17", source_revision=1,
@@ -102,7 +108,7 @@ def test_student_work_review(env):
         status="active", included=True, idempotency_key="old-17")
     db.session.add(historical)
     db.session.commit()
-    multi = dict(version=submitted.json["version"], decision="verified", comment="分别核对两学年",
+    multi = dict(version=db.session.get(MaterialRecord, submitted.json["id"]).version, decision="verified", comment="分别核对两学年",
                  idempotency_key="annual", verified_facts={"assessments":[assessment(),
                  assessment(academic_year=2026, assessment_score=90, assessment_source="第二学年签章考核表")]})
     blocked = client.post(url+"/review", json=multi)

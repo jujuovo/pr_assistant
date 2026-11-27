@@ -26,6 +26,8 @@
         :differences="context.ocr_assessment?.differences || []"
       />
     </ReviewEvidenceLayout>
+    <p v-if="context.review_stage">当前阶段：{{ {1: '一级审核', 2: '二级审核', 3: '教师终审'}[context.review_stage] }}</p>
+    <ReviewTimeline :events="context.history" />
     <details class="competition-review-details" :open="readOnly || undefined">
       <summary>计分依据与 OCR 详情</summary>
       <details v-if="context.ocr_raw_terms">
@@ -94,6 +96,7 @@
 </template>
 
 <script setup>
+import ReviewTimeline from '@/components/common/ReviewTimeline.vue'
 import { computed, nextTick, ref, watch } from 'vue'
 import materialApi from '@/services/materialApi.js'
 import { formatScoreTime, materialEventText } from '@/services/scorePresentation.js'

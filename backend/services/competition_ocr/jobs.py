@@ -21,10 +21,10 @@ def authorized_job(job_id):
     user = actor()
     row = db.get_or_404(OCRJob, job_id)
     if row.user_id != user.id and not (
-        user.role in ("teacher", "admin") and user.faculty_id == row.faculty_id
+        user.role in ("teacher", "admin", "reviewer_level1", "reviewer_level2") and user.faculty_id == row.faculty_id
     ):
         abort(403, description="没有该 OCR 材料的访问权限")
-    if user.role == "teacher" and row.user_id != user.id:
+    if user.role in {"teacher", "reviewer_level1", "reviewer_level2"} and row.user_id != user.id:
         from material_models import CompetitionOcrJob, MaterialRecord
         from ocr_models import OCRMaterialLink
         from services.materials.service import record_at

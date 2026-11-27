@@ -1,3 +1,5 @@
+from conftest import approve_pending_preliminaries
+from material_models import MaterialRecord
 from datetime import date
 from io import BytesIO
 import json
@@ -37,8 +39,9 @@ def test_research_api(env):
         url = base + "/" + str(row["id"])
         submitted = client.post(url + "/submit", json={"version": row["version"]})
         assert submitted.status_code == 200, submitted.json
+        approve_pending_preliminaries(client)
         login(client, teacher.id)
-        payload = dict(version=submitted.json["version"], decision="verified", comment="核对原件",
+        payload = dict(version=db.session.get(MaterialRecord, submitted.json["id"]).version, decision="verified", comment="核对原件",
                        idempotency_key="verify", verified_facts=facts)
         accepted = client.post(url + "/review", json=payload)
         assert accepted.status_code == 200, accepted.json
@@ -81,8 +84,9 @@ def test_research_api(env):
     assert uploaded.status_code in (200, 201), uploaded.json
     submitted = client.post(successor + "/submit", json={"version": uploaded.json["version"]})
     assert submitted.status_code == 200 and entry.status == "active"
+    approve_pending_preliminaries(client)
     login(client, teacher.id)
-    accepted = client.post(successor + "/review", json=dict(version=submitted.json["version"],
+    accepted = client.post(successor + "/review", json=dict(version=db.session.get(MaterialRecord, submitted.json["id"]).version,
                            decision="verified", comment="新原件落款超期", idempotency_key="correction",
                            verified_facts=PAPER | dict(venue="Nature", proof_date="2028-09-02")))
     assert accepted.status_code == 200, accepted.json

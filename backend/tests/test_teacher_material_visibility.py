@@ -7,7 +7,7 @@ from test_material_rule_submission import MATERIAL_TERMS, version
 
 def make_row(status, rule_version_id=None):
     row = MaterialRecord(student_id="S1", faculty_id=1, category="competition",
-                         year=2026, status=status, data={}, analysis={},
+                         year=2026, status=status, review_stage=3, data={}, analysis={},
                          normalized_terms=MATERIAL_TERMS,
                          normalization_version="material-terms-v1",
                          rule_version_id=rule_version_id)
@@ -68,7 +68,7 @@ def test_history_keyword_matches_names_and_student_suffix_before_pagination(env)
         ("verified", "交互设计 100%", "sample2602", 2),
     ):
         db.session.add(MaterialRecord(student_id=student_id, faculty_id=faculty_id,
-            category="arts_sports", year=2028, status=status, data={"project_name": name}, analysis={}))
+            category="arts_sports", year=2028, status=status, review_stage=3, data={"project_name": name}, analysis={}))
     db.session.commit()
     client = env[1]
     login(client, reviewer.id)

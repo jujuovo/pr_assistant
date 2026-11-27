@@ -1,3 +1,4 @@
+from conftest import prepare_final_stage
 """Three-role integration: local OCR, formal authority, manual evidence and score feedback."""
 import copy
 import io
@@ -73,7 +74,9 @@ def test_material_page_ocr_reaches_real_worker_then_teacher_scoring(env):
     submitted=env[1].post(path+'/submit',json={"version":material['version']})
     assert submitted.status_code==200,submitted.json
     teacher=User(username='ocr_teacher',password='test',name='教师',role='teacher',status='active',faculty_id=material['faculty_id'])
-    db.session.add(teacher);db.session.commit();login(env[1],teacher.id)
+    db.session.add(teacher);db.session.commit()
+    prepare_final_stage()
+    login(env[1],teacher.id)
     context=env[1].get(path+'/review-context')
     assert context.status_code==200,context.json
     assert context.json['ocr_links'][0]['job_id']==job['job_id']
@@ -180,7 +183,9 @@ def test_teacher_cannot_read_unsubmitted_ocr_by_guessing_job_url(env):
     job_id,_=prepared_job(env)
     owner=db.session.get(User,env[2]['student'])
     teacher=User(username='teacher_draft',password='x',name='教师',role='teacher',status='active',faculty_id=owner.faculty_id)
-    db.session.add(teacher);db.session.commit();login(env[1],teacher.id)
+    db.session.add(teacher);db.session.commit()
+    prepare_final_stage()
+    login(env[1],teacher.id)
     assert env[1].get(f'/api/ocr/jobs/{job_id}').status_code==403
 
 
@@ -236,7 +241,9 @@ def test_manual_appointment_can_be_submitted_and_reviewed_without_ocr(env):
     submitted=env[1].post(path+'/submit',json={'version':edited.json['version']})
     assert submitted.status_code==200,submitted.json
     owner=db.session.get(User,env[2]['student']);teacher=User(username='manual_teacher',password='x',name='教师',role='teacher',status='active',faculty_id=owner.faculty_id)
-    db.session.add(teacher);db.session.commit();login(env[1],teacher.id)
+    db.session.add(teacher);db.session.commit()
+    prepare_final_stage()
+    login(env[1],teacher.id)
     assert len(env[1].get('/api/materials/student_work/records').json['records'])==1
     reviewed=env[1].post(path+'/review',json={'version':submitted.json['version'],'decision':'verified','comment':'已核对学校任职记录'})
     assert reviewed.status_code==200,reviewed.json

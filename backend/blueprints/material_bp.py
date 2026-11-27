@@ -13,7 +13,8 @@ from sqlalchemy.exc import IntegrityError
 from werkzeug.exceptions import HTTPException
 from services.time_format import utc_timestamp
 from extensions import db
-from material_models import CompetitionOcrJob, MaterialRecord, MaterialAttachment, MaterialSource
+from material_models import CompetitionOcrJob, MaterialRecord, MaterialAttachment, MaterialSource, MaterialEvent
+from models import User
 from services.actors import actor
 from services.materials.schemas import (RESEARCH_TYPES, TYPES, type_view, normalize, analyze, integer, text, object_keys)
 from services.materials.service import (body, record_at, category_exists, authorize, view,
@@ -273,7 +274,9 @@ def records(category):
     query=MaterialRecord.query.filter_by(category=category)
     if user.role=='student':
         query=query.filter_by(student_id=user.student_id)
-    elif user.role=='teacher' and user.faculty_id:
+    elif user.role in {'teacher', 'reviewer_level1', 'reviewer_level2'} and user.faculty_id:
+        query=query.filter(or_(MaterialRecord.analysis['source'].as_string().is_(None),
+                               MaterialRecord.analysis['source'].as_string() != 'certificate_preview_compatibility'))
         from services.materials.ocr_schemas import MANUAL_TYPES
         # 已审核态必须包含竞赛：竞赛材料审核后是 needs_correction/scored，
         # 旧写法只放行人工材料类别，导致教师永远查不到竞赛审核记录。
@@ -281,7 +284,12 @@ def records(category):
             'innovation_training', 'student_work', 'volunteer', 'competition',
         }
         statuses = ('verified','rejected','needs_correction','scored','verified_not_eligible') if request.args.get('reviewed') == '1' and category in reviewed_categories else ('submitted','under_review')
-        query=query.filter_by(faculty_id=user.faculty_id).filter(MaterialRecord.status.in_(statuses))
+        query=query.filter_by(faculty_id=user.faculty_id)
+        if request.args.get("reviewed") == "1":
+            query=query.filter(or_(MaterialRecord.status.in_(statuses), MaterialRecord.id.in_(db.session.query(MaterialEvent.record_id).filter(MaterialEvent.action == "stage_reviewed"))))
+        else:
+            from use_cases.staged_review import stage_filter
+            query=stage_filter(query.filter(MaterialRecord.status.in_(statuses)), MaterialRecord, user)
         keyword = request.args.get("keyword", "").strip()
         if keyword and request.args.get("reviewed") == "1" and category in reviewed_categories:
             query = query.filter(material_review_keyword(keyword))
@@ -445,6 +453,14 @@ def review(category,record_id):
     row=record_at(category,record_id,allow_teacher_processed=True)
     user=actor()
     payload=body()
+    if (row.analysis or {}).get('source') == 'certificate_preview_compatibility':
+        return jsonify({'error': '请通过证书申请审核入口处理此材料', 'code': 'certificate_review_route_required',
+                        'route': f'/api/applications/{row.application_id}/review'}), 409
+    from use_cases.staged_review import review_before_final
+    intermediate = review_before_final(user, row, payload)
+    if intermediate is not None:
+        db.session.commit()
+        return jsonify({**view(row), **intermediate})
     if category == "student_work" and row.normalization_version == WORK_POLICY:
         from domain.student_work_scoring import candidate
         from services.materials.schemas import normalize_student_work
@@ -466,10 +482,10 @@ def review(category,record_id):
         db.session.commit()
         return jsonify({**result, "replayed": replayed})
     if is_manual(row):
-        object_keys(payload, {'version','decision','comment'}, {'version','decision'})
-        review_manual(user,row,payload)
+        object_keys(payload, {'version','decision','comment','idempotency_key'}, {'version','decision'})
+        replayed = review_manual(user,row,payload)
         db.session.commit()
-        return jsonify(view(row))
+        return jsonify({**view(row), 'replayed': replayed})
     if category == 'competition':
         # Validate the dedicated command before the atomic executor (task 4.3)
         # sees any request.  Legacy decision names and override fields are
@@ -544,7 +560,7 @@ def competition_ocr_cancel_route(record_id, job_id):
 @material_bp.get('/<category>/records/<int:record_id>/events')
 def events(category,record_id):
     row=record_at(category,record_id)
-    return jsonify({'events':[{'id':e.id,'actor_id':e.actor_id,'action':e.action,'details':e.details,'created_at':utc_timestamp(e.created_at)} for e in row.events]})
+    return jsonify({'events':[{'id':e.id,'actor_id':e.actor_id,'actor':{'id':e.actor_id,'name':db.session.get(User,e.actor_id).name,'role':db.session.get(User,e.actor_id).role} if db.session.get(User,e.actor_id) else None,'action':e.action,'details':e.details,'created_at':utc_timestamp(e.created_at)} for e in row.events]})
 
 
 @material_bp.post('/<category>/records/<int:record_id>/withdraw')

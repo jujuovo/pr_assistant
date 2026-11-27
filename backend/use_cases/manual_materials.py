@@ -21,16 +21,34 @@ def submit_manual(user, row, version):
 
 
 def review_manual(user, row, payload):
+    from use_cases.staged_review import assert_final_review
+    assert_final_review(user, row)
     if user.role not in {"teacher", "admin"} or user.faculty_id != row.faculty_id:
         raise MaterialUseCaseError("没有本学院材料核验权限", code="forbidden", status_code=403)
+    import hashlib
+    import json
+    from extensions import db
+    from workflow_models import MaterialReviewCommand
+    key = text(payload.get('idempotency_key') or f'manual:{user.id}:{payload["version"]}', '幂等键', maximum=128)
+    digest = hashlib.sha256(json.dumps([row.id, user.id, payload], sort_keys=True).encode()).hexdigest()
+    previous = MaterialReviewCommand.query.filter_by(record_id=row.id, idempotency_key=key).first()
+    if previous:
+        if previous.request_digest != digest:
+            raise MaterialUseCaseError('幂等键冲突', code='idempotency_conflict', status_code=409)
+        return True
     if payload["decision"] not in ("verified", "rejected", "needs_correction"):
         raise MaterialUseCaseError("人工核验结论无效")
     comment = text(payload.get("comment", ""), "核验意见", required=payload["decision"] != "verified", maximum=2000)
     from services.materials.originals import verify_ocr_originals
     verify_ocr_originals(row)
-    _cas_change(row, payload["version"], ("submitted",), {"status": payload["decision"]})
+    target = 'needs_correction' if payload['decision'] == 'rejected' else payload['decision']
+    _cas_change(row, payload["version"], ("submitted", "under_review"), {"status": target})
     from services.competition_ocr.binding import record_links
-    _event(row, user, "reviewed", {"version": row.version, "decision": row.status, "comment": comment,
+    _event(row, user, "reviewed", {"version": row.version, "decision": payload['decision'], "comment": comment,
         "manual_only": True, "data_snapshot": row.data, "ocr_links_snapshot": record_links(row),
         "attachments_snapshot": [{"id": a.id, "filename": a.filename, "size": a.size, "sha256": a.sha256}
                                  for a in row.attachments]})
+    db.session.add(MaterialReviewCommand(record_id=row.id, idempotency_key=key, request_digest=digest,
+        result={'version': row.version, 'status': row.status, 'review_stage': row.review_stage}, created_by=user.id))
+    db.session.flush()
+    return False

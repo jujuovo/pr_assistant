@@ -37,7 +37,7 @@ def test_owner_actions_follow_material_state(status, expected):
 
 
 def test_staff_actions_are_scoped_to_faculty():
-    material = MaterialScope(student_id="S1", faculty_id=1, status="submitted")
+    material = MaterialScope(student_id="S1", faculty_id=1, status="submitted", review_stage=3)
     assert set(allowed_actions(TEACHER, material)) == {
         "view", "download_attachment", "check", "begin_review", "review"
     }
@@ -74,7 +74,7 @@ def test_student_cannot_access_another_students_material():
 def test_legal_transitions(actor, status, action, target):
     authorize_transition(
         actor,
-        MaterialScope(student_id="S1", faculty_id=1, status=status),
+        MaterialScope(student_id="S1", faculty_id=1, status=status, review_stage=3),
         action,
         target,
     )

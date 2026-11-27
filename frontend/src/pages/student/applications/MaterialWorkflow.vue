@@ -87,6 +87,14 @@ const names = {
 function history() {
   router.push({ query: { page: 'application-record' } })
 }
+function editRecordId(value) {
+  if (typeof value !== 'number' && (typeof value !== 'string' || !/^[1-9]\d*$/.test(value)))
+    throw new TypeError('材料编号无效，请返回“我的材料”重新打开补正稿。')
+  const id = Number(value)
+  if (!Number.isSafeInteger(id) || id <= 0)
+    throw new TypeError('材料编号无效，请返回“我的材料”重新打开补正稿。')
+  return id
+}
 async function loadEdit() {
   typeSpec.value = null
   if (category.value === 'competition' || !route.query.editId) return
@@ -94,7 +102,7 @@ async function loadEdit() {
   error.value = ''
   try {
     const [row, context] = await Promise.all([
-      materialApi.getRecord(category.value, route.query.editId),
+      materialApi.getRecord(category.value, editRecordId(route.query.editId)),
       materialApi.getTypes()
     ])
     if (!row.allowed_actions?.includes('edit'))

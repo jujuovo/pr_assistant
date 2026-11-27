@@ -58,6 +58,8 @@ def review_policy_material(user, row, payload, policy_version, normalize_facts, 
         if previous.request_digest != digest:
             raise MaterialUseCaseError("幂等键冲突", code="idempotency_conflict", status_code=409)
         return previous.result, True
+    from use_cases.staged_review import assert_final_review
+    assert_final_review(user, row)
     rule = db.session.get(RuleVersion, row.rule_version_id)
     policy = db.session.get(RecommendationCyclePolicy, row.cycle_policy_version_id)
     if not rule or not policy or row.normalization_version != policy_version:
@@ -65,7 +67,7 @@ def review_policy_material(user, row, payload, policy_version, normalize_facts, 
     from domain.student_work_scoring import POLICY_VERSION as WORK_POLICY
     is_work = policy_version == WORK_POLICY
     facts = None
-    target = decision
+    target = 'needs_correction' if decision == 'rejected' else decision
     if decision == "verified":
         facts = normalize_facts(row.category, payload.get("verified_facts"), verified=True)
         if is_work:

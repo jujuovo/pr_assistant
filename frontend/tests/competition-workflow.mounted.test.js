@@ -174,6 +174,7 @@ describe('single upload submission', () => {
     state.route.query.editId = '7'
     const w = render()
     await flushPromises()
+    expect(state.api.getRecord).toHaveBeenCalledWith('competition', 7)
     await w.get('#project-name').setValue('unsaved draft edit')
     state.api.getCompetitionCatalogItem.mockResolvedValue({
       competition: item,
@@ -629,4 +630,32 @@ it('student history highlights only current differing declared and raw OCR field
   expect(w.get('.material-facts dd[data-field="project_name"]').classes()).not.toContain('fact-difference')
   expect(w.text()).not.toContain('OCR 尚不足')
   expect(button(w, '正式提交审核')).toBeDefined()
+})
+
+describe('edit URL parameter boundary', () => {
+  for (const component of [Form, MaterialWorkflow]) {
+    it.each(['47', 47])('loads and reloads a correction with a numeric API identifier (%s)', async value => {
+      state.route.query = { page: 'materials', category: component === Form ? 'competition' : 'social_practice', editId: value }
+      state.api.getTypes = vi.fn().mockResolvedValue({ types: [] })
+      state.api.getRecord.mockImplementation(async (category, id) => {
+        if (!Number.isSafeInteger(id) || id <= 0) throw new TypeError('ID 和版本必须为正整数')
+        return { ...structuredClone(row), id, category }
+      })
+      const wrapper = render(component)
+      await flushPromises()
+      expect(state.api.getRecord).toHaveBeenCalledWith(state.route.query.category, 47)
+      expect(wrapper.text()).not.toContain('ID 和版本必须为正整数')
+      wrapper.unmount()
+      const refreshed = render(component)
+      await flushPromises()
+      expect(refreshed.text()).not.toContain('ID 和版本必须为正整数')
+    })
+    it.each(['0', '-1', '1.5', 'abc', '9007199254740992', ['47', '48']])('rejects malformed URL identifiers (%s)', async value => {
+      state.route.query = { page: 'materials', category: component === Form ? 'competition' : 'social_practice', editId: value }
+      const wrapper = render(component)
+      await flushPromises()
+      expect(state.api.getRecord).not.toHaveBeenCalled()
+      expect(wrapper.text()).toContain('材料编号无效')
+    })
+  }
 })

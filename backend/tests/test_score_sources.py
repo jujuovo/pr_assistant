@@ -1,3 +1,4 @@
+from conftest import prepare_final_stage
 """Score-source detail scope, compatibility and original proof reuse."""
 from datetime import datetime
 import pytest
@@ -15,7 +16,9 @@ def approved(env):
     assert run_one_ocr(env[0],Provider())
     submitted=env[1].post(path+'/submit',json={'version':row['version']}).json
     teacher=User(username='detail_teacher',name='教师',password='test',role='teacher',status='active',faculty_id=row['faculty_id'])
-    db.session.add(teacher);db.session.commit();login(env[1],teacher.id)
+    db.session.add(teacher);db.session.commit()
+    prepare_final_stage()
+    login(env[1],teacher.id)
     result=env[1].post(path+'/review',json={'version':submitted['version'],'decision':'approve','comment':'','ocr_confirmed':True,'idempotency_key':'detail-approve'})
     assert result.status_code==200,result.json
     return row,teacher
@@ -55,6 +58,7 @@ def test_source_endpoint_enforces_student_owner_faculty_year_and_visible_source(
     assert env[1].get(path.replace(str(row['id'])+'?','9999?')).status_code==404
     for year in ['bad','0','2101','']:
         assert env[1].get(path.replace('year=2028','year='+year)).status_code==400
+    prepare_final_stage()
     login(env[1],teacher.id);assert env[1].get(path).status_code==200
     login(env[1],env[2]['admin']);assert env[1].get(path).status_code==200
 

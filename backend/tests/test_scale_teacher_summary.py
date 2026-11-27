@@ -12,9 +12,9 @@ def test_teacher_summary_counts_research_innovation_and_preserves_faculty_scope(
     for category in ('research_paper', 'invention_patent', 'innovation_training'):
         for status in ('submitted', 'needs_correction', 'scored'):
             db.session.add(MaterialRecord(student_id='S1', faculty_id=1, category=category,
-                                          year=2026, status=status, data={}, analysis={}))
+                                          year=2026, status=status, review_stage=3, data={}, analysis={}))
     db.session.add(MaterialRecord(student_id='S1', faculty_id=2, category='research_paper',
-                                 year=2026, status='submitted', data={}, analysis={}))
+                                 year=2026, status='submitted', review_stage=3, data={}, analysis={}))
     db.session.commit()
     login(env[1], reviewer.id)
     response=env[1].get('/api/materials/teacher/summary')
@@ -34,7 +34,7 @@ def test_competition_workbench_pages_pending_separately_from_newer_drafts(env):
     for status,count in [('submitted',70),('draft',60),('scored',65)]:
         for i in range(count):
             db.session.add(MaterialRecord(student_id='S1',faculty_id=1,category='competition',year=2028,
-                status=status,data={'project_name':status+str(i)},analysis={},competition_rule_package_id=package.id))
+                status=status, review_stage=3,data={'project_name':status+str(i)},analysis={},competition_rule_package_id=package.id))
     db.session.commit();login(env[1],reviewer.id)
     first=env[1].get('/api/materials/competition/workbench-summary').json
     assert first['pending_count']==70

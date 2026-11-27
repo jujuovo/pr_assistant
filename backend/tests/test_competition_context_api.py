@@ -1,3 +1,4 @@
+from conftest import prepare_final_stage
 import json
 from datetime import date
 from pathlib import Path
@@ -117,6 +118,7 @@ def test_teacher_list_includes_submitted_competition_without_legacy_rule_version
     db.session.add(teacher); db.session.commit()
     assert row.rule_version_id is None
 
+    prepare_final_stage()
     login(client, teacher.id)
     response = client.get("/api/materials/competition/records?year=2028")
     assert response.status_code == 200

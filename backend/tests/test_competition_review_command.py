@@ -35,6 +35,8 @@ def _submitted_competition(env):
         },
     })
     row.status = "submitted"
+    # This helper exercises final review/scoring; the staged journey has its own tests.
+    row.review_stage = 3
     teacher = User(
         username="same-faculty-teacher", name="审核教师", password="test",
         role="teacher", status="active", faculty_id=row.faculty_id,
@@ -80,7 +82,8 @@ def test_competition_review_enforces_teacher_faculty_scope(env):
 
     admin = db.session.get(User, env[2]["admin"])
     outsider = db.session.get(User, env[2]["other"])
-    for actor in (admin, outsider):
+    assert validate_competition_review_command(admin, row, _command(row))["decision"] == "approve"
+    for actor in (outsider,):
         with pytest.raises(MaterialUseCaseError) as error:
             validate_competition_review_command(actor, row, _command(row))
         assert error.value.code == "forbidden"
