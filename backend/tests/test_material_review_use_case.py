@@ -57,12 +57,12 @@ def test_review_command_is_idempotent(env):
         admin, row, 2, "rejected", "已核验", "review-command-1"
     )
     db.session.commit()
-    assert reviewed.status == "rejected" and not replayed
+    assert reviewed.status == "needs_correction" and not replayed
     replay, replayed = review_material(
         admin, row, 2, "rejected", "已核验", "review-command-1"
     )
     db.session.commit()
-    assert replay.status == "rejected" and replayed
+    assert replay.status == "needs_correction" and replayed
     assert MaterialReviewCommand.query.count() == 1
     assert MaterialEvent.query.filter_by(action="reviewed").count() == 1
 

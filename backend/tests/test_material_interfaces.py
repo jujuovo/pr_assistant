@@ -263,6 +263,7 @@ def test_material_migration_matches_models_and_reverses(env):
                         'supersedes_record_id', 'correction_sequence',
                         'competition_rule_package_id', 'competition_duplicate_digest',
                         'competition_work_group_key', 'competition_event_group_key',
+                        'review_stage',
                     }
                 assert actual==expected
             module.downgrade()

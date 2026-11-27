@@ -81,6 +81,8 @@ def review_competition_material(user, row, payload, *, fail_at=None):
             raise MaterialUseCaseError("同一幂等键不能用于不同审核请求",
                 code="idempotency_conflict", status_code=409)
         return previous.result, True
+    from use_cases.staged_review import assert_final_review
+    assert_final_review(user, row)
     locked = MaterialRecord.query.filter_by(id=row.id).with_for_update().one()
     student = Student.query.filter_by(student_id=locked.student_id).with_for_update().one()
     if locked.version != command["version"]:
@@ -99,8 +101,10 @@ def review_competition_material(user, row, payload, *, fail_at=None):
     verify_ocr_originals(locked)
     from services.competition_ocr.binding import record_links
     ocr_snapshot = record_links(locked)
-    locked.version += 1
-    locked.status = "needs_correction" if command["decision"] == "return" else "scored"
+    from use_cases.materials import _cas_change
+    _cas_change(locked, command['version'], ('submitted', 'under_review'), {
+        'status': 'needs_correction' if command['decision'] == 'return' else 'scored',
+    })
     if command["decision"] == "approve":
         candidate = Decimal(str((locked.analysis or {})["candidate_score"]))
         entry = ScoreEntry(
@@ -129,7 +133,7 @@ def review_competition_material(user, row, payload, *, fail_at=None):
     else:
         scoring = None
     if fail_at == "before_audit": raise RuntimeError("injected before_audit failure")
-    details = {**command, "version": locked.version, "scoring": scoring,
+    details = {**command, "review_stage": locked.review_stage, "version": locked.version, "scoring": scoring,
                "data_snapshot": locked.data, "ocr_links_snapshot": ocr_snapshot,
                "ocr_assessment_snapshot": advice, "ocr_raw_snapshot":locked.ocr_raw_terms}
     db.session.add(MaterialEvent(record_id=locked.id, actor_id=user.id,

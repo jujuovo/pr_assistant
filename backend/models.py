@@ -175,6 +175,9 @@ class Application(db.Model):
     dynamic_coefficients = db.Column(db.JSON, nullable=True)  # 存储动态系数数据的JSON对象
 
     # 审核相关字段
+    review_stage = db.Column(db.Integer, nullable=False, default=1, server_default="1")
+    review_version = db.Column(db.Integer, nullable=False, default=1, server_default="1")
+    review_history = db.Column(db.JSON, nullable=True)
     final_score = db.Column(db.Float, nullable=True)  # 最终核定分数
     review_comment = db.Column(db.Text, nullable=True)  # 审核意见
     reviewed_at = db.Column(db.DateTime, nullable=True)  # 审核时间

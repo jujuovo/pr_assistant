@@ -191,7 +191,7 @@ def save_preview(row, application, payload):
         abort(403, description='仅学生本人可确认识别材料')
     if not row or not row.claims.get('preview_flow'):
         abort(409, description='不是上传预览申请')
-    if application.status != 'draft' or row.status in ('queued', 'processing'):
+    if application.status not in {'draft', 'needs_correction'} or row.status in ('queued', 'processing'):
         abort(409, description='申请已提交或识别尚未完成，请刷新状态')
     if requires_reupload(row):
         abort(409, description='材料质量不合格，请重新上传清晰材料并完成识别后再确认或提交')
@@ -227,16 +227,35 @@ def save_preview(row, application, payload):
     application_updates = {
         'project_name': name.strip(), 'award_date': award_date, 'rule_id': rule.id,
         'application_type': 'academic', 'status': 'pending' if payload['submit'] else 'draft',
-        'description': '学生已确认OCR预览；申报值与OCR结果独立保存'}
+        'description': '学生已确认OCR预览；申报值与OCR结果独立保存',
+        'review_stage': 1, 'review_version': application.review_version + 1}
     if policy:
         application_updates.update(
             cycle_code=policy.cycle_code, cycle_policy_version_id=policy.id
         )
-    changed = Application.query.filter_by(id=application.id, status='draft').update(
+    changed = Application.query.filter_by(id=application.id, status=application.status, review_version=application.review_version).update(
         application_updates, synchronize_session=False)
     if not changed:
         db.session.rollback()
         abort(409, description='申请状态已变化')
+    # The compatibility material is created by final review. After a return,
+    # keep its evidence audit but reset the resubmitted projection to stage 1.
+    from material_models import MaterialRecord
+    from workflow_models import RuleVersion
+    linked = MaterialRecord.query.filter_by(application_id=application.id).first()
+    if linked is not None:
+        from use_cases.materials import _cas_change, _event
+        published = RuleVersion.query.filter_by(rule_id=rule.id, status='published').order_by(RuleVersion.version.desc()).first()
+        _cas_change(linked, linked.version, ('draft', 'needs_correction'), {
+            'status': 'submitted' if payload['submit'] else 'draft', 'review_stage': 1,
+            'data': {'award_date': award_date.isoformat()},
+            'confirmed_terms': confirmed_terms, 'normalized_terms': normalized_terms,
+            'ocr_raw_terms': _ocr_raw_terms(row.report),
+            'rule_version_id': published.id if published else None,
+        })
+        _event(linked, user, 'certificate_resubmitted' if payload['submit'] else 'edited', {
+            'version': linked.version, 'confirmed_terms': confirmed_terms,
+        })
     db.session.commit()
     db.session.refresh(row)
     return row

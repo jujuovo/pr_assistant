@@ -1,3 +1,4 @@
+from conftest import prepare_final_stage
 """Volunteer material queue, exact gates, appeals and teacher scoring on a fresh DB."""
 import io
 import json
@@ -46,7 +47,9 @@ def refresh(env, row):
 def teacher(env):
     user = User(username='reviewer', password='test', name='教师', role='teacher', status='active',
                 faculty_id=db.session.get(User, env[2]['student']).faculty_id)
-    db.session.add(user); db.session.commit(); login(env[1], user.id)
+    db.session.add(user); db.session.commit()
+    prepare_final_stage()
+    login(env[1], user.id)
     return user
 
 

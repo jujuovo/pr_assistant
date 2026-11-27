@@ -1330,7 +1330,7 @@
         }
       ],
       "post": {
-        "summary": "教师或管理员人工核验，结果不加分",
+        "summary": "同院分级审核；预审通过仅流转，教师终审按类别规则计分",
         "responses": {
           "200": {
             "description": "成功",
@@ -2180,13 +2180,25 @@
                   "properties": {
                     "status_counts": {
                       "type": "object",
-                      "additionalProperties": { "type": "integer" }
+                      "additionalProperties": {
+                        "type": "integer"
+                      }
                     },
-                    "pending_count": { "type": "integer" },
-                    "approved_count": { "type": "integer" },
-                    "needs_correction_count": { "type": "integer" },
-                    "rejected_count": { "type": "integer" },
-                    "submitted_count": { "type": "integer" }
+                    "pending_count": {
+                      "type": "integer"
+                    },
+                    "approved_count": {
+                      "type": "integer"
+                    },
+                    "needs_correction_count": {
+                      "type": "integer"
+                    },
+                    "rejected_count": {
+                      "type": "integer"
+                    },
+                    "submitted_count": {
+                      "type": "integer"
+                    }
                   }
                 }
               }
@@ -2211,11 +2223,19 @@
                   "properties": {
                     "status_counts": {
                       "type": "object",
-                      "additionalProperties": { "type": "integer" }
+                      "additionalProperties": {
+                        "type": "integer"
+                      }
                     },
-                    "pending_count": { "type": "integer" },
-                    "needs_correction_count": { "type": "integer" },
-                    "completed_count": { "type": "integer" }
+                    "pending_count": {
+                      "type": "integer"
+                    },
+                    "needs_correction_count": {
+                      "type": "integer"
+                    },
+                    "completed_count": {
+                      "type": "integer"
+                    }
                   }
                 }
               }
@@ -3106,7 +3126,9 @@
           "allowed_actions",
           "data",
           "analysis",
-          "bonus_result"
+          "bonus_result",
+          "review_stage",
+          "review_history"
         ],
         "properties": {
           "id": {
@@ -3305,6 +3327,62 @@
           "priority_review": {
             "type": "boolean",
             "description": "申诉材料需重点人工核验"
+          },
+          "review_stage": {
+            "type": "integer",
+            "enum": [
+              1,
+              2,
+              3
+            ],
+            "readOnly": true
+          },
+          "review_stage_label": {
+            "type": "string",
+            "readOnly": true
+          },
+          "review_history": {
+            "type": "array",
+            "readOnly": true,
+            "items": {
+              "type": "object",
+              "properties": {
+                "review_stage": {
+                  "type": "integer",
+                  "nullable": true
+                },
+                "action": {
+                  "type": "string"
+                },
+                "decision": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "comment": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "actor": {
+                  "type": "object",
+                  "nullable": true,
+                  "properties": {
+                    "id": {
+                      "type": "integer"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "created_at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
           }
         }
       },
@@ -3871,5 +3949,17 @@
         "description": "两类工时总和必须大于0；OCR按原始小时分别累计并比对，不提前减半。"
       }
     }
+  },
+  "x-three-stage-review": {
+    "roles": {
+      "reviewer_level1": 1,
+      "reviewer_level2": 2,
+      "teacher": 3
+    },
+    "scope": "same faculty, any reviewer at the current level",
+    "approval": "Stages 1 and 2 advance review_stage without scoring; teacher final review uses the existing category policy. Administrator intervention is not a required stage.",
+    "return": "Every new rejection/return allows student correction; resubmission restarts at stage 1. Existing approved records retain their results.",
+    "concurrency": "version compare-and-swap and durable idempotency_key; legacy applications expose review_version and append-only review_history.",
+    "history": "Students see their own review actors, stages, decisions and times. Reviewers see the complete history in their faculty."
   }
 }

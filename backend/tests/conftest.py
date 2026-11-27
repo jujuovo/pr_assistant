@@ -18,6 +18,50 @@ from blueprints.certificate_bp import certificate_bp
 from blueprints.workflow_bp import workflow_bp
 
 
+def prepare_final_stage():
+    """Fixture for existing tests of final review, OCR gates and score formulas.
+
+    No versions or audit events change. Full stage transitions are exercised by
+    test_staged_material_review, rather than repeated in every scoring test.
+    """
+    from material_models import MaterialRecord
+    from models import Application
+    MaterialRecord.query.filter(MaterialRecord.status.in_(['submitted', 'under_review'])).update(
+        {'review_stage': 3}, synchronize_session='fetch')
+    Application.query.filter_by(status='pending').update({'review_stage': 3}, synchronize_session='fetch')
+    db.session.commit()
+
+
+def approve_pending_preliminaries(client):
+    """Exercise both pre-review APIs before existing category scoring journeys."""
+    from material_models import MaterialRecord
+    from workflow_models import ScoreEntry, StudentScoreSnapshot
+    pending = MaterialRecord.query.filter(MaterialRecord.status.in_(['submitted', 'under_review']),
+                                          MaterialRecord.review_stage < 3).all()
+    for row in pending:
+        before = ScoreEntry.query.count()
+        snapshots_before = StudentScoreSnapshot.query.count()
+        for stage in range(row.review_stage, 3):
+            role = f'reviewer_level{stage}'
+            username = f'journey-{role}-{row.faculty_id}'
+            user = User.query.filter_by(username=username).first()
+            if user is None:
+                user = User(username=username, name=role, password='test', role=role,
+                            faculty_id=row.faculty_id, status='active')
+                db.session.add(user)
+                db.session.commit()
+            login(client, user.id)
+            response = client.post(f'/api/materials/{row.category}/records/{row.id}/review', json={
+                'version': row.version, 'decision': 'approve' if row.category == 'competition' else 'verified',
+                'comment': '预审核对证明', 'idempotency_key': f'preliminary:{row.id}:{stage}:{row.version}',
+            })
+            assert response.status_code == 200, response.json
+            db.session.refresh(row)
+            assert row.review_stage == stage + 1 and row.status == 'submitted'
+            assert ScoreEntry.query.count() == before
+            assert StudentScoreSnapshot.query.count() == snapshots_before
+
+
 @pytest.fixture
 def env(tmp_path):
     app = Flask("automation_test")

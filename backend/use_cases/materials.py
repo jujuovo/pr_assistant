@@ -21,6 +21,8 @@ from domain.materials import (
     is_owner,
     is_staff,
 )
+from domain.review_stages import REVIEW_ROLES, REVIEWER_ROLES
+from use_cases.staged_review import stage_filter, assert_final_review
 from extensions import db
 from material_models import MaterialAttachment, MaterialEvent, MaterialRecord
 from domain.student_work_scoring import POLICY_VERSION as WORK_POLICY
@@ -52,6 +54,8 @@ class MaterialUseCaseError(ValueError):
 COMPETITION_CONTEXT_ACTIONS = {
     "student": ("view_catalog", "list_records", "create_draft"),
     "teacher": ("view_catalog", "list_pending", "review"),
+    "reviewer_level1": ("view_catalog", "list_pending", "review"),
+    "reviewer_level2": ("view_catalog", "list_pending", "review"),
     "admin": ("view_catalog", "list_records", "manage_rule_packages"),
 }
 
@@ -72,7 +76,7 @@ def _latest_review_summaries(rows):
         return {}
     events = MaterialEvent.query.filter(
         MaterialEvent.record_id.in_(record_ids),
-        MaterialEvent.action.in_(tuple(REVIEW_ACTION_DECISIONS)),
+        MaterialEvent.action.in_((*REVIEW_ACTION_DECISIONS, "stage_reviewed")),
     ).order_by(MaterialEvent.id).all()
     if not events:
         return {}
@@ -85,7 +89,7 @@ def _latest_review_summaries(rows):
     latest = {}
     for event in events:
         latest[event.record_id] = {
-            "decision": REVIEW_ACTION_DECISIONS[event.action],
+            "decision": REVIEW_ACTION_DECISIONS.get(event.action) or (event.details or {}).get("decision"),
             "comment": (event.details or {}).get("comment"),
             "actor": actors.get(event.actor_id),
             "at": utc_timestamp(event.created_at),
@@ -123,9 +127,11 @@ def competition_workbench_summary(user, student_id="", *, keyword="", before_id=
         query = query.filter_by(student_id=user.student_id).filter(
             MaterialRecord.status != "abandoned"
         )
-    elif user.role in {"teacher", "admin"} and user.faculty_id:
+    elif user.role in REVIEW_ROLES and user.faculty_id:
         query = query.filter_by(faculty_id=user.faculty_id)
-        if user.role == "teacher":
+        query = query.filter(or_(MaterialRecord.analysis['source'].as_string().is_(None),
+                                MaterialRecord.analysis['source'].as_string() != 'certificate_preview_compatibility'))
+        if user.role in ({"teacher"} | REVIEWER_ROLES):
             query = query.filter(
                 or_(MaterialRecord.competition_rule_package_id.isnot(None),
                     MaterialRecord.rule_version_id.isnot(None)),
@@ -144,7 +150,7 @@ def competition_workbench_summary(user, student_id="", *, keyword="", before_id=
     def item(row):
         return {
             "id": row.id, "student_id": row.student_id, "status": row.status,
-            "version": row.version, "project_name": (row.data or {}).get("project_name"),
+            "review_stage": row.review_stage, "version": row.version, "project_name": (row.data or {}).get("project_name"),
             "competition_name": (row.data or {}).get("competition_name"),
             "updated_at": utc_timestamp(row.updated_at),
             "review": reviews.get(row.id),
@@ -155,8 +161,8 @@ def competition_workbench_summary(user, student_id="", *, keyword="", before_id=
     pending_statuses = {"submitted", "under_review"}
     reviewed_statuses = {"needs_correction", "scored", "verified", "verified_not_eligible"}
     pending_next = reviewed_next = None
-    if user.role == "teacher":
-        pending_query = query.filter(MaterialRecord.status.in_(tuple(pending_statuses)))
+    if user.role in ({"teacher"} | REVIEWER_ROLES):
+        pending_query = stage_filter(query.filter(MaterialRecord.status.in_(tuple(pending_statuses))), MaterialRecord, user)
         if before_id:
             pending_query = pending_query.filter(MaterialRecord.id < before_id)
         pending_rows = pending_query.order_by(MaterialRecord.id.desc()).limit(51).all()
@@ -165,7 +171,7 @@ def competition_workbench_summary(user, student_id="", *, keyword="", before_id=
         reviews.update(_latest_review_summaries(item_rows))
         # 已审记录不受「被取代」影响：退回过的旧版本仍需留在审核记录里。
         reviewed_query = history_query.filter(
-            MaterialRecord.status.in_(tuple(reviewed_statuses))
+            or_(MaterialRecord.status.in_(tuple(reviewed_statuses)), MaterialRecord.id.in_(db.session.query(MaterialEvent.record_id).filter(MaterialEvent.action == "stage_reviewed")))
         ).order_by(
             MaterialRecord.id.desc()
         )
@@ -198,7 +204,7 @@ def competition_workbench_summary(user, student_id="", *, keyword="", before_id=
         "cycle_code": year,
         "role": user.role,
         "status_counts": counts,
-        "pending_count": counts.get("submitted", 0) + counts.get("under_review", 0),
+        "pending_count": stage_filter(query.filter(MaterialRecord.status.in_(("submitted", "under_review"))), MaterialRecord, user).count(),
         "needs_correction_count": counts.get("needs_correction", 0),
         "completed_count": sum(counts.get(status, 0) for status in (
             "scored", "verified", "verified_not_eligible"
@@ -246,7 +252,7 @@ def student_material_summary(user):
 
 def teacher_noncompetition_summary(user):
     """Count reviewable non-competition materials in the teacher's own faculty."""
-    if user.role not in {"teacher", "admin"} or not user.faculty_id:
+    if user.role not in REVIEW_ROLES or not user.faculty_id:
         raise MaterialUseCaseError("仅本学院教师可读取非竞赛待审统计", code="forbidden", status_code=403)
     from services.materials.ocr_schemas import MANUAL_TYPES
     from services.materials.schemas import RULE_SCORING_CATEGORIES
@@ -262,7 +268,12 @@ def teacher_noncompetition_summary(user):
         .group_by(MaterialRecord.status)
         .all()
     )
-    pending = counts.get("submitted", 0) + counts.get("under_review", 0)
+    pending = stage_filter(MaterialRecord.query.filter(
+        MaterialRecord.faculty_id == user.faculty_id,
+        MaterialRecord.category.in_(categories),
+        MaterialRecord.application_id.is_(None),
+        MaterialRecord.status.in_(("submitted", "under_review")),
+    ), MaterialRecord, user).count()
     return {
         "status_counts": counts,
         "pending_count": pending,
@@ -404,7 +415,7 @@ def validate_competition_review_command(user, row, payload):
             f"竞赛审核缺少字段: {', '.join(missing)}",
             code="competition_review_invalid_command",
         )
-    if user is None or user.role != "teacher" or not user.faculty_id:
+    if user is None or user.role not in REVIEW_ROLES or not user.faculty_id:
         raise MaterialUseCaseError(
             "只有授权教师可以审核竞赛材料", code="forbidden", status_code=403
         )
@@ -445,7 +456,7 @@ def competition_review_context(user, row):
     from services.competition_ocr.assessment import assessment
     if row.category != "competition":
         raise MaterialUseCaseError("该审核上下文仅适用于竞赛材料")
-    if user is None or user.role != "teacher" or not user.faculty_id:
+    if user is None or user.role not in REVIEW_ROLES or not user.faculty_id:
         raise MaterialUseCaseError(
             "只有授权教师可以查看竞赛审核上下文", code="forbidden", status_code=403
         )
@@ -481,6 +492,7 @@ def competition_review_context(user, row):
         "record_id": row.id,
         "material_version": row.version,
         "status": row.status,
+        "review_stage": row.review_stage,
         "attachments": [
             {
                 "id": attachment.id,
@@ -518,7 +530,7 @@ def competition_review_context(user, row):
         "history": _material_history(row),
         "allowed_actions": (
             ["approve", "return"]
-            if row.status in {"submitted", "under_review"} else []
+            if "review" in material_allowed_actions(_actor_scope(user), _material_scope(row)) else []
         ),
         "review_command_schema": {
             "writable_fields": ["version", "decision", "comment", "idempotency_key"],
@@ -534,18 +546,37 @@ def _material_history(row):
     """
     from models import User
 
-    events = sorted(row.events, key=lambda event: (event.created_at, event.id))
+    ancestors = [row.id]
+    current = row
+    while current.supersedes_record_id and current.supersedes_record_id not in ancestors:
+        current = db.session.get(MaterialRecord, current.supersedes_record_id)
+        if current is None or current.student_id != row.student_id or current.faculty_id != row.faculty_id:
+            break
+        ancestors.append(current.id)
+    events = MaterialEvent.query.filter(MaterialEvent.record_id.in_(ancestors)).order_by(MaterialEvent.id).all()
     actor_ids = {event.actor_id for event in events if event.actor_id}
     actors = {
         user.id: {"id": user.id, "name": user.name, "username": user.username, "role": user.role}
         for user in User.query.filter(User.id.in_(actor_ids)).all()
     } if actor_ids else {}
-    return [{
+    history = [{
         "action": event.action,
         "comment": (event.details or {}).get("comment"),
+        "review_stage": (event.details or {}).get("review_stage"),
+        "decision": (event.details or {}).get("decision"),
         "actor": actors.get(event.actor_id),
         "created_at": utc_timestamp(event.created_at),
     } for event in events]
+    if row.application_id and (row.analysis or {}).get('source') == 'certificate_preview_compatibility':
+        application = db.session.get(Application, row.application_id)
+        if application and application.review_history:
+            history = [e for e in history if e['action'] not in {'reviewed', 'stage_reviewed'}]
+            history.extend({'action': 'stage_reviewed', 'comment': e.get('comment'),
+                'review_stage': e.get('review_stage'), 'decision': e.get('decision'),
+                'actor': e.get('actor'), 'created_at': e.get('created_at')}
+                for e in application.review_history)
+            history.sort(key=lambda e: e['created_at'] or '')
+    return history
 
 
 def _actor_scope(user):
@@ -553,7 +584,7 @@ def _actor_scope(user):
 
 
 def _material_scope(row):
-    return MaterialScope(row.student_id, row.faculty_id, row.status)
+    return MaterialScope(row.student_id, row.faculty_id, row.status, row.review_stage)
 
 
 def _authorize_transition(user, row, action, target_status):
@@ -576,6 +607,7 @@ def _authorize_transition(user, row, action, target_status):
 
 
 def _event(row, user, action, details):
+    details = {"review_stage": row.review_stage, **details}
     db.session.add(
         MaterialEvent(
             record_id=row.id,
@@ -588,6 +620,8 @@ def _event(row, user, action, details):
 
 def _cas_change(row, version, allowed_statuses, changes):
     integer(version, "version", 1, 2_000_000_000)
+    if changes.get("status") == "submitted" and row.status not in {"submitted", "under_review"}:
+        changes = {**changes, "review_stage": 1}
     changed = (
         MaterialRecord.query.filter_by(id=row.id, version=version)
         .filter(MaterialRecord.status.in_(allowed_statuses))
@@ -1222,6 +1256,7 @@ def review_material(user, row, version, decision, comment, idempotency_key,
         db.session.refresh(row)
         return row, True
 
+    assert_final_review(user, row)
     if version != row.version:
         raise MaterialUseCaseError(
             "材料状态或版本已变化，请刷新后重试",
@@ -1243,7 +1278,7 @@ def review_material(user, row, version, decision, comment, idempotency_key,
         from services.materials.originals import verify_ocr_originals
         verify_ocr_originals(row)
     eligibility = None
-    target_status = decision
+    target_status = 'needs_correction' if decision == 'rejected' else decision
     if decision == "verified":
         from domain.cycles import evaluate_award_date
         from workflow_models import RecommendationCyclePolicy
@@ -1267,7 +1302,7 @@ def review_material(user, row, version, decision, comment, idempotency_key,
             target_status = "needs_correction"
     if target_status != decision:
         _authorize_transition(user, row, "review", target_status)
-    _cas_change(row, version, ("submitted",), {"status": target_status})
+    _cas_change(row, version, ("submitted", "under_review"), {"status": target_status})
     if decision == "verified":
         from use_cases.review_scoring import review_scoring_result
 
@@ -1336,7 +1371,7 @@ def review_material(user, row, version, decision, comment, idempotency_key,
             overall_status="complete",
             verification_status=decision,
             scoring_status="not_scored",
-            allowed_actions=["correct_evidence", "resubmit"] if decision == "needs_correction" else ["view"],
+            allowed_actions=["correct_evidence", "resubmit"],
         )
     details = {
         "version": row.version,

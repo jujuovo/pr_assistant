@@ -1,3 +1,4 @@
+from conftest import prepare_final_stage
 from extensions import db
 from use_cases.competition_review import review_competition_material
 from use_cases.competition_rules import switch_competition_package
@@ -28,6 +29,8 @@ def test_reconfirmation_creates_new_submitted_version_and_preserves_history(env)
     assert row.status == "rule_reconfirmation_required"
     assert ScoreEntry.query.filter_by(status="active").count() == 0
 
+    assert replacement.review_stage == 1
+    prepare_final_stage()
     review_competition_material(teacher, replacement, {"version": replacement.version,
         "decision": "approve", "comment": "重新核验一致", "idempotency_key": "new-approval"})
     assert replacement.status == "scored"

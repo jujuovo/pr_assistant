@@ -171,7 +171,8 @@ def main(database_file=None, competition_package_file=None, skip_demo_accounts=F
     additions = {'system_settings': {'avatar_file_size_limit':'INTEGER DEFAULT 2'},
                  'rule': {'faculty_id':'INTEGER REFERENCES faculty(id)', 'calculation_formula':'JSON',
                           'total_score_cap':'NUMERIC(12, 4)'},
-                 'application': {'dynamic_coefficients':'JSON'},
+                 'application': {'dynamic_coefficients':'JSON', 'review_stage':'INTEGER NOT NULL DEFAULT 1', 'review_version':'INTEGER NOT NULL DEFAULT 1', 'review_history':'JSON'},
+                 'material_record': {'review_stage':'INTEGER NOT NULL DEFAULT 1'},
                  'ocr_job': {'material_record_id':'INTEGER REFERENCES material_record(id)',
                              'material_version':'INTEGER', 'attachment_id':'INTEGER REFERENCES material_attachment(id)'}}
     try:

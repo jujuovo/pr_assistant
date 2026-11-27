@@ -3,6 +3,7 @@ import hashlib
 import json
 from pathlib import Path
 from flask import abort, current_app, session
+from domain.review_stages import REVIEW_ROLES, REVIEWER_ROLES, STAGE_LABELS
 from extensions import db
 from models import Application, Student, User
 from material_models import MaterialRecord, MaterialEvent, MaterialSource
@@ -17,18 +18,15 @@ def has_linked_material(application_id):
 
 
 def scope_application_query(query):
-    """旧申请列表中，关联新材料的申请同样遵循本人/同院权限。"""
-    from sqlalchemy import or_
-    protected = Application.id.in_(db.session.query(MaterialRecord.application_id).filter(
-        MaterialRecord.application_id.isnot(None)))
+    """All compatibility applications follow student ownership/faculty scope."""
     user = db.session.get(User, session.get('user_id')) if session.get('user_id') else None
     allowed = False
     if user and user.status == 'active':
         if user.role == 'student' and user.student_id:
             allowed = Application.student_id == user.student_id
-        elif user.role in ('teacher', 'admin') and user.faculty_id:
+        elif user.role in REVIEW_ROLES and user.faculty_id:
             allowed = Application.faculty_id == user.faculty_id
-    return query.filter(or_(~protected, allowed))
+    return query.filter(allowed)
 
 
 def category_exists(category):
@@ -48,7 +46,7 @@ def authorize(row, user=None, staff=False):
     user = user or actor()
     if not staff and user.role == 'student' and row.student_id == user.student_id:
         return user
-    if user.role in ('teacher','admin') and user.faculty_id and user.faculty_id == row.faculty_id:
+    if user.role in REVIEW_ROLES and user.faculty_id and user.faculty_id == row.faculty_id:
         return user
     abort(403, description='没有该学生或学院的材料权限')
 
@@ -76,8 +74,8 @@ def record_at(category, record_id, *, allow_teacher_processed=False):
     from use_cases.manual_materials import is_manual
     if is_manual(row):
         has_fixed_rule = True
-        teacher_status_allowed = row.status in {'submitted', 'verified', 'rejected', 'needs_correction'}
-    if user.role == 'teacher' and (not teacher_status_allowed or not has_fixed_rule):
+        teacher_status_allowed = row.status in {'submitted', 'under_review', 'verified', 'rejected', 'needs_correction'}
+    if user.role in ({'teacher'} | REVIEWER_ROLES) and (not teacher_status_allowed or not has_fixed_rule):
         abort(403, description='教师只能访问已固定规则版本的正式提交材料')
     return row
 
@@ -101,6 +99,7 @@ REVIEWED_STATUSES = frozenset({
 REVIEW_EVENT_DECISIONS = {
     'competition_approved': 'approve',
     'competition_returned': 'return',
+    'stage_reviewed': None,
 }
 
 
@@ -124,6 +123,7 @@ def _last_review(row):
 
 
 def view(row):
+    from use_cases.materials import _material_history
     from services.competition_ocr.binding import record_links
     from .schemas import OCR_CATEGORIES
     from use_cases.manual_materials import is_manual
@@ -132,7 +132,7 @@ def view(row):
     user = actor()
     actions = allowed_actions(
         ActorScope(user.role, user.student_id, user.faculty_id),
-        MaterialScope(row.student_id, row.faculty_id, row.status),
+        MaterialScope(row.student_id, row.faculty_id, row.status, row.review_stage),
     )
     # 只有「仍然有效」的后继版本才算取代关系。若把已放弃的补正稿也当后继，
     # 学生放弃补正后原材料会被判定为"已被取代"，两条记录同时不可操作，材料彻底僵死。
@@ -173,8 +173,10 @@ def view(row):
             'normalization_version':row.normalization_version, 'rule_version_id':row.rule_version_id,
             'cycle_code':row.year, 'cycle_policy_version_id':row.cycle_policy_version_id,
             'status':row.status, 'version':row.version,
+            'review_stage':row.review_stage, 'review_stage_label':STAGE_LABELS.get(row.review_stage),
             'allowed_actions':list(actions),
-            'last_review':_last_review(row) if row.status in REVIEWED_STATUSES else None,
+            'last_review':_last_review(row),
+            'review_history':_material_history(row),
             'data':row.data, 'analysis':{**(row.analysis or {}), 'ocr_executed':bool(links) or bool(row.ocr_raw_terms)}, 'check_report':row.check_report,
             'ocr_raw_terms':row.ocr_raw_terms,
             'competition_rule_package_id':row.competition_rule_package_id,

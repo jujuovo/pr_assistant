@@ -811,7 +811,9 @@ const handleLogin = async () => {
     if (import.meta.env.MODE === 'demo') {
       const demoRouteMap = {
         student: '/student',
-        teacher: '/teacher',
+        reviewer_level1: '/reviewer_level1',
+      reviewer_level2: '/reviewer_level2',
+      teacher: '/teacher',
         admin: '/admin'
       }
       await router.replace(demoRouteMap[authStore.role] || '/login')
@@ -896,6 +898,8 @@ const handleLogin = async () => {
     // 登录成功，根据角色跳转
     const routeMap = {
       student: '/student',
+      reviewer_level1: '/reviewer_level1',
+      reviewer_level2: '/reviewer_level2',
       teacher: '/teacher',
       admin: '/admin'
     }

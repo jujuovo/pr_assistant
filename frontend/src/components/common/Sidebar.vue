@@ -117,12 +117,10 @@ const expanded = reactive({
   'system-management': true
 })
 
-const currentUserRole = computed(() => (authStore.user?.role === 'admin' ? 'admin' : 'teacher'))
+const currentUserRole = computed(() => (authStore.user?.role || 'teacher'))
 const navigation = computed(() => roleNavigation[currentUserRole.value])
-const identityName = computed(() =>
-  currentUserRole.value === 'teacher' ? '演示教师' : '演示管理员'
-)
-const roleLabel = computed(() => (currentUserRole.value === 'teacher' ? '教师' : '管理员'))
+const identityName = computed(() => authStore.userName)
+const roleLabel = computed(() => ({teacher: '教师', admin: '管理员', reviewer_level1: '一级审核员', reviewer_level2: '二级审核员'}[currentUserRole.value]))
 const roleMark = computed(() => (currentUserRole.value === 'teacher' ? '师' : '管'))
 const userAvatar = computed(() => authStore.userAvatar)
 const navigationId = computed(() => `${currentUserRole.value}-side-navigation`)

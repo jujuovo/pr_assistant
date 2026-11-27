@@ -132,7 +132,7 @@ export const useAuthStore = defineStore('auth', () => {
       }
 
       // 验证用户数据是否有效，防止username为"student"等错误值
-      if (userData?.username && ['student', 'teacher', 'admin'].includes(userData.role)) {
+      if (userData?.username && ['student', 'teacher', 'admin', 'reviewer_level1', 'reviewer_level2'].includes(userData.role)) {
         // 先调用sessionCheck API验证后端会话是否有效
         try {
           const sessionResponse = await api.sessionCheck()

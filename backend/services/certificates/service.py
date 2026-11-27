@@ -15,7 +15,7 @@ def authorize_application(application, reviewer=False):
     user = actor()
     if user.role == "student" and not reviewer and user.student_id == application.student_id:
         return user
-    if user.role in ("teacher", "admin") and user.faculty_id == application.faculty_id:
+    if user.role in ("teacher", "admin", "reviewer_level1", "reviewer_level2") and user.faculty_id == application.faculty_id:
         return user
     abort(403, description="没有该申请的证书材料权限")
 

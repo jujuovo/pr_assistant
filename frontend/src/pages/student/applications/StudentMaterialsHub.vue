@@ -29,6 +29,8 @@
         </div>
         <small>{{ row.year }} 年 · 材料 #{{ row.id }}</small>
       </header>
+      <p v-if="['submitted', 'under_review'].includes(row.status)">当前阶段：{{ row.review_stage_label || ({1: '一级审核', 2: '二级审核', 3: '教师终审'}[row.review_stage]) }}</p>
+      <ReviewTimeline :events="row.review_history" />
       <p
         v-if="row.last_review"
         class="review-banner"
@@ -169,6 +171,7 @@
   </section>
 </template>
 <script setup>
+import ReviewTimeline from '@/components/common/ReviewTimeline.vue'
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import materialApi, { MATERIAL_CATEGORIES } from '@/services/materialApi.js'

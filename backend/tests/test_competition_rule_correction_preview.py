@@ -23,6 +23,7 @@ def _baseline(env):
         "participation_mode": "individual",
     }})
     row.status = "submitted"
+    row.review_stage = 3
     teacher = User(username="preview-teacher", name="教师", password="test", role="teacher",
                    status="active", faculty_id=row.faculty_id)
     db.session.add(teacher); db.session.flush()

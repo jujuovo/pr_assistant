@@ -57,3 +57,7 @@ export const roleNavigation = {
     }
   ]
 }
+
+for (const role of ['reviewer_level1', 'reviewer_level2']) {
+  roleNavigation[role] = roleNavigation.teacher.filter(item => ['home', 'recommendation-review'].includes(item.key || item.id))
+}

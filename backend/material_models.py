@@ -15,6 +15,7 @@ class MaterialRecord(db.Model):
         db.Integer, db.ForeignKey('recommendation_cycle_policy.id'), nullable=True
     )
     status = db.Column(db.String(32), nullable=False, default='draft')
+    review_stage = db.Column(db.Integer, nullable=False, default=1, server_default='1')
     data = db.Column(db.JSON, nullable=False)
     analysis = db.Column(db.JSON, nullable=False)
     # Evidence extraction, student declarations and normalized matching input are

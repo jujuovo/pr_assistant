@@ -7,10 +7,12 @@ from workflow_models import MaterialReviewCommand, RuleVersion
 
 
 def review_certificate_application(user, application, payload):
+    from use_cases.staged_review import assert_final_review
+    assert_final_review(user, application)
     if not isinstance(payload, dict):
         raise MaterialUseCaseError("请求体必须为JSON对象")
     allowed = {"status", "reviewComment", "idempotency_key", "override_score", "override_reason",
-               "finalScore", "overrideReason"}
+               "finalScore", "overrideReason", "review_version"}
     if set(payload) - allowed:
         raise MaterialUseCaseError("证书审核请求包含不支持字段")
     if "finalScore" in payload:
@@ -27,7 +29,7 @@ def review_certificate_application(user, application, payload):
     status = payload.get("status")
     decisions = {
         "approved": "verified",
-        "rejected": "rejected",
+        "rejected": "needs_correction",
         "needs_correction": "needs_correction",
     }
     if status not in decisions:
@@ -54,7 +56,7 @@ def review_certificate_application(user, application, payload):
             category="competition",
             year=application.cycle_code,
             cycle_policy_version_id=application.cycle_policy_version_id,
-            status="submitted",
+            status="submitted", review_stage=application.review_stage,
             data={"award_date": application.award_date.isoformat() if application.award_date else None},
             analysis={"source": "certificate_preview_compatibility"},
             ocr_raw_terms=certificate.claims.get("ocr_raw_terms") if (
@@ -80,7 +82,7 @@ def review_certificate_application(user, application, payload):
         payload.get("override_score"), payload.get("override_reason"),
     )
     if status != "approved":
-        application.status = status
+        application.status = 'needs_correction' if status == 'rejected' else status
         application.final_score = None
     command = MaterialReviewCommand.query.filter_by(
         record_id=reviewed.id, idempotency_key=key

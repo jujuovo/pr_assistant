@@ -5,6 +5,7 @@ adapters translate :class:`MaterialPolicyError` into their own response type.
 """
 
 from dataclasses import dataclass
+from domain.review_stages import REVIEW_ROLES, REVIEWER_ROLES, can_review_stage
 
 
 MATERIAL_STATUSES = frozenset(
@@ -62,6 +63,7 @@ class MaterialScope:
     student_id: str
     faculty_id: int
     status: str
+    review_stage: int = 1
 
 
 def is_owner(actor: ActorScope, material: MaterialScope) -> bool:
@@ -70,7 +72,7 @@ def is_owner(actor: ActorScope, material: MaterialScope) -> bool:
 
 def is_staff(actor: ActorScope, material: MaterialScope) -> bool:
     return (
-        actor.role in {"teacher", "admin"}
+        actor.role in REVIEW_ROLES
         and actor.faculty_id is not None
         and actor.faculty_id == material.faculty_id
     )
@@ -99,9 +101,10 @@ def allowed_actions(actor: ActorScope, material: MaterialScope) -> tuple[str, ..
     elif is_staff(actor, material):
         if material.status in {"draft", "submitted", "under_review", "needs_correction"}:
             actions.append("check")
-        if material.status == "submitted":
+        stage_allowed = can_review_stage(actor.role, actor.faculty_id, material.faculty_id, material.review_stage)
+        if material.status == "submitted" and stage_allowed:
             actions.extend(("begin_review", "review"))
-        elif material.status == "under_review":
+        elif material.status == "under_review" and stage_allowed:
             actions.append("review")
         if actor.role == "admin" and material.status == "rule_unmatched":
             actions.append("mark_rule_available")
@@ -115,6 +118,8 @@ def authorize_transition(
     target_status: str,
 ) -> None:
     """Validate one state-changing action or raise a domain error."""
+    if action == 'review' and actor.role in REVIEWER_ROLES and target_status != 'needs_correction':
+        raise MaterialPolicyError('preliminary reviewers cannot finalize evidence or scores')
     if action not in allowed_actions(actor, material):
         raise MaterialPolicyError("actor is not allowed to perform this action")
     if (action, material.status, target_status) not in TRANSITIONS:

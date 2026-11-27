@@ -23,7 +23,7 @@
             ><strong>{{ reviewDecisionText(row.review.decision) }}</strong
             ><span
               >· {{ row.review.actor?.name || '未知审核人' }}（{{
-                row.review.actor?.role === 'admin' ? '管理员' : '教师'
+                ({admin: '管理员', teacher: '教师', reviewer_level1: '一级审核员', reviewer_level2: '二级审核员'}[row.review.actor?.role] || '审核人')
               }}）</span
             ><time>· {{ formatScoreTime(row.review.at) }}</time></p
           ><p v-if="historyMode && row.review?.comment" class="review-opinion"

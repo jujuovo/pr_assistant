@@ -51,7 +51,9 @@ const authStore = useAuthStore()
 const toastStore = useToastStore()
 
 // 当前活动页面
-const currentPage = ref(route.query.page || 'home')
+const limited = computed(() => ['reviewer_level1', 'reviewer_level2'].includes(authStore.role))
+const permitted = page => !limited.value || ['home', 'pending-review', 'review-history'].includes(page)
+const currentPage = ref(permitted(route.query.page || 'home') ? route.query.page || 'home' : 'home')
 
 // 页面组件映射
 const pageComponents = {
@@ -63,7 +65,7 @@ const pageComponents = {
   rankings: TeacherRanking
 }
 
-const currentPageComponent = computed(() => pageComponents[currentPage.value])
+const currentPageComponent = computed(() => permitted(currentPage.value) ? pageComponents[currentPage.value] : null)
 
 // 用户信息
 const userInfo = computed(() => ({
@@ -82,14 +84,14 @@ const handleSidebarToggle = (isOpen) => {
 
 // 切换页面
 const switchPage = (page) => {
-  if (page === currentPage.value) return
+  if (!permitted(page) || page === currentPage.value) return
   currentPage.value = page
   const query = { ...route.query, page }
   delete query.ranking_only
   delete query.batch_id
   router.push({ query })
 }
-watch(() => route.query.page, page => { if (page) currentPage.value = page })
+watch(() => route.query.page, page => { currentPage.value = permitted(page || 'home') ? page || 'home' : 'home' })
 
 // 切换到待审核页面（用于从其他页面跳转）
 const switchToPendingReview = () => {
@@ -100,14 +102,14 @@ const switchToPendingReview = () => {
 
 // 切换到个人信息页面
 const goToProfile = () => {
-  if (currentPage.value === 'profile') return
+  if (limited.value || currentPage.value === 'profile') return
   currentPage.value = 'profile'
   router.push({ query: { ...route.query, page: 'profile' } })
 }
 
 // 权限验证和数据加载
 onMounted(() => {
-  if (authStore.role !== 'teacher') {
+  if (!['teacher', 'reviewer_level1', 'reviewer_level2'].includes(authStore.role)) {
     toastStore.error('您没有权限访问教师端')
     router.push('/login')
   }

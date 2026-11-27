@@ -14,6 +14,7 @@
 
     <!-- 选项卡 -->
     <div class="tabs">
+      <button v-for="role in ['reviewer_level1', 'reviewer_level2']" :key="role" class="tab-btn" :class="{ active: activeTab === role }" @click="activeTab = role">{{ role === 'reviewer_level1' ? '一级审核员账户' : '二级审核员账户' }}</button>
       <button
         class="tab-btn"
         :class="{ active: activeTab === 'student' }"
@@ -149,7 +150,7 @@
                   ? user.major?.name || user.major
                   : user.role === 'teacher'
                     ? user.roleName
-                    : user.roleName || '管理员'
+                    : user.roleName || ({reviewer_level1: '一级审核员', reviewer_level2: '二级审核员'}[user.role]) || '管理员'
               }}</td>
               <td>
                 <span
@@ -266,6 +267,8 @@
                   <option value="">请选择角色</option>
                   <option value="student">学生</option>
                   <option value="teacher">教师</option>
+                  <option value="reviewer_level1">一级审核员</option>
+                  <option value="reviewer_level2">二级审核员</option>
                   <option value="admin">管理员</option>
                 </select>
               </div>
@@ -273,7 +276,7 @@
                 <label class="form-label">{{
                   userForm.role === 'student'
                     ? '学号'
-                    : userForm.role === 'teacher'
+                    : ['teacher', 'reviewer_level1', 'reviewer_level2'].includes(userForm.role)
                       ? '工号'
                       : '管理员账号'
                 }}</label>
@@ -465,7 +468,7 @@
                 <strong>1. 格式要求：</strong><br />
                 必填表头：用户名,姓名,角色,状态<br />
                 可选表头：学院,系,专业,邮箱,电话,性别,CET4成绩,CET6成绩,绩点,转换分数（顺序不限）<br />
-                -角色只能是：admin/teacher/student<br />
+                -角色只能是：admin/teacher/student/reviewer_level1/reviewer_level2<br />
                 -状态只能是：active(启用)/disabled(禁用)<br />
                 -性别只能是：男/女<br />
                 默认密码为：123456<br />
@@ -1136,7 +1139,7 @@ const saveUser = async () => {
             majorId: userForm.majorId
           }
         : {
-            roleName: userForm.roleName || (userForm.role === 'teacher' ? '审核员' : '系统管理员')
+            roleName: userForm.roleName || ({teacher: '教师', reviewer_level1: '一级审核员', reviewer_level2: '二级审核员', admin: '系统管理员'}[userForm.role])
           })
     }
 
