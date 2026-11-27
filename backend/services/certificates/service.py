@@ -6,6 +6,7 @@ from flask import abort, current_app
 from extensions import db
 from certificate_models import CertificateAssessment
 from services.actors import actor
+from services.private_paths import contained
 
 CATALOG = [{"key": "lanqiao", "name": "蓝桥杯（已适配样本模板）", "automatic_assistance": True,
             "note": "仅辅助核对已适配的图片/PDF模板，水印匹配不能证明证书真实。"}]
@@ -15,7 +16,7 @@ def authorize_application(application, reviewer=False):
     user = actor()
     if user.role == "student" and not reviewer and user.student_id == application.student_id:
         return user
-    if user.role in ("teacher", "admin", "reviewer_level1", "reviewer_level2") and user.faculty_id == application.faculty_id:
+    if user.role in ("teacher", "admin") and user.faculty_id == application.faculty_id:
         return user
     abort(403, description="没有该申请的证书材料权限")
 
@@ -35,13 +36,6 @@ def validate_selection(data):
 def artifact_root(app=None):
     config = (app or current_app).config
     return Path(config.get("CERTIFICATE_STORAGE_FOLDER", Path(config["AUTOMATION_UPLOAD_FOLDER"]).parent / "private-certificates")).resolve()
-
-
-def contained(root, relative):
-    path = (root / relative).resolve()
-    if path == root or root not in path.parents:
-        raise ValueError("证书文件路径越界")
-    return path
 
 
 def enqueue(application, key, claims):

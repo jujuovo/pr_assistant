@@ -1,7 +1,7 @@
 """Readable score source and rule metadata; no changes to scoring facts or snapshots."""
 from extensions import db
 from material_models import MaterialRecord
-from models import Application, Rule
+from models import Rule
 from workflow_models import CompetitionRulePackage, RuleVersion
 
 
@@ -24,9 +24,25 @@ def rule_labels(references):
 
 def decorate_score_entries(entries, facts, student_id, snapshot_references):
     """Resolve names only within the requested student's already authorized score scope."""
-    ids={int(e['project_source']['id']) for e in entries if str(e['project_source'].get('id','')).isdigit()}
-    materials={m.id:m for m in MaterialRecord.query.filter(MaterialRecord.student_id==student_id,MaterialRecord.id.in_(ids)).all()}
-    applications={a.id:a for a in Application.query.filter(Application.student_id==student_id,Application.id.in_(ids)).all()}
+    material_ids = set()
+    application_ids = set()
+    for entry in entries:
+        source = entry['project_source']
+        if not str(source.get('id', '')).isdigit():
+            continue
+        if source['type'] == 'material':
+            material_ids.add(int(source['id']))
+        elif source['type'] in {'application', 'legacy_application', 'volunteer_automation', 'certificate'}:
+            application_ids.add(int(source['id']))
+    materials = {row.id: row for row in MaterialRecord.query.filter(
+        MaterialRecord.student_id == student_id, MaterialRecord.id.in_(material_ids)
+    ).all()} if material_ids else {}
+    applications = {}
+    if application_ids and "application" in db.metadata.tables:
+        from legacy_models import Application
+        applications = {row.id: row for row in Application.query.filter(
+            Application.student_id == student_id, Application.id.in_(application_ids)
+        ).all()}
     by_id={e.id:e for e in facts}
     references=set(snapshot_references or [])
     for entry in entries:
@@ -49,7 +65,7 @@ def decorate_score_entries(entries, facts, student_id, snapshot_references):
             if record.category == 'volunteer':
                 name=f"志愿服务累计工时（{data.get('award_date', '')}）"
             if name:source['name']=name
-        elif source['type'] in {'application','legacy_application','volunteer_automation'}:
+        elif source['type'] in {'application','legacy_application','volunteer_automation','certificate'}:
             application=applications.get(source_id)
             if application:source['name']=application.project_name
         package_id=fact.competition_rule_package_id if fact else record.competition_rule_package_id if record else None

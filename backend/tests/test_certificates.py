@@ -7,7 +7,8 @@ from pathlib import Path
 import pytest
 from PIL import Image
 from extensions import db
-from models import Application, Rule, Student, SystemSettings, User
+from legacy_models import Application
+from models import Rule, Student, SystemSettings, User
 from automation_models import utcnow
 from certificate_models import CertificateAssessment
 from conftest import login

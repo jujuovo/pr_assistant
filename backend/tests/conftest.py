@@ -25,10 +25,8 @@ def prepare_final_stage():
     test_staged_material_review, rather than repeated in every scoring test.
     """
     from material_models import MaterialRecord
-    from models import Application
     MaterialRecord.query.filter(MaterialRecord.status.in_(['submitted', 'under_review'])).update(
         {'review_stage': 3}, synchronize_session='fetch')
-    Application.query.filter_by(status='pending').update({'review_stage': 3}, synchronize_session='fetch')
     db.session.commit()
 
 

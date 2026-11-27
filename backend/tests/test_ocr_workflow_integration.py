@@ -10,7 +10,8 @@ import pytest
 from PIL import Image
 from conftest import login
 from extensions import db
-from models import Application, User
+from legacy_models import Application
+from models import User
 from material_models import CompetitionOcrJob, MaterialRecord
 from ocr_models import OCRJob, OCRMaterialLink
 from workflow_models import CompetitionRulePackage, RecommendationCyclePolicy, ScoreEntry, StudentScoreSnapshot

@@ -5,12 +5,12 @@ from pathlib import Path
 from flask import abort, current_app, session
 from domain.review_stages import REVIEW_ROLES, REVIEWER_ROLES, STAGE_LABELS
 from extensions import db
-from models import Application, Student, User
+from models import Student, User
 from material_models import MaterialRecord, MaterialEvent, MaterialSource
 from services.time_format import utc_timestamp
 from automation_models import utcnow
 from services.actors import actor
-from .schemas import TYPES, integer, normalize, analyze, text, source_url, object_keys
+from .schemas import TYPES, integer, normalize, text, source_url, object_keys
 
 
 def has_linked_material(application_id):
@@ -19,6 +19,7 @@ def has_linked_material(application_id):
 
 def scope_application_query(query):
     """All compatibility applications follow student ownership/faculty scope."""
+    from legacy_models import Application
     user = db.session.get(User, session.get('user_id')) if session.get('user_id') else None
     allowed = False
     if user and user.status == 'active':
@@ -169,7 +170,7 @@ def view(row):
                             "details": entry.exclusion_basis.get("allocations", [])}
     queued_job=((projection.get('ocr_assessment') or {}).get('job') or {})
     return {**projection, 'id':row.id, 'category':row.category, 'student_id':row.student_id, 'faculty_id':row.faculty_id,
-            'application_id':row.application_id, 'year':row.year,
+            'application_id':getattr(row, 'application_id', None), 'year':row.year,
             'normalization_version':row.normalization_version, 'rule_version_id':row.rule_version_id,
             'cycle_code':row.year, 'cycle_policy_version_id':row.cycle_policy_version_id,
             'status':row.status, 'version':row.version,
@@ -188,34 +189,6 @@ def view(row):
             'created_at':utc_timestamp(row.created_at), 'updated_at':utc_timestamp(row.updated_at),
             'attachments':[{'id':f.id,'filename':f.filename,'size':f.size,'sha256':f.sha256,
                             'url':f'/api/materials/{row.category}/records/{row.id}/attachments/{f.id}'} for f in row.attachments]}
-
-
-def make_record(category, data):
-    category_exists(category)
-    if category == "competition":
-        from use_cases.materials import create_material
-        return create_material(actor(), category, data)
-    object_keys(data,{'year','data','application_id'},{'year','data'})
-    user = actor()
-    if user.role != 'student' or not user.student_id:
-        abort(403,description='仅学生本人可创建申报材料')
-    owner = Student.query.filter_by(student_id=user.student_id).first()
-    if not owner or not owner.faculty_id or owner.faculty_id != user.faculty_id:
-        abort(400,description='学生账号未正确关联学院')
-    application_id = data.get('application_id')
-    if application_id is not None:
-        integer(application_id,'application_id',1,2_000_000_000)
-        application = Application.query.filter_by(id=application_id).with_for_update().first_or_404()
-        if application.student_id != user.student_id or application.faculty_id != owner.faculty_id:
-            abort(403,description='不能关联其他学生的申请')
-    normalized = normalize(category,data['data'])
-    row = MaterialRecord(student_id=user.student_id,faculty_id=owner.faculty_id,category=category,
-                         year=integer(data['year'],'year',2000,2100),application_id=application_id,
-                         data=normalized,analysis=analyze(category,normalized),status='draft')
-    db.session.add(row)
-    db.session.flush()
-    event(row,'created',{'version':1})
-    return row
 
 
 def storage_root():

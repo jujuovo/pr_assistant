@@ -30,12 +30,11 @@ from models import (
     SystemSettings,
     FacultyScoreSettings,
     Student,
-    Application,
     GraduateFile,
 )
 from datetime import datetime
 from extensions import db
-from services.deletion import automation_deletion_conflict, protected_deletion_response, commit_deletion
+from services.deletion import archived_rows_for_deletion, automation_deletion_conflict, protected_deletion_response, commit_deletion
 
 # 引入组织信息管理模块
 from .organization_bp import (
@@ -185,7 +184,7 @@ def delete_faculty(faculty_id):
         return jsonify({"message": "学院不存在"}), 404
     # 先读取完整删除范围并保护自动化材料，不在数据库提交前删除附件。
     score_settings = FacultyScoreSettings.query.filter_by(faculty_id=faculty_id).first()
-    applications = Application.query.filter_by(faculty_id=faculty.id).all()
+    applications = archived_rows_for_deletion(faculty_id=faculty.id)
     students = Student.query.filter_by(faculty_id=faculty.id).all()
     users = [student.user for student in students if student.user]
     non_student_users = User.query.filter_by(faculty_id=faculty.id).filter(User.role != "student").all()
@@ -316,7 +315,7 @@ def delete_department(department_id):
     if not department:
         return jsonify({"message": "系不存在"}), 404
 
-    applications = Application.query.filter_by(department_id=department.id).all()
+    applications = archived_rows_for_deletion(department_id=department.id)
     students = Student.query.filter_by(department_id=department.id).all()
     users = [student.user for student in students if student.user]
     majors = Major.query.filter_by(department_id=department.id).all()
@@ -436,7 +435,7 @@ def delete_major(major_id):
     if not major:
         return jsonify({"message": "专业不存在"}), 404
 
-    applications = Application.query.filter_by(major_id=major.id).all()
+    applications = archived_rows_for_deletion(major_id=major.id)
     students = Student.query.filter_by(major_id=major.id).all()
     users = [student.user for student in students if student.user]
     linked_users = User.query.filter_by(major_id=major.id).all()

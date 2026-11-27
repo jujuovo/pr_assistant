@@ -1,7 +1,8 @@
 from conftest import login
 from extensions import db
 from material_models import MaterialRecord
-from models import Application, Student, User
+from legacy_models import Application
+from models import Student, User
 from test_material_rule_submission import MATERIAL_TERMS, version
 
 
@@ -9,7 +10,7 @@ def application(student, name):
     row = Application(student_id=student.student_id, student_name=student.student_name,
                       faculty_id=student.faculty_id, department_id=student.department_id,
                       major_id=student.major_id, application_type="academic",
-                      project_name=name, status="pending", review_stage=3, self_score=0)
+                      project_name=name, status="pending", self_score=0)
     db.session.add(row); db.session.flush()
     return row
 
@@ -17,7 +18,7 @@ def application(student, name):
 def material(app, status, rule_version_id=None):
     row = MaterialRecord(student_id=app.student_id, faculty_id=app.faculty_id,
                          application_id=app.id, category="competition", year=2026,
-                         status=status, review_stage=3, rule_version_id=rule_version_id,
+                         status=status, rule_version_id=rule_version_id,
                          data={}, analysis={}, normalized_terms=MATERIAL_TERMS)
     db.session.add(row); return row
 
@@ -36,4 +37,4 @@ def test_teacher_pending_application_projection_excludes_unmatched_and_available
     response = env[1].get("/api/applications/pending")
     assert response.status_code == 200
     names = {item["projectName"] for item in response.json}
-    assert names == {legacy.project_name}  # Linked records use their canonical material queue.
+    assert names == {legacy.project_name, submitted.project_name}

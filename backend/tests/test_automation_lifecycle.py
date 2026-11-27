@@ -15,7 +15,8 @@ from sqlalchemy.exc import IntegrityError
 
 from conftest import login
 from extensions import db
-from models import Application, Department, Faculty, Major, Student, SystemSettings, User
+from legacy_models import Application
+from models import Department, Faculty, Major, Student, SystemSettings, User
 from automation_models import AutomationBatch, AutomationPolicy, AutomationReview
 
 # 旧申请创建要求存在活动的推免周期政策。

@@ -8,7 +8,6 @@ class MaterialRecord(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     student_id = db.Column(db.String(20), db.ForeignKey('student.student_id'), nullable=False)
     faculty_id = db.Column(db.Integer, db.ForeignKey('faculty.id'), nullable=False)
-    application_id = db.Column(db.Integer, db.ForeignKey('application.id'), nullable=True)
     category = db.Column(db.String(32), nullable=False)
     year = db.Column(db.Integer, nullable=False)
     cycle_policy_version_id = db.Column(
@@ -100,7 +99,7 @@ class MaterialEvent(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     record_id = db.Column(db.Integer, db.ForeignKey('material_record.id'), nullable=False)
     actor_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    action = db.Column(db.String(32), nullable=False)
+    action = db.Column(db.String(64), nullable=False)
     details = db.Column(db.JSON, nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
     __table_args__ = (db.Index('ix_material_event_record', 'record_id', 'id'),)

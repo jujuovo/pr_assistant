@@ -4,7 +4,8 @@ from unittest.mock import patch
 import pytest
 from conftest import login
 from extensions import db
-from models import Application, Student, User, Rule
+from legacy_models import Application
+from models import Student, User, Rule
 from certificate_models import CertificateAssessment
 from workflow_models import ScoreEntry, RuleVersion
 

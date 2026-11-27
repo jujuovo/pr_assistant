@@ -54,6 +54,9 @@ export async function requestJson(path, { method = 'GET', data, signal, timeoutM
 
 
 export function positiveInteger(value) {
-  if (!Number.isSafeInteger(value) || value <= 0) throw new TypeError("ID 和版本必须为正整数")
-  return value
+  const normalized =
+    typeof value === 'string' && /^[1-9]\d*$/.test(value) ? Number(value) : value
+  if (!Number.isSafeInteger(normalized) || normalized <= 0)
+    throw new TypeError('ID 和版本必须为正整数')
+  return normalized
 }

@@ -4,7 +4,7 @@ import uuid
 from pathlib import Path
 from datetime import timedelta
 from PIL import Image
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, column, inspect, or_
 from extensions import db
 from automation_models import AutomationBatch
 from automation_models import utcnow
@@ -15,8 +15,18 @@ from services.automation import (reserve, semantic_key, honor_event_key, value, 
 from services.volunteer_rules import parse_number
 
 
+def _available_batches():
+    query = AutomationBatch.query
+    # Before a database is upgraded, linked historical batches must not be
+    # claimed. New installations have no such column.
+    columns = inspect(db.session.connection()).get_columns("automation_batch")
+    if any(item["name"] == "application_id" for item in columns):
+        return query.filter(column("application_id").is_(None))
+    return query
+
+
 def _current_batch(batch_id, token):
-    return AutomationBatch.query.filter_by(id=batch_id, lease_token=token, status="processing", application_id=None)
+    return _available_batches().filter_by(id=batch_id, lease_token=token, status="processing")
 
 
 def _fail_exhausted_batch(batch, token):
@@ -93,12 +103,11 @@ def run_one(app, provider):
     lease_seconds = app.config["AUTOMATION_LEASE_SECONDS"]
     eligible = or_(AutomationBatch.status == "queued",
                    and_(AutomationBatch.status == "processing", AutomationBatch.lease_until < now))
-    batch = AutomationBatch.query.filter(eligible, AutomationBatch.application_id.is_(None)).order_by(AutomationBatch.id).first()
+    batch = _available_batches().filter(eligible).order_by(AutomationBatch.id).first()
     if not batch:
         return False
     token = str(uuid.uuid4())
-    claimed = AutomationBatch.query.filter(AutomationBatch.id == batch.id, eligible,
-                                           AutomationBatch.application_id.is_(None)).update(
+    claimed = _available_batches().filter(AutomationBatch.id == batch.id, eligible).update(
         {"status": "processing", "lease_token": token, "lease_until": now + timedelta(seconds=lease_seconds),
          "attempts": AutomationBatch.attempts + 1}, synchronize_session=False)
     db.session.commit()

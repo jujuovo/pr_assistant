@@ -13,7 +13,7 @@
 """
 
 from flask import Blueprint, request, jsonify
-from models import Rule, RuleCalculation, Application
+from models import Rule, RuleCalculation
 from extensions import db
 import traceback
 import json
@@ -556,9 +556,6 @@ def delete_rule(rule_id):
         if _formal_competition_rule_protected(rule=rule):
             return _legacy_competition_rejected()
 
-        # 删除所有引用该规则的申请记录
-        Application.query.filter_by(rule_id=rule_id).update({"rule_id": None})
-
         # 删除规则
         db.session.delete(rule)
         db.session.commit()
@@ -579,11 +576,6 @@ def batch_delete_rules():
 
         if not rule_ids or not isinstance(rule_ids, list):
             return jsonify({"error": "Invalid or empty rule IDs"}), 400
-
-        # 删除所有引用这些规则的申请记录
-        Application.query.filter(Application.rule_id.in_(rule_ids)).update(
-            {"rule_id": None}, synchronize_session=False
-        )
 
         # 先删除关联的规则计算记录
         RuleCalculation.query.filter(RuleCalculation.rule_id.in_(rule_ids)).delete(

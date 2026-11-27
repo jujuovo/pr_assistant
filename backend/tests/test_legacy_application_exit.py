@@ -6,7 +6,7 @@ import pytest
 
 from conftest import login
 from extensions import db
-from models import Application
+from legacy_models import Application
 from blueprints.application_bp import MIGRATED_MATERIAL_ROUTES
 
 

@@ -26,7 +26,7 @@ from use_cases.staged_review import stage_filter, assert_final_review
 from extensions import db
 from material_models import MaterialAttachment, MaterialEvent, MaterialRecord
 from domain.student_work_scoring import POLICY_VERSION as WORK_POLICY
-from models import Application, Faculty, Student
+from models import Faculty, Student
 from services.materials.schemas import RESEARCH_TYPES, analyze, integer, normalize, object_keys
 from workflow_models import CompetitionRulePackage, MaterialReviewCommand
 from workflow_models import RuleVersion
@@ -37,6 +37,12 @@ from domain.competition_rules import (
     validate_competition_package,
 )
 from workflow_models import RecommendationCyclePolicy
+
+
+
+def archived_material_filter():
+    link = MaterialRecord.__table__.c.get("application_id")
+    return (link.is_(None),) if link is not None else ()
 
 
 def _ocr_links(row):
@@ -229,7 +235,7 @@ def student_material_summary(user):
         db.session.query(MaterialRecord.status, func.count(MaterialRecord.id))
         .filter(
             MaterialRecord.student_id == user.student_id,
-            MaterialRecord.application_id.is_(None),
+            *archived_material_filter(),
             MaterialRecord.status != "abandoned",
             ~MaterialRecord.id.in_(successor_source_ids),
         )
@@ -262,16 +268,16 @@ def teacher_noncompetition_summary(user):
         .filter(
             MaterialRecord.faculty_id == user.faculty_id,
             MaterialRecord.category.in_(categories),
-            MaterialRecord.application_id.is_(None),
+            *archived_material_filter(),
             MaterialRecord.status != "abandoned",
         )
         .group_by(MaterialRecord.status)
         .all()
     )
     pending = stage_filter(MaterialRecord.query.filter(
+        *archived_material_filter(),
         MaterialRecord.faculty_id == user.faculty_id,
         MaterialRecord.category.in_(categories),
-        MaterialRecord.application_id.is_(None),
         MaterialRecord.status.in_(("submitted", "under_review")),
     ), MaterialRecord, user).count()
     return {
@@ -567,15 +573,6 @@ def _material_history(row):
         "actor": actors.get(event.actor_id),
         "created_at": utc_timestamp(event.created_at),
     } for event in events]
-    if row.application_id and (row.analysis or {}).get('source') == 'certificate_preview_compatibility':
-        application = db.session.get(Application, row.application_id)
-        if application and application.review_history:
-            history = [e for e in history if e['action'] not in {'reviewed', 'stage_reviewed'}]
-            history.extend({'action': 'stage_reviewed', 'comment': e.get('comment'),
-                'review_stage': e.get('review_stage'), 'decision': e.get('decision'),
-                'actor': e.get('actor'), 'created_at': e.get('created_at')}
-                for e in application.review_history)
-            history.sort(key=lambda e: e['created_at'] or '')
     return history
 
 
@@ -682,10 +679,20 @@ def match_material_rule(row, cycle_code):
     )
 
 
+def reject_application_link(payload, category):
+    if payload.get("application_id") is not None:
+        raise MaterialUseCaseError(
+            "请直接申报材料，不能绑定旧申请",
+            code=("competition_material_route_required" if category == "competition" else "material_route_required"),
+            status_code=409,
+        )
+
+
 def create_material(user, category, payload):
     object_keys(payload, {"year", "data", "application_id", "manual_only"}, {"year", "data"})
     if user.role != "student" or not user.student_id:
         raise MaterialUseCaseError("仅学生本人可创建申报材料", code="forbidden", status_code=403)
+    reject_application_link(payload, category)
     manual_only = payload.get("manual_only", False)
     if type(manual_only) is not bool:
         raise MaterialUseCaseError("manual_only必须为布尔值")
@@ -701,18 +708,8 @@ def create_material(user, category, payload):
                    and db.session.get(Faculty, owner.faculty_id).name == "信息学院")
     if work_policy:
         manual_only = False
-        if payload.get("application_id") is not None:
-            raise MaterialUseCaseError("干部任职使用独立材料申报")
-    application_id = payload.get("application_id")
-    if category in RESEARCH_TYPES | {"innovation_training"} and application_id is not None:
-        raise MaterialUseCaseError("科研成果使用独立材料申报")
     competition_package = None
     if category == "competition":
-        if application_id is not None:
-            raise MaterialUseCaseError(
-                "竞赛材料不能关联旧申请链路",
-                code="competition_material_route_required", status_code=409,
-            )
         requested_year = integer(payload["year"], "year", 2000, 2100)
         competition_package = CompetitionRulePackage.query.filter_by(
             cycle_code=requested_year, scope_key="global", status="current"
@@ -722,15 +719,6 @@ def create_material(user, category, payload):
                 "当前周期没有正式竞赛规则包",
                 code="competition_package_unavailable", status_code=409,
             )
-    if application_id is not None:
-        integer(application_id, "application_id", 1, 2_000_000_000)
-        application = (
-            Application.query.filter_by(id=application_id).with_for_update().first()
-        )
-        if not application:
-            raise MaterialUseCaseError("关联申请不存在", code="not_found", status_code=404)
-        if application.student_id != user.student_id or application.faculty_id != owner.faculty_id:
-            raise MaterialUseCaseError("不能关联其他学生的申请", code="forbidden", status_code=403)
     if category == "competition":
         try:
             normalized = normalize_competition_facts(competition_package.snapshot, payload["data"])
@@ -743,7 +731,6 @@ def create_material(user, category, payload):
         faculty_id=owner.faculty_id,
         category=category,
         year=integer(payload["year"], "year", 2000, 2100),
-        application_id=application_id,
         data=normalized,
         analysis=(
             {"candidate_score": normalized["candidate_score"], "authority": "server"}
@@ -1073,7 +1060,7 @@ def create_correction_version(user, row, version, confirmed_terms):
     new_data["award_date"] = normalized_terms["award_date"]
     corrected = MaterialRecord(
         student_id=row.student_id, faculty_id=row.faculty_id,
-        application_id=row.application_id, category=row.category, year=row.year,
+        category=row.category, year=row.year,
         cycle_policy_version_id=row.cycle_policy_version_id,
         status="draft", data=new_data, analysis=dict(row.analysis or {}),
         ocr_raw_terms=row.ocr_raw_terms,

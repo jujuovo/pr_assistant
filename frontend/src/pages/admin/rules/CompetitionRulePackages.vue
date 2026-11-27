@@ -19,8 +19,9 @@
 import { onMounted, ref } from 'vue'
 import api from '@/services/competitionRulePackageApi.js'
 import { workflowErrorMessage } from '@/services/workflowPresentation.js'
+import { randomUuid } from '@/utils/uuid.js'
 const items=ref([]),draft=ref(null),snapshotText=ref(''),preview=ref(null),error=ref('')
-const key=prefix=>`${prefix}-${crypto.randomUUID()}`
+const key=prefix=>`${prefix}-${randomUuid()}`
 async function run(fn){try{error.value='';return await fn()}catch(e){error.value=workflowErrorMessage(e);throw e}}
 async function load(){const result=await run(()=>api.list());items.value=result.items||[]}
 async function copyToNext(row){await run(()=>api.copy(row.id,row.cycle_code+1,key('copy')));await load()}

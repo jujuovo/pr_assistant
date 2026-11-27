@@ -7,34 +7,22 @@ import uuid
 from flask import abort
 from extensions import db
 from material_models import MaterialAttachment, MaterialRecord
-from models import Application
 from ocr_models import OCRJob, OCRMaterialLink
 from services.actors import actor
 from services.materials.schemas import object_keys, integer
 from services.materials.service import record_at, event, stored_path
-from use_cases.materials import create_material, edit_material
+from use_cases.materials import create_material, edit_material, reject_application_link
 from .jobs import authorized_job, job_root
 from .mapping import suggestions
 from .service import MAX_BYTES
 
 
-def _draft_application(application_id, student_id, faculty_id):
-    if application_id is None:
-        return
-    integer(application_id, "application_id", 1, 2_000_000_000)
-    row = Application.query.filter_by(id=application_id).with_for_update().first_or_404()
-    if row.student_id != student_id or row.faculty_id != faculty_id:
-        abort(403, description="不能关联其他学生或学院的申请")
-    if row.status != "draft":
-        abort(409, description="仅可关联草稿申请")
-
-
 def _material(job, mapped, payload, user):
     object_keys(payload, {"year", "data", "application_id", "material_record_id", "version"})
     target = mapped["material_category"]
+    reject_application_link(payload, target)
     if payload.get("material_record_id") is None:
         object_keys(payload, {"year", "data", "application_id"}, {"year", "data"})
-        _draft_application(payload.get("application_id"), user.student_id, user.faculty_id)
         return create_material(user, target, payload)
     object_keys(payload, {"material_record_id", "version", "data", "application_id"},
                 {"material_record_id", "version", "data"})
@@ -43,12 +31,9 @@ def _material(job, mapped, payload, user):
         abort(403)
     if target == "competition" and row.status != "draft":
         abort(409, description="竞赛退回材料须先创建补正版本，不能覆盖原审核依据")
-    application_id = payload.get("application_id", row.application_id)
-    _draft_application(application_id, user.student_id, row.faculty_id)
-    if target == "competition" and application_id is not None:
-        abort(409, description="竞赛材料不能关联旧申请")
+    if getattr(row, "application_id", None) is not None:
+        abort(409, description="历史关联材料不能覆盖，请创建独立材料")
     edit_material(user, row, payload["version"], payload["data"])
-    row.application_id = application_id
     return row
 
 

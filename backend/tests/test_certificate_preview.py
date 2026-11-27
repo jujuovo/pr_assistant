@@ -5,7 +5,8 @@ import pytest
 
 pytestmark = pytest.mark.usefixtures("active_cycle")
 from extensions import db
-from models import Application, Rule, Student, User
+from legacy_models import Application
+from models import Rule, Student, User
 from certificate_models import CertificateAssessment
 from conftest import login
 from test_certificates import NoWatermark

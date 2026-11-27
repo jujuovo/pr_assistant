@@ -13,7 +13,8 @@
 """
 
 from flask import Blueprint, request, jsonify, current_app
-from models import Application, Student, Rule, Department, Major, SystemSettings
+from legacy_models import Application
+from models import Student, Rule, Department, Major, SystemSettings
 from datetime import datetime
 import pytz
 import json
@@ -29,10 +30,6 @@ from services.certificates.service import (authorize_application, validate_selec
                                             selection_present, selection_json)
 from services.legacy_application_policy import (application_actor, bind_student_identity,
     authorize_write, validate_edit, protect_deletion)
-from use_cases.staged_applications import begin_review, finish_review, public_history
-from use_cases.materials import MaterialUseCaseError
-from domain.review_stages import REVIEW_ROLES
-from use_cases.staged_review import stage_filter
 from services.actors import actor
 from services.materials.service import has_linked_material, scope_application_query
 from blueprints.score_bp import update_student_statistics
@@ -140,12 +137,6 @@ def application_http_error(error):
 
 
 # 获取所有申请
-@application_bp.errorhandler(MaterialUseCaseError)
-def stage_error(error):
-    db.session.rollback()
-    return jsonify({'error': str(error), 'code': error.code}), error.status_code
-
-
 @application_bp.route("/applications", methods=["GET"])
 def get_applications():
     # 获取查询参数
@@ -164,7 +155,6 @@ def get_applications():
 
     # 构建查询
     query = scope_application_query(Application.query)
-
 
     # 按学院筛选
     if faculty_id:
@@ -325,8 +315,6 @@ def get_applications():
             "selfScore": app.self_score,
             "finalScore": app.final_score,
             "status": app.status,
-                "review_stage": app.review_stage, "review_version": app.review_version,
-                "review_history": public_history(app),
             "reviewComment": app.review_comment,
             "reviewedAt": app.reviewed_at.isoformat() if app.reviewed_at else None,
             "reviewedBy": app.reviewed_by,
@@ -360,7 +348,6 @@ def get_application(id):
     if automation:
         authorize(automation)
     app = Application.query.get_or_404(id)
-    authorize_application(app)
     if CertificateAssessment.query.filter_by(application_id=id).first() or has_linked_material(id):
         authorize_application(app)
 
@@ -442,8 +429,6 @@ def get_application(id):
         "appliedAt": app.applied_at.isoformat() if app.applied_at else None,
         "selfScore": app.self_score,
         "status": app.status,
-                "review_stage": app.review_stage, "review_version": app.review_version,
-                "review_history": public_history(app),
         "projectName": app.project_name,
         "awardDate": app.award_date.isoformat() if app.award_date else None,
         "description": app.description,
@@ -964,9 +949,6 @@ def update_application(id):
         if application.status == "draft" and next_status == "pending":
             from use_cases.cycles import pin_application_cycle
             pin_application_cycle(application)
-        if next_status in {"pending", "draft"}:
-            application.review_stage = 1
-            application.review_version += 1
         application.status = next_status
         application.final_score = data.get("final_score", application.final_score)
         application.review_comment = data.get(
@@ -1089,18 +1071,6 @@ def review_application(id):
     if not isinstance(data, dict) or data.get("status") not in {"approved", "rejected", "needs_correction"}:
         abort(400, description="审核结果必须为通过、驳回或待补正")
 
-    linked_record = MaterialRecord.query.filter_by(application_id=application.id).first()
-    if linked_record is not None and not (certificate and certificate.claims.get('preview_flow')):
-        if 'finalScore' in data:
-            return jsonify({'error': '旧 finalScore 写入已停用', 'code': 'legacy_final_score_not_supported'}), 400
-        return jsonify({'error': '请通过统一材料入口审核此材料', 'code': 'material_review_route_required',
-                        'route': f'/api/materials/{linked_record.category}/records/{linked_record.id}/review'}), 409
-
-    intermediate, review_token = begin_review(reviewer, application, data)
-    if intermediate is not None:
-        db.session.commit()
-        return jsonify(intermediate)
-
     if "finalScore" in data:
         current_app.logger.warning(
             "legacy_final_score_request application_id=%s actor_id=%s has_reason=%s",
@@ -1112,7 +1082,6 @@ def review_application(id):
         from use_cases.materials import MaterialUseCaseError
         try:
             result = review_certificate_application(reviewer, application, data)
-            finish_review(application, review_token, result)
             db.session.commit()
             return jsonify(result), 200 if result["overall_status"] == "complete" else 409
         except MaterialUseCaseError as error:
@@ -1125,7 +1094,7 @@ def review_application(id):
             "code": "legacy_final_score_not_supported",
         }), 400
 
-    application.status = "needs_correction" if data["status"] == "rejected" else data["status"]
+    application.status = data["status"]
 
     # 获取教师输入的分数，如果有的话优先使用
     teacher_final_score = data.get("finalScore")
@@ -1214,12 +1183,10 @@ def review_application(id):
                           "snapshot_ids": [row.id for row in snapshots]}
     # 旧字段仅作为兼容投影，与新计分事实同一事务提交。
     update_student_statistics(application.student_id, commit=False)
-    result = {"message": "申请审核成功", "status": application.status,
-            "review_stage": application.review_stage, "review_version": application.review_version,
-              "version": application.review_version, "scoring": scoring_result}
-    finish_review(application, review_token, result)
     db.session.commit()
-    return jsonify(result), 200
+
+    return jsonify({"message": "申请审核成功", "status": application.status,
+                    "version": 1, "scoring": scoring_result}), 200
 
 
 # 删除申请
@@ -1265,16 +1232,6 @@ def delete_application(id):
 @application_bp.route("/applications/pending", methods=["GET"])
 def get_pending_applications():
     # 获取查询参数
-    try:
-        current_reviewer = actor()
-    except HTTPException as error:
-        if error.code == 401:
-            return jsonify([]), 200
-        raise
-    if current_reviewer.role == 'student':
-        return jsonify([]), 200
-    if current_reviewer.role not in REVIEW_ROLES or not current_reviewer.faculty_id:
-        abort(403)
     faculty_id = request.args.get("facultyId")
     department_id = request.args.get("departmentId")
     major_id = request.args.get("majorId")
@@ -1287,13 +1244,14 @@ def get_pending_applications():
     linked_ids = db.session.query(MaterialRecord.application_id).filter(
         MaterialRecord.application_id.isnot(None)
     )
-    preview_ids = db.session.query(CertificateAssessment.application_id).filter(
-        CertificateAssessment.claims['preview_flow'].as_boolean().is_(True)
+    reviewable_ids = db.session.query(MaterialRecord.application_id).filter(
+        MaterialRecord.application_id.isnot(None),
+        MaterialRecord.status.in_(("submitted", "under_review")),
+        MaterialRecord.rule_version_id.isnot(None),
     )
-    query = scope_application_query(Application.query.filter_by(status='pending')).filter(
-        or_(~Application.id.in_(linked_ids), Application.id.in_(preview_ids))
+    query = scope_application_query(Application.query.filter_by(status="pending")).filter(
+        or_(~Application.id.in_(linked_ids), Application.id.in_(reviewable_ids))
     )
-    query = stage_filter(query.filter_by(faculty_id=current_reviewer.faculty_id), Application, current_reviewer)
 
     # 按学院筛选
     if faculty_id:
@@ -1396,8 +1354,6 @@ def get_pending_applications():
             "appliedAt": app.applied_at.isoformat() if app.applied_at else None,
             "selfScore": app.self_score,
             "status": app.status,
-                "review_stage": app.review_stage, "review_version": app.review_version,
-                "review_history": public_history(app),
             "projectName": app.project_name,
             "awardDate": app.award_date.isoformat() if app.award_date else None,
             "description": app.description,

@@ -5,7 +5,21 @@
 > 保存不了「依据」；规则一旦修改，历史分数无法解释来源，因此**不可复算**，
 > 这也正是它无法支撑自动计分的原因。
 
-## 一、当前状态（2026-11-21）
+## 2026-11-25 退役结果
+
+正式服务通过材料接口申报、识别和审核，通过 `ScoreEntry` 计分。新建库直接使用材料结构。旧的证书队列、申请表、两张历史回填表及材料和批次上的 `application_id` 列由迁移移除。历史模型集中在 `backend/legacy_models.py`，供离线旧库工具使用。
+
+有版本号的数据库先备份，再在副本上使用现有 Flask-Migrate 的 `db upgrade` 入口。最新版本为 `20261125_retire_application`。没有版本号的本地 SQLite 开发库可用以下命令生成验收副本，目标文件必须是新路径。
+
+```powershell
+.\.venv\Scripts\python.exe -B backend/tools/rehearse_application_retirement.py backend/instance/gradpush-dev.db --output backend/outputs/retired-copy.db
+```
+
+演练按行核对保留表、附件元数据和计分，再检查完整性与外键。材料附件仍在原存储目录，更换部署目录时须一并备份原件。遇到未归档的旧申请、旧来源计分、旧关联或额外外键时，先核对提示中的数据。恢复此前版本时需要同时恢复旧程序和升级前备份。
+
+以下记录描述 2026-11-21 的历史实现。
+
+## 一、当时状态（2026-11-21）
 
 ### 已迁到 `MaterialRecord` 链路的类别
 

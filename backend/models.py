@@ -2,12 +2,11 @@
 """
 数据模型文件
 
-该文件定义了应用的数据库模型，包括用户模型(User)、申请模型(Application)和学生模型(Student)，
+该文件定义了应用的数据库模型，包括用户模型(User)和学生模型(Student)，
 负责数据库表结构的设计和数据关系的定义，提供数据操作的基础。
 
 主要模型：
 - User: 用户信息模型，存储用户账号、密码、角色等信息
-- Application: 申请信息模型，存储推免加分申请的相关数据
 - Student: 学生信息模型，合并了学生基本信息和总评成绩
 - PerformanceDetail: 合并了学术专长和综合表现详情
 - Rule: 加分规则模型，存储推免加分的规则定义
@@ -143,63 +142,6 @@ class User(db.Model):
         return bcrypt.checkpw(password.encode("utf-8"), self.password.encode("utf-8"))
 
 
-# 申请模型
-class Application(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    student_id = db.Column(
-        db.String(20), db.ForeignKey("student.student_id"), nullable=False
-    )
-    student_name = db.Column(db.String(100), nullable=False)
-    # 使用外键关联学院、系和专业
-    faculty_id = db.Column(db.Integer, db.ForeignKey("faculty.id"), nullable=True)
-    department_id = db.Column(
-        db.Integer, db.ForeignKey("department.id"), nullable=False
-    )
-    major_id = db.Column(db.Integer, db.ForeignKey("major.id"), nullable=False)
-    application_type = db.Column(
-        db.String(50), nullable=False
-    )  # academic, comprehensive
-    applied_at = db.Column(db.DateTime, default=get_current_time)
-    self_score = db.Column(db.Float, nullable=True)
-    status = db.Column(
-        db.String(20), default="pending"
-    )  # pending, approved, rejected, draft
-    project_name = db.Column(db.String(200), nullable=False)
-    award_date = db.Column(db.Date, nullable=True)
-    cycle_code = db.Column(db.Integer, nullable=True)
-    cycle_policy_version_id = db.Column(
-        db.Integer, db.ForeignKey("recommendation_cycle_policy.id"), nullable=True
-    )
-    description = db.Column(db.Text, nullable=True)
-    files = db.Column(db.JSON, nullable=True)  # 存储文件信息的JSON数组
-    dynamic_coefficients = db.Column(db.JSON, nullable=True)  # 存储动态系数数据的JSON对象
-
-    # 审核相关字段
-    review_stage = db.Column(db.Integer, nullable=False, default=1, server_default="1")
-    review_version = db.Column(db.Integer, nullable=False, default=1, server_default="1")
-    review_history = db.Column(db.JSON, nullable=True)
-    final_score = db.Column(db.Float, nullable=True)  # 最终核定分数
-    review_comment = db.Column(db.Text, nullable=True)  # 审核意见
-    reviewed_at = db.Column(db.DateTime, nullable=True)  # 审核时间
-    reviewed_by = db.Column(db.String(100), nullable=True)  # 审核人
-
-    # 规则关联
-    rule_id = db.Column(db.Integer, db.ForeignKey("rule.id"), nullable=True)
-
-    # 关系定义
-    faculty = db.relationship("Faculty", backref=db.backref("applications", lazy=True))
-    department = db.relationship(
-        "Department", backref=db.backref("applications", lazy=True)
-    )
-    major = db.relationship("Major", backref=db.backref("applications", lazy=True))
-
-    created_at = db.Column(db.DateTime, default=get_current_time)
-    updated_at = db.Column(
-        db.DateTime, default=get_current_time, onupdate=get_current_time
-    )
-
-    def __repr__(self):
-        return f"<Application {self.id}>"
 
 
 # 学生总评模型

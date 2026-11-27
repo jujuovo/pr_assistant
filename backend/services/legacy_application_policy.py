@@ -1,11 +1,10 @@
 """One access boundary for compatibility application writes; never owns a transaction."""
 from flask import abort
-from domain.review_stages import REVIEW_ROLES
 from models import Student
 from services.actors import actor
 
 IDENTITY_FIELDS = ("student_id", "student_name", "faculty_id", "department_id", "major_id")
-REVIEW_FIELDS = {"review_stage", "review_version", "review_history", "final_score", "review_comment", "reviewed_at", "reviewed_by", "applied_at", "created_at", "updated_at"}
+REVIEW_FIELDS = {"final_score", "review_comment", "reviewed_at", "reviewed_by", "applied_at", "created_at", "updated_at"}
 EDITABLE = {"draft", "pending", "needs_correction"}
 
 
@@ -34,8 +33,10 @@ def bind_student_identity(data, user):
 
 def authorize_write(application, user, *, action):
     if action == "review":
-        if user.role not in REVIEW_ROLES or not user.faculty_id or user.faculty_id != application.faculty_id:
+        if user.role not in {"teacher", "admin"} or not user.faculty_id or user.faculty_id != application.faculty_id:
             abort(403, description="只能审核本学院申请")
+        if application.status != "pending":
+            abort(409, description="仅待审核申请可审核，已处理记录只读")
         return
     if user.role != "student" or user.student_id != application.student_id or user.faculty_id != application.faculty_id:
         abort(403, description="仅学生本人可以修改或删除自己的申请")
@@ -76,7 +77,7 @@ def protect_deletion(application):
         ReviewScoringCommand.query.filter(ReviewScoringCommand.source_id == str(application.id),
             ReviewScoringCommand.source_type.in_(["legacy_application", "certificate", "volunteer_automation"])).first()
     )
-    if protected or application.review_history:
+    if protected:
         abort(409, description="申请关联识别、材料、计分或审核证据，不能直接删除")
     if application.status != "draft":
         abort(409, description="只能删除未关联证据的草稿；已提交或已处理申请须保留历史")

@@ -25,7 +25,6 @@ class AutomationBatch(db.Model):
     year = db.Column(db.Integer, nullable=False)
     material_type = db.Column(db.String(64), nullable=False)
     status = db.Column(db.String(24), nullable=False, default="queued")
-    application_id = db.Column(db.Integer, db.ForeignKey("application.id"), unique=True)
     policy_snapshot = db.Column(db.JSON)
     score_snapshot = db.Column(db.JSON)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)

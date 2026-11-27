@@ -9,9 +9,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app import app
 from extensions import db
-from models import Application, Student, User
+from legacy_models import Application
+from models import Student, User
 from use_cases.migration import run_legacy_backfill
-from workflow_models import (LegacyBackfillBatch, LegacyBackfillItem,
+from legacy_models import LegacyBackfillBatch, LegacyBackfillItem
+from workflow_models import (
                              RecommendationCyclePolicy, RuleVersion, ScoreEntry,
                              StudentScoreSnapshot)
 

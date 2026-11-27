@@ -3,7 +3,7 @@
 from automation_models import utcnow
 from domain.cycles import CyclePolicyError, normalize_cycle_code
 from extensions import db
-from models import Application, SystemSettings
+from models import SystemSettings
 from workflow_models import RecommendationCyclePolicy
 
 
@@ -54,7 +54,10 @@ def pin_application_cycle(application):
 def pin_material_cycle(row):
     if row.cycle_policy_version_id:
         return db.session.get(RecommendationCyclePolicy, row.cycle_policy_version_id)
-    application = db.session.get(Application, row.application_id) if row.application_id else None
+    application = None
+    if getattr(row, "application_id", None):
+        from legacy_models import Application
+        application = db.session.get(Application, row.application_id)
     if application:
         policy = pin_application_cycle(application)
     else:

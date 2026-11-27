@@ -62,16 +62,16 @@ def test_migration_preserves_historical_results_and_can_be_reversed(tmp_path):
     engine = sa.create_engine('sqlite:///' + str(tmp_path / 'migration.db'))
     original = [(1, 'submitted'), (2, 'scored'), (3, 'needs_correction')]
     with engine.begin() as conn:
-        for table in ('material_record', 'application'):
+        for table in ('material_record',):
             conn.exec_driver_sql(f'CREATE TABLE {table} (id INTEGER PRIMARY KEY, status TEXT)')
             conn.exec_driver_sql(f'INSERT INTO {table} VALUES (?, ?)', original)
         with Operations.context(MigrationContext.configure(conn)):
             migration.upgrade()
-        for table in ('material_record', 'application'):
+        for table in ('material_record',):
             assert conn.exec_driver_sql(f'SELECT id,status FROM {table} ORDER BY id').all() == original
             assert conn.exec_driver_sql(f'SELECT review_stage FROM {table}').all() == [(1,)] * 3
         with Operations.context(MigrationContext.configure(conn)):
             migration.downgrade()
-        for table in ('material_record', 'application'):
+        for table in ('material_record',):
             assert conn.exec_driver_sql(f'SELECT * FROM {table} ORDER BY id').all() == original
     engine.dispose()

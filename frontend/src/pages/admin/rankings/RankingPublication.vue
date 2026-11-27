@@ -67,6 +67,7 @@ import api from '@/services/api.js'
 import workflowApi from '@/services/workflowApi.js'
 import { workflowErrorMessage } from '@/services/workflowPresentation.js'
 import { useAuthStore } from '@/stores/auth.js'
+import { randomUuid } from '@/utils/uuid.js'
 
 const auth = useAuthStore()
 const workbench = ref(null)
@@ -124,7 +125,7 @@ async function generate() {
     const cutoff = new Date(form.cutoff_at + '+08:00').toISOString().slice(0, -1)
     const result = await workflowApi.generateRanking({
       year: form.year, major_id: form.major_id, cutoff_at: cutoff, precision: 4,
-      idempotency_key: crypto.randomUUID()
+      idempotency_key: randomUuid()
     })
     await workbench.value.refresh(result.batch_id)
     notice.value = '已生成试算批次'
@@ -149,7 +150,7 @@ async function command() {
   blockers.value = []
   try {
     const result = await workflowApi.rankingCommand(ranking.batch_id, action, ranking.version,
-      crypto.randomUUID(), requiresReason.value ? { reason: reason.value } : {})
+      randomUuid(), requiresReason.value ? { reason: reason.value } : {})
     dialog.value.close()
     await workbench.value.refresh(result.batch_id)
     notice.value = `已完成「${labels[action]}」`

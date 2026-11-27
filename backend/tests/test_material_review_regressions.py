@@ -8,7 +8,8 @@ import pytest
 
 pytestmark = pytest.mark.usefixtures("active_honor_rule")
 from extensions import db
-from models import Application, Student
+from legacy_models import Application
+from models import Student
 from material_models import MaterialAttachment, MaterialRecord, MaterialSource
 from conftest import login
 from test_material_interfaces import create, endpoint, SAMPLES, source_payload
@@ -20,7 +21,9 @@ def linked(env):
         department_id=student.department_id,major_id=student.major_id,application_type='academic',
         project_name='关联申请',status='pending',self_score=2)
     db.session.add(application); db.session.commit()
-    create(env,application_id=application.id)
+    row = create(env)
+    db.session.get(MaterialRecord, row["id"]).application_id = application.id
+    db.session.commit()
     return application
 
 

@@ -8,7 +8,7 @@ from PIL import Image, ImageOps
 from services.recognition.serialization import json_safe
 from .ocr_comparison import extract_fields, compare_ocr_fields
 from .zigzag_preprocess import prepare_zigzag_image
-from .service import contained
+from services.private_paths import contained
 
 
 def predict(provider, path):

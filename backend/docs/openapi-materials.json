@@ -2917,10 +2917,6 @@
             "minimum": 2000,
             "maximum": 2100
           },
-          "application_id": {
-            "type": "integer",
-            "minimum": 1
-          },
           "data": {
             "oneOf": [
               {
@@ -3959,7 +3955,7 @@
     "scope": "same faculty, any reviewer at the current level",
     "approval": "Stages 1 and 2 advance review_stage without scoring; teacher final review uses the existing category policy. Administrator intervention is not a required stage.",
     "return": "Every new rejection/return allows student correction; resubmission restarts at stage 1. Existing approved records retain their results.",
-    "concurrency": "version compare-and-swap and durable idempotency_key; legacy applications expose review_version and append-only review_history.",
+    "concurrency": "version compare-and-swap and durable idempotency_key; review history remains auditable.",
     "history": "Students see their own review actors, stages, decisions and times. Reviewers see the complete history in their faculty."
   }
 }

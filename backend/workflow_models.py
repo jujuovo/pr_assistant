@@ -568,33 +568,8 @@ class RankingExportAudit(db.Model):
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
 
 
-class LegacyBackfillBatch(db.Model):
-    __tablename__ = "legacy_backfill_batch"
-    id = db.Column(db.Integer, primary_key=True)
-    batch_key = db.Column(db.String(128), nullable=False, unique=True)
-    year = db.Column(db.Integer, nullable=False)
-    backup_reference = db.Column(db.String(500), nullable=False)
-    cycle_policy_version_id = db.Column(
-        db.Integer, db.ForeignKey("recommendation_cycle_policy.id"), nullable=True
-    )
-    evidence_manifest = db.Column(db.JSON, nullable=True)
-    status = db.Column(db.String(20), nullable=False, default="running")
-    processed_count = db.Column(db.Integer, nullable=False, default=0)
-    failed_count = db.Column(db.Integer, nullable=False, default=0)
-    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
-    updated_at = db.Column(db.DateTime, nullable=False, default=utcnow)
 
 
-class LegacyBackfillItem(db.Model):
-    __tablename__ = "legacy_backfill_item"
-    id = db.Column(db.Integer, primary_key=True)
-    batch_id = db.Column(db.Integer, db.ForeignKey("legacy_backfill_batch.id"), nullable=False)
-    application_id = db.Column(db.Integer, db.ForeignKey("application.id"), nullable=False)
-    status = db.Column(db.String(20), nullable=False)
-    result = db.Column(db.JSON, nullable=True)
-    error = db.Column(db.String(1000), nullable=True)
-    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
-    __table_args__ = (db.UniqueConstraint("batch_id", "application_id", name="uq_backfill_item_application"),)
 
 
 class StructuredMaterialMigrationBatch(db.Model):

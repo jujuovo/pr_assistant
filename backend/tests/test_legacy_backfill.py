@@ -3,9 +3,11 @@ from datetime import date
 import pytest
 
 from extensions import db
-from models import Application, Rule, Student
+from legacy_models import Application
+from models import Rule, Student
 from use_cases.migration import run_legacy_backfill
-from workflow_models import (LegacyBackfillBatch, LegacyBackfillItem, RankingBatch,
+from legacy_models import LegacyBackfillBatch, LegacyBackfillItem
+from workflow_models import (RankingBatch,
                              RuleVersion, ScoreEntry, StudentScoreSnapshot)
 
 

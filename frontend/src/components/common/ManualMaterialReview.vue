@@ -88,6 +88,7 @@ import MaterialFacts from './MaterialFacts.vue'
 import MaterialImagePreview from './MaterialImagePreview.vue'
 import VolunteerOcrAssessment from './VolunteerOcrAssessment.vue'
 import { manualReviewCategories } from '@/services/teacherReviewCategories.js'
+import { randomUuid } from '@/utils/uuid.js'
 const props = defineProps({ history: Boolean, compareEvidence: Boolean, fixedCategory: String, keyword: String })
 const emit = defineEmits(['pending-count'])
 const kinds = [['all', '全部类别'], ...manualReviewCategories]
@@ -192,7 +193,7 @@ async function review(row, decision) {
       row.version,
       decision,
       comments.value[row.id] || '',
-      ...(policy(row) ? [{idempotency_key: crypto.randomUUID(), ...(decision==='verified'?{verified_facts:facts.value[row.id]}:{})}] : [])
+      ...(policy(row) ? [{idempotency_key: randomUuid(), ...(decision==='verified'?{verified_facts:facts.value[row.id]}:{})}] : [])
     )
     notice.value = '核验结果已保存。'
     await load()

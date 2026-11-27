@@ -9,7 +9,7 @@ from flask import abort, session
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import defer, joinedload, selectinload
 from extensions import db
-from models import User, Application, Student, Rule
+from models import User, Student, Rule
 from workflow_models import RuleVersion
 from automation_models import (AutomationBatch, AutomationItem, AutomationPolicy,
                                AutomationFingerprint, AutomationReview)
@@ -69,7 +69,7 @@ def authorize(batch, user=None, reviewer=False):
     user = user or actor()
     if user.role == "student" and not reviewer and user.student_id == batch.student_id:
         return user
-    if user.role in ("admin", "teacher", "reviewer_level1", "reviewer_level2") and user.faculty_id == batch.faculty_id:
+    if user.role in ("admin", "teacher") and user.faculty_id == batch.faculty_id:
         return user
     abort(403, description="没有该学院/学生的材料权限")
 
@@ -390,6 +390,7 @@ def preview(batch, item_ids=None):
         if "final_score" in snapshot:
             final_score = round_score(Decimal(snapshot["final_score"]))
         else:
+            from legacy_models import Application
             application = db.session.get(Application, batch.application_id)
             if application and application.final_score is not None:
                 final_score = round_score(Decimal(str(application.final_score)))
@@ -424,6 +425,7 @@ def recalculate_year(batch):
     ).filter_by(student_id=batch.student_id, faculty_id=batch.faculty_id,
                 year=batch.year, status="approved").order_by(AutomationBatch.id).all()
     # 用关联查询而非不断增长的 IN 参数表，大量历史批次也不会触及绑定参数上限。
+    from legacy_models import Application
     applications = {application.id: application for application in Application.query.join(
         AutomationBatch, AutomationBatch.application_id == Application.id
     ).filter(AutomationBatch.student_id == batch.student_id, AutomationBatch.faculty_id == batch.faculty_id,
@@ -463,13 +465,9 @@ def review_batch(batch, data):
         abort(409, description='2028届起不得按旧志愿工时费率计分，请核验累计工时材料')
     if not isinstance(data, dict):
         abort(400, description="审核数据必须是对象")
-    application = db.session.get(Application, batch.application_id)
-    from use_cases.staged_applications import begin_review, finish_review
-    intermediate, review_token = begin_review(user, application, data)
-    if intermediate is not None:
-        db.session.commit()
-        return intermediate
     claim_transition(batch, data.get("version"), ("submitted", "approved"))
+    from legacy_models import Application
+    application = db.session.get(Application, batch.application_id)
     decision = data.get("status")
     if decision not in ("approved", "rejected"):
         abort(400, description="审核状态必须为 approved/rejected")
@@ -558,7 +556,5 @@ def review_batch(batch, data):
         from use_cases.scoring import invalidate_score_entries
         invalidate_score_entries("volunteer_automation", application.id,
                                  "automation recognition rejected or revoked")
-    result = preview(batch)
-    finish_review(application, review_token, result)
     db.session.commit()
-    return result
+    return preview(batch)

@@ -4,7 +4,8 @@ import pytest
 
 from extensions import db
 from material_models import MaterialEvent, MaterialRecord
-from models import Application, Rule, Student, User
+from legacy_models import Application
+from models import Rule, Student, User
 from use_cases.materials import create_material, review_material, submit_material
 from workflow_models import (
     MaterialReviewCommand,
